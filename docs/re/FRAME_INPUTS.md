@@ -83,3 +83,15 @@ Focus is checked against the verified swap's output HWND. Only GetAsyncKeyState'
 Initial scheduler/configuration tests were observed RED then GREEN. Tests cover startup/held keys, focus cancellation, presentation gaps, cooldown discard, timeout/retry/session bounds, configuration rejection/defaults and restart classification. Runtime hotkey validation is pending at this source checkpoint.
 
 Deployment8ad4771: 0.1.7 loaded at23:52:39 on September19 through MO2. No new capture appeared during more than two minutes of Present calls, confirming removal of automatic startup capture. Two synthetic Ctrl+Shift+F10 actions (including explicit game-window activation) produced no logged request. This is unresolved input-path evidence, not a successful hotkey test. No root cause is assigned without a physical-key comparison. Game PID18080 was left open at the menu; physical test requested. Logs: ignored `artifacts/local/capture-hotkey-017-smoke/`.
+
+### Physical-key result — September20, 00:11:48
+
+The user's physical key press produced request1 on eligibility attempt1, renderer-lock thread20060. All prior creation-anchor and canonical-device checks passed. Manifest `18080-136142390/manifest.txt` completed; all three2560x1440 hashes and row extents were verified by the inspector. Colour and motion contain only finite values. The physical hotkey therefore works; the exact reason synthetic automation did not register remains unestablished.
+
+| Candidate | SHA256 | Observed raw values |
+|---|---|---|
+| Colour, format10 | 353e6672c11cf91556f5ee4150296014b93861540425c7a03214ada9fd05379e | RGB maxima9.53125 / 5.0078125 / 3.19921875; alpha0.995605–1 |
+| Motion, format34 | 017cb958c330215868bd3b9475c5a13e9f6a12e1735b11ecad8dda0c57555b9a | X -0.000611305–0.001483917; Y -0.001176834–0.001283646 |
+| Depth, format44 | 64366b5fc8f20150d47290de8a25215aa5753844b41b6c0ab5f738847c6b68db | Low24 bits1,215,336–16,777,215, 1,658,290 distinct values; high8 bits0–1 |
+
+Analysis: ignored `artifacts/local/capture-hotkey-017-physical-analysis.json`. Nonzero motion/nonuniform depth distinguish this from the earlier menu capture, but the user did not identify camera/scene state for the key press. No world-stage, temporal coherence, motion direction/units or depth convention is inferred. Continued Present>=176400 with failed0 was logged after capture. Game remains running for controlled stationary/slow/fast-pan tests; five of six request slots remain at this checkpoint.
