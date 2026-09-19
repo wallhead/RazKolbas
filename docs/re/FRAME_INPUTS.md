@@ -55,3 +55,19 @@ Diagnostic follow-up `ea03ee7` logs creation-time and Present-time renderer/acce
 The follow-up established that correlation: at23:18:07 creation returned device `0x2b1d0747750`, context `0x2b1d078f370`, swap `0x2b1c54ffed0`; at23:19:42 renderer fields remained exactly those values, whereas accessor device/context were `0x2b184502580` / `0x2b182e9f590`. Swap remained identical. The earlier successful creation observer already checked canonical device identity across those interfaces. The raw-pointer equality to accessor results was therefore the wrong gate for this wrapper chain. Logs: ignored `artifacts/local/frame-provenance-015/`; read-only memory correlation: `artifacts/local/frame-re/provenance-live/`.
 
 0.1.6 instead applies the creation-anchor and canonical revalidation contract above. This is a runtime-RED correction to an observed ABI mismatch, not an unverified offset change. Debug/Release14 groups PASS, including new foreign-context/foreign-device revalidation cases. Follow-up reviewer found no actionable safety defects. Game capture remains pending at this source checkpoint.
+
+## 0.1.6 runtime result
+
+Source `5f01803`, installed DLL SHA256 `848a3f7b833a809f8f8586b3630314a9321e6857fa0ccbb543d09825114ca12c`. Automated MO2 launch captured the bundle at23:24:39 on September19; renderer lock owned by thread10368, all creation anchors matched, canonical identity revalidation succeeded. All three textures were2560x1440, one mip/array/sample. Total CPU bytes58,982,400 (56.25MiB).
+
+| Candidate | DXGI format | Row bytes | Raw SHA256 |
+|---|---|---|---|
+| Colour | 10 / R16G16B16A16_FLOAT | 20480 | 12e8651f5d9aa05e67426846c06909d3db9ee88cf879856c7549595616cf707b |
+| Motion | 34 / R16G16_FLOAT | 10240 | 76dd1477c9761f489bc80a07db65a61f8d2a429250b9c300a47e4ae9dd9a0c40 |
+| Depth | 44 / R24G8_TYPELESS | 10240 | a88ce2b20d59a0866fe25302523eaf471eb8d2e00ee7a64571af0a6839e8687a |
+
+`tools/re/inspect_candidate_capture.py` verified the complete manifest, every hash and byte/row extent. Colour RGB values were finite, overall range0.00500488–1.146484375, alpha0. Motion values were all numeric zero (some negative-zero bit patterns). Depth's low24 bits were uniformly16777215, high8 bits0. These menu buffers are not evidence of valid world depth or motion conventions.
+
+Raw bundle: Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures/21132-133312734/. Analysis: ignored `artifacts/local/frame-capture-016-analysis.json`; logs: `artifacts/local/frame-capture-016-success/`. No captures or third-party binaries committed. At least18,600 Present calls completed with zero reported failures; screenshot after readback showed the menu. Alt+F4 closed the test. No resize or Release-zero callback was observed. No performance or pixel-equivalence baseline is claimed.
+
+Next executable milestone: add a bounded, explicit capture trigger usable after loading a save, then compare stationary/slow-pan/fast-pan frames while recovering the actual world/pre-UI stage and guide semantics. The current one-shot90-second startup probe is insufficient for that test. No further unchanged menu-only user run is needed.

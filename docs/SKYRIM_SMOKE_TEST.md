@@ -96,3 +96,10 @@ MO2 launch started at22:27; SKSE loaded0.1.4 and installed the exact ENB outer-t
 The game reached its main menu, verified through computer-use screenshots; ENB and ReShade remained enabled. Menu click/keyboard navigation did not reliably select Quit, so the game was closed through the targeted window's Alt+F4 action. The window disappeared and a separate process query confirmed zero SkyrimSE processes. No forced process termination or save loading occurred. No ResizeBuffers or zero-count Release event was logged; those game paths remain NOT OBSERVED, and resource retirement is not claimed.
 
 Logs preserved in artifacts/local/skyrim-enb-swap-smoke-2026-09-19-222746/. Installed DLL hash still matches the0.1.4 build. ReShade's existing Rumble/Sky Reflection Fix ImGui18600 mismatch messages remain separate observations. The test establishes the correct outer presentation boundary for this exact ENB/ReShade setup, not pre-UI/world capture, pixel-equivalent screenshots, resize compatibility or working SR/FG/NR.
+
+## 0.1.6 bounded candidate capture — September 19
+
+Source: 5f01803. Package: D:/TESV_EX/MO2/downloads/RazKolbas-0.1.6-frame-capture-5f01803.zip. DLL SHA256: 848a3f7b833a809f8f8586b3630314a9321e6857fa0ccbb543d09825114ca12c. ZIP SHA256: b7711c356bded553a6010e5e29704165831e00f0fcf16e9344578ed995dac75f. INI retained byte-for-byte (bce1346afa14199ba36b3040ccff5992d34c08f5f6223b4670eecd0e77de8365). Backup: artifacts/local/frame-capture-install-2026-09-19-232212/.
+
+Automated MO2 menu test passed candidate readback at23:24:39: three2560x1440 raw textures, complete manifest and independently verified hashes. Renderer ownership and canonical device identity checks passed. Present continued to at least18600 with no failures. Screenshot showed menu; Alt+F4 closed game and subsequent process query confirmed absence. ENB/ReShade active; game executable hash unchanged. No resize or Release-zero observed; no world guide validity, SR/FG/NR output or performance claim. See re/FRAME_INPUTS.md for exact formats, hashes, pointer-provenance correction and next capture-trigger milestone.
+
