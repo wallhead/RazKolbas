@@ -61,6 +61,7 @@ const std::vector<Field>& settingsSchema() {
         {"Interface.ShowDisabledOptionReasons", true, 0, 2, {}},
         {"Interface.FontScale", double{1.0}, 0.5, 4, {}},
         {"Diagnostics.Overlay", false, 0, 2, {}},
+        {"Diagnostics.CaptureHotkey", Choice{"Off"}, 0, 2, {"Off","CtrlShiftF10"}},
         {"Diagnostics.GPUStageTimings", false, 0, 2, {}},
         {"Diagnostics.DumpCapabilitiesAtStartup", true, 0, 2, {}},
         {"Diagnostics.LogResourceGenerations", false, 0, 2, {}},

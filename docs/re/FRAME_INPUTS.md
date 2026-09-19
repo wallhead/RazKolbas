@@ -71,3 +71,13 @@ Source `5f01803`, installed DLL SHA256 `848a3f7b833a809f8f8586b3630314a9321e6857
 Raw bundle: Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures/21132-133312734/. Analysis: ignored `artifacts/local/frame-capture-016-analysis.json`; logs: `artifacts/local/frame-capture-016-success/`. No captures or third-party binaries committed. At least18,600 Present calls completed with zero reported failures; screenshot after readback showed the menu. Alt+F4 closed the test. No resize or Release-zero callback was observed. No performance or pixel-equivalence baseline is claimed.
 
 Next executable milestone: add a bounded, explicit capture trigger usable after loading a save, then compare stationary/slow-pan/fast-pan frames while recovering the actual world/pre-UI stage and guide semantics. The current one-shot90-second startup probe is insufficient for that test. No further unchanged menu-only user run is needed.
+
+## 0.1.7 explicit capture trigger
+
+The automatic90-second probe is replaced by an opt-in foreground Ctrl+Shift+F10 trigger. `Diagnostics.CaptureHotkey` defaults to Off; the controlled MO2 installation explicitly enables CtrlShiftF10. The setting is restart-scoped. See `../CAPTURE_TEST.md` for the loaded-save test.
+
+The pure CaptureTrigger policy requires a released chord before a fresh press, discards cooldown presses, limits requests to six per session, and bounds each request to32 eligibility checks spaced at least50ms apart within2 seconds. Failed or cancelled requests still consume a slot; GPU/file attempts are consumed before execution and require a fresh request to retry. The renderer lock, creation anchors, canonical device identity and64MiB bundle limit remain unchanged. No COM references or texture objects survive a callback.
+
+Focus is checked against the verified swap's output HWND. Only GetAsyncKeyState's current-down bit is used. Observed focus loss cancels pending work. Review identified that a minimized game might stop Present callbacks; a >250ms gap now cancels work and requires rearming. A no-background-poll regression failed before this guard and passed after. Shorter focus transitions between polls are not guaranteed observable; capture always checks current foreground identity. This bounded diagnostic does not add a global event thread or another game hook to claim complete OS focus history.
+
+Initial scheduler/configuration tests were observed RED then GREEN. Tests cover startup/held keys, focus cancellation, presentation gaps, cooldown discard, timeout/retry/session bounds, configuration rejection/defaults and restart classification. Runtime hotkey validation is pending at this source checkpoint.

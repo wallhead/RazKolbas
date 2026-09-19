@@ -1,7 +1,7 @@
 #include "rk/Settings.hpp"
 namespace rk {
 ChangeCategory classifyChange(const Settings& before, const Settings& after) {
-    for (const auto key : {"General.Presentation", "General.SafeMode", "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches", "Patching.DisabledPatchIds"})
+    for (const auto key : {"General.Presentation", "General.SafeMode", "Diagnostics.CaptureHotkey", "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches", "Patching.DisabledPatchIds"})
         if (before.values.at(key) != after.values.at(key)) return ChangeCategory::RestartRequired;
     for (const auto& [key, value] : before.values) {
         if (value == after.values.at(key)) continue;

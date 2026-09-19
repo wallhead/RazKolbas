@@ -107,6 +107,9 @@ ShowDisabledOptionReasons = true
 FontScale = 1.0
 
 [Diagnostics]
+; Restart required. CtrlShiftF10 enables one candidate bundle per fresh chord.
+; Requires verified experimental ENB renderer hooks; 5s cooldown, six requests/session.
+CaptureHotkey = Off
 Overlay = false
 GPUStageTimings = false
 DumpCapabilitiesAtStartup = true
