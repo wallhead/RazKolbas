@@ -11,7 +11,7 @@ Installed September 19 at 22:07 from source `691b0eb`, after confirming Skyrim w
 - Prior DLL/INI/meta backup: `artifacts/local/swap-observer-install-2026-09-19-220753/`.
 - Deployment record: `artifacts/local/swap-observer-install.json`.
 
-All 13 CTest groups pass in Debug and Release. Offline exact-ReShade validation passes 38 assertions; no ReShade code is executed by that audit. Game callbacks for this version are **NOT RUN**.
+All 13 CTest groups pass in Debug and Release. Offline exact-ReShade validation passes 38 assertions; no ReShade code is executed by that audit. Game result: **observer rejected the returned table** at 22:09:33. No Present/resize/release patches were applied. Device capture and native fallback remained active.
 
 Next test: launch through MO2 with ENB and ReShade enabled, reach the menu, load a save and play briefly, then exit normally. Fresh 0.1.2 logs should show `Installed reshade673.swapchain-observe-v1` and `Swap Present observation` (or Present1). Any resize or zero-count release is recorded separately; absence means that event was not observed. No video-settings change is required. SR/FG/NR remain inactive; this verifies presentation boundaries rather than image processing.
 
@@ -68,3 +68,9 @@ Captured RTX 4080 SUPER (vendor 0x10de, device 0x2702), adapter LUID 00000000:00
 ReShade 6.7.3 (dxgi.dll SHA-256 059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc) was active and independently logged the same adapter and swap-chain dimensions. Its log records unsupported ImGui version 18600 errors while registering Rumble and Sky Reflection Fix for Skyrim; these are separate add-on compatibility observations, not failures of RazKolbas device capture. No attribution to RazKolbas or proof that they predate this run is made. User settings were left unchanged.
 
 Full logs preserved in artifacts/local/skyrim-observer-smoke-2026-09-19-214521/. This proves the creation boundary and identity capture in this exact ENB/ReShade setup. It does not establish frame processing, resize handling, resource retirement, image quality, performance, or general compatibility with other versions. Next T05 work: verified frame and resize boundaries and resource lifecycle before provider integration.
+
+## 0.1.2 returned-table rejection
+
+The requested user test completed; Skyrim was absent afterward. Fresh SKSE logs show 0.1.2 loaded correctly. At 22:09:33 the device observer captured the RTX4080 SUPER and 2560×1440 swap chain, then rejected its table with `Unknown swap table identity/location`. ReShade remained active. This is a fallback result, not presentation-hook success. Logs are preserved under `artifacts/local/skyrim-swap-smoke-2026-09-19-220916/`.
+
+The rejection message did not report which owner or table was actually returned. 0.1.3 adds read-only provenance logging: table owner's exact hash/size/RVA and the module hash/size/RVA for base-interface Release, Present and ResizeBuffers slots. It does not relax matching, guess extended-interface slots or patch a new owner. One short menu/exit run is sufficient to collect this missing evidence; loading a save is unnecessary for this probe.

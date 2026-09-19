@@ -110,6 +110,24 @@ HRESULT WINAPI swapResize1(IDXGISwapChain3* s,UINT count,UINT width,UINT height,
     const auto* state=swapLease.load(std::memory_order_acquire);
     return observeResize1(reinterpret_cast<Resize1Fn>(state->originals[4]),s,count,width,height,format,flags,nodes,queues,&swapObserved);
 }
+void logSwapTableOwners(void** table,HMODULE tableOwner,const FileIdentity& tableIdentity) {
+    const auto base=reinterpret_cast<std::uintptr_t>(tableOwner);
+    spdlog::info("Swap table provenance: ownerSHA256={}; ownerFileSize={}; tableRVA=0x{:x}",
+        tableIdentity.hash,tableIdentity.size,reinterpret_cast<std::uintptr_t>(table)-base);
+    // Only slots guaranteed by the already-validated IDXGISwapChain interface.
+    // Do not assume extended interfaces or read wrapper-private object fields.
+    for(const unsigned slot:{2U,8U,13U}) {
+        const auto method=std::atomic_ref<void*>(table[slot]).load(std::memory_order_acquire);
+        HMODULE owner=nullptr;
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,reinterpret_cast<LPCWSTR>(method),&owner)) {
+            spdlog::info("Swap method provenance: slot={}; no loaded-module owner",slot);continue;
+        }
+        struct Reference { HMODULE value;~Reference(){FreeLibrary(value);} } reference{owner};
+        const auto identity=owner==tableOwner?tableIdentity:identify(owner);
+        spdlog::info("Swap method provenance: slot={}; ownerSHA256={}; ownerFileSize={}; methodRVA=0x{:x}",
+            slot,identity.hash,identity.size,reinterpret_cast<std::uintptr_t>(method)-reinterpret_cast<std::uintptr_t>(owner));
+    }
+}
 Result<bool> installSwapObserver(IDXGISwapChain* swap) {
     std::scoped_lock lock(swapInstallMutex);
     if(swapLease.load())return false; // A process-lifetime installation is attempted only once after preparation.
@@ -119,6 +137,7 @@ Result<bool> installSwapObserver(IDXGISwapChain* swap) {
         return Error{ErrorCode::Unsupported,"Swap table is not owned by a loaded module"};
     struct Reference { HMODULE value;~Reference(){FreeLibrary(value);} } reference{owner};
     const auto identity=identify(owner);
+    logSwapTableOwners(table,owner,identity);
     const auto& profile=reshade673SwapProfile();
     const auto base=reinterpret_cast<std::uintptr_t>(owner),address=reinterpret_cast<std::uintptr_t>(table);
     if(identity.hash!=profile.hash||identity.size!=profile.fileSize||address<base||address-base!=profile.tableRva)

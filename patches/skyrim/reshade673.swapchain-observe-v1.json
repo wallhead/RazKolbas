@@ -19,5 +19,5 @@
   "lifetime": "Shared vtable applies to all objects of this exact wrapper class; modules and immutable forwarding state remain pinned for process lifetime; no saved COM object pointers or references",
   "recovery": "On partial install failure restore acquired slots by owner-aware CAS in reverse order, retain state/modules for in-flight callbacks and later chains; fatal if non-conflict restoration fails. Normal removal uses process exit and next-launch patch disable",
   "evidence": ["docs/re/SWAPCHAIN_TRACE.md", "tests/unit/SwapObserverTests.cpp", "tests/integration/RendererCaptureTests.cpp", "tests/unit/HookProfileTests.cpp [.local_swap_profile]"],
-  "game_runtime": "NOT RUN; exact shared table and callback invocation must be confirmed in the next Skyrim test"
+  "game_runtime": "REJECTED: 0.1.2 game run at 2026-09-19 22:09:33 returned an unmatched table; no slots patched; actual owner provenance probe pending"
 }
