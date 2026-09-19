@@ -1,0 +1,127 @@
+; PROPOSED NEW CONFIGURATION — not accepted by either reference mod.
+; Implementation must validate values against actual runtime/provider support.
+; Requested values persist even when an effective fallback is used.
+; Target: Data/SKSE/Plugins/RazKolbas.ini
+
+[General]
+SchemaVersion = 1
+Enabled = true
+; SafeMode avoids rendering hooks and vendor initialization at next launch.
+SafeMode = false
+; Auto resolves once at startup; NativeD3D11 and ProxyD3D12 are explicit options.
+; Changing presentation ownership may require restart.
+Presentation = Auto
+; Never silently enable another temporal upscaler alongside this plugin.
+ConflictPolicy = DisableThisPlugin
+LogLevel = Info
+
+[Adapter]
+; Renderer means the adapter LUID obtained from Skyrim's actual D3D11 device.
+Selection = Renderer
+AllowCrossAdapter = false
+
+[Upscaling]
+; Auto / Native / DLSS / FSR / XeSS
+Provider = Auto
+; NativeAA / Quality / Balanced / Performance / UltraPerformance, as supported.
+Quality = Quality
+; Separate provider model choice from SDK-independent quality names.
+ModelPreset = Auto
+AutoExposure = true
+Sharpening = true
+Sharpness = 0.30
+; Auto or Manual; apply a tested bias for the chosen render scale.
+MipBiasMode = Auto
+ManualMipBias = 0.0
+; Zero chooses the provider's supported quality ratio, not an arbitrary zero size.
+ManualRenderScale = 0.0
+
+[FrameGeneration]
+Enabled = false
+; Auto / DLSS / FSR / XeSS; a valid SR provider does not imply FG support.
+Provider = Auto
+; Explicit count: 1 extra frame means 2 total displayed frames per real frame.
+; Clamp/reject according to the selected runtime's actual capability query.
+ExtraGeneratedFrames = 1
+DynamicFrameCount = false
+; Zero uses an explicitly implemented display-aware target policy.
+TargetDisplayedFPS = 0
+; Auto coordinates provider-required Reflex/XeLL/pacing, not all at once.
+LatencyMode = Auto
+; Auto / NativePlane / ProviderDefault / DifferenceMaskExperimental
+UIComposition = Auto
+
+[NeuralRendering]
+Enabled = false
+; Auto selects only an implemented, validated NR provider contract.
+Backend = Auto
+; BeforeSR / AfterSR: AfterSR requires matching output-resolution guide buffers.
+Position = BeforeSR
+Preset = Auto
+Style = 0
+Intensity = 1.0
+LocalToneStrength = 1.0
+LocalStructureStrength = 1.0
+; Auto inherits local structure where the actual backend supports it.
+SkinStructureStrength = Auto
+UseAutoMask = false
+PassCount = 1
+; 1.0 means full NR input size; reduced scales are experimental, not SR quality.
+InputResolutionScale = 1.0
+; Model-native UI correction differs from host-side HUD composition.
+NativeUICorrection = false
+; Auto / Residual / Ratio; expose only independently implemented resolve modes.
+Resolve = Auto
+TransferStrength = 1.0
+ColourStrength = 1.0
+MaxRatio = 2.0
+WhitePoint = 1.0
+; Auto follows verified input metadata; never guess from the GPU name.
+ColourEncoding = Auto
+
+[Compatibility]
+ENB = Auto
+ReShade = Auto
+; AfterSR / BeforeSR. Effects run exactly once at the verified selected stage.
+ReShadePlacement = AfterSR
+PublishDepthToReShade = true
+; Unsupported coexistence must be reported, not assumed to work.
+OtherTemporalUpscaler = Reject
+
+[Presentation]
+; Auto / On / Off only where the actual presentation backend supports them.
+VSync = Auto
+; Zero disables this plugin's explicit displayed-FPS limiter.
+DisplayedFPSLimit = 0
+; Auto uses the coordinator/provider policy; never stack arbitrary frame sleeps.
+Pacing = Auto
+
+[Interface]
+Enabled = true
+; Symbolic keys are translated by this plugin; not PureDark's ImGui numeric codes.
+ToggleMenuKey = End
+ToggleFrameGenerationKey = NumMultiply
+ToggleNeuralRenderingKey = NumSubtract
+ShowRequestedAndEffective = true
+ShowDisabledOptionReasons = true
+FontScale = 1.0
+
+[Diagnostics]
+Overlay = false
+GPUStageTimings = false
+DumpCapabilitiesAtStartup = true
+LogResourceGenerations = false
+; Validation is for a development build and can change timing/performance.
+GraphicsDebugValidation = false
+
+[Patching]
+; These settings control product runtime behavior, not Codex's permission to RE.
+; Matching, verified integration patches are allowed by default.
+EnableVersionedPatches = true
+ExperimentalPatches = false
+; Comma-separated known patch IDs only. Unknown IDs produce a diagnostic.
+DisabledPatchIds =
+LogPatchDecisions = true
+
+; File patches use the explicit backup/journal tool, not silent INI-driven writes.
+; Runtime files belong in the plugin's documented controlled installation folder.
