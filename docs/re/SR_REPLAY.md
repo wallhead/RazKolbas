@@ -88,3 +88,22 @@ owners unwind. SDK binaries, reference DLLs and captures stay out of git/MO2.
 Next: use this NGX call path in the owned backend after recovering pre-SR
 resource preparation and jitter/hook timing. No repeated stationary/pan test is
 needed for that step. Installed 0.1.7 remains diagnostic; live DLSS is inactive.
+
+## Reference hook map, next investigation
+
+Static inspection of the exact supplied `SkyrimUpscaler.dll` install routine
+`0x157b60` found two renderer Begin jitter modifications based on AE relocation
+ID 77245 at addends `0xe5` and `0x133`. It also identified a call-site hook
+labelled `Main_DrawWorld_MainDraw`, based on AE ID 82084 at addend `0x17a`.
+`tools/re/map_skyrim_sr_hooks.py` decoded all 428,461 records from the exact
+hash-verified 1.6.1170 Address Library and mapped these to game RVAs
+`0xe44675`, `0xe446c3`, and `0xfa507a`, respectively. The latter is a stronger
+reference for the world-draw stage than ENB Present, but its exact place
+relative to UI and the SR input preparation remains unverified. The reference
+also uses AE IDs 77518/77520 during jitter/camera hook setup; their final
+patched sites require further instruction/data-flow tracing.
+
+RazKolbas 0.1.8 adds one read-only live-byte log for each mapped site after
+its exact game profile check. It writes no instructions there. This checks
+whether the running modlist has already changed those sites before a new
+hook descriptor is considered.

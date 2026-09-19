@@ -22,6 +22,31 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied=0;
     return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),destination,size,&copied)&&copied==size;
 }
+void logReferenceSites(std::uintptr_t base) {
+    // RVA/addends were recovered from the exact supplied SkyrimUpscaler.dll
+    // and the exact Skyrim 1.6.1170 Address Library. Read-only: other mods may
+    // already own these instructions. No signature or hook claim is made here.
+    struct Site { const char* name; std::uint32_t rva; };
+    constexpr std::array sites{
+        Site{"Renderer Begin jitter reference #1",0xe44675},
+        Site{"Renderer Begin jitter reference #2",0xe446c3},
+        Site{"Main_DrawWorld_MainDraw reference call",0xfa507a},
+    };
+    constexpr char digits[]="0123456789abcdef";
+    for(const auto& site:sites) {
+        std::array<std::uint8_t,16> bytes{};
+        if(!read(base+site.rva,bytes.data(),bytes.size())) {
+            spdlog::warn("Reference site read failed: {} RVA=0x{:x}",site.name,site.rva);
+            continue;
+        }
+        std::array<char,33> hex{};
+        for(std::size_t i=0;i<bytes.size();++i) {
+            hex[i*2]=digits[bytes[i]>>4];hex[i*2+1]=digits[bytes[i]&15];
+        }
+        spdlog::info("Reference site observed: {} RVA=0x{:x} live16={}; read-only, owner/ABI not yet established",
+            site.name,site.rva,hex.data());
+    }
+}
 std::filesystem::path captureDirectory() {
     PWSTR documents=nullptr;
     if(FAILED(SHGetKnownFolderPath(FOLDERID_Documents,KF_FLAG_DEFAULT,nullptr,&documents)))
@@ -34,10 +59,10 @@ std::filesystem::path captureDirectory() {
 }
 }
 void armFrameProbe(HMODULE verifiedGame,const Settings& settings) {
+    const auto base=reinterpret_cast<std::uintptr_t>(verifiedGame);
     if(settings.get<Choice>("Diagnostics.CaptureHotkey").value!="CtrlShiftF10") {
         spdlog::info("Candidate capture disabled: Diagnostics.CaptureHotkey=Off; no automatic startup capture");return;
     }
-    const auto base=reinterpret_cast<std::uintptr_t>(verifiedGame);
     // Live code is decoded by the game; disk text is not a valid signature here.
     constexpr std::array<std::uint8_t,14> lock{0x48,0x81,0xc1,0xf0,0x27,0,0,0x48,0xff,0x25,0x72,0xab,0x90,0};
     constexpr std::array<std::uint8_t,14> unlock{0x48,0x81,0xc1,0xf0,0x27,0,0,0x48,0xff,0x25,0x5a,0xab,0x90,0};
@@ -46,6 +71,7 @@ void armFrameProbe(HMODULE verifiedGame,const Settings& settings) {
        !read(base+0xe44570,actual.data(),actual.size())||actual!=unlock) {
         spdlog::warn("Candidate probe disabled: live renderer lock layout signature differs");return;
     }
+    logReferenceSites(base);
     gameBase.store(base,std::memory_order_release);
     spdlog::info("Candidate capture armed: Ctrl+Shift+F10 while Skyrim has focus; release between requests; 5s cooldown; six requests/session; 64MiB/bundle; no automatic capture; requires renderer lock ownership");
 }
@@ -110,7 +136,7 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.7 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.8 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"trigger=CtrlShiftF10 request="<<trigger.requests()<<" captureTickMs="<<now<<" attempt="<<attempts<<"\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);
