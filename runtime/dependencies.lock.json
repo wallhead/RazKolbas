@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "sources": {
+    "rapidcsv": {"repository": "https://github.com/d99kris/rapidcsv.git", "commit": "a98b85e663114b8fdc9c0dc03abf22c296f38241", "version": "8.84"},
     "commonlib": {"repository": "https://github.com/CharmedBaryon/CommonLibSSE-NG.git", "commit": "d51fa0938bf53f829ff83a144079136f0d4a2f18", "version": "3.6.0", "use": "SKSE headers; no engine relocation use in native host"},
     "fmt": {"repository": "https://github.com/fmtlib/fmt.git", "commit": "e69e5f977d458f2650bb346dadf2ad30c5320281", "version": "10.2.1"},
     "spdlog": {"repository": "https://github.com/gabime/spdlog.git", "commit": "27cb4c76708608465c413f6d0e6b8d99a4d84302", "version": "1.14.1"},

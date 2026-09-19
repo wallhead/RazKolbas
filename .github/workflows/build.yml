@@ -1,0 +1,16 @@
+name: Windows host and policy
+on: [push, pull_request]
+jobs:
+  host:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        preset: [win-dev, win-release]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: cmake --preset ${{ matrix.preset }}
+      - run: cmake --build --preset ${{ matrix.preset }}
+      - run: ctest --preset ${{ matrix.preset }} --no-tests=error --output-on-failure

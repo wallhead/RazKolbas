@@ -1,0 +1,15 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {"name": "win-dev", "generator": "Visual Studio 17 2022", "architecture": "x64", "binaryDir": "${sourceDir}/build/win-dev", "cacheVariables": {"CMAKE_SYSTEM_VERSION": "10.0.26100.0", "BUILD_TESTING": "ON"}},
+    {"name": "win-release", "inherits": "win-dev", "binaryDir": "${sourceDir}/build/win-release"}
+  ],
+  "buildPresets": [
+    {"name": "win-dev", "configurePreset": "win-dev", "configuration": "Debug", "jobs": 6},
+    {"name": "win-release", "configurePreset": "win-release", "configuration": "Release", "jobs": 6}
+  ],
+  "testPresets": [
+    {"name": "win-dev", "configurePreset": "win-dev", "configuration": "Debug", "output": {"outputOnFailure": true}},
+    {"name": "win-release", "configurePreset": "win-release", "configuration": "Release", "output": {"outputOnFailure": true}}
+  ]
+}
