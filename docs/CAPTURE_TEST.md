@@ -1,3 +1,5 @@
+> September20: the requested three gameplay captures are complete and verified. No repeat is currently requested. Current work is reference-derived DLSS integration; see [SR replay](re/SR_REPLAY.md).
+
 # Gameplay candidate capture test — 0.1.7
 
 Launch through MO2 with RazKolbas enabled. Keep the current ENB/ReShade setup. This build has no automatic startup capture; the test installation enables `Diagnostics.CaptureHotkey = CtrlShiftF10`. Changing that setting requires a restart. The normal sample/default is Off and the verified experimental renderer hooks remain required.

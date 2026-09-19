@@ -95,3 +95,17 @@ The user's physical key press produced request1 on eligibility attempt1, rendere
 | Depth, format44 | 64366b5fc8f20150d47290de8a25215aa5753844b41b6c0ab5f738847c6b68db | Low24 bits1,215,336–16,777,215, 1,658,290 distinct values; high8 bits0–1 |
 
 Analysis: ignored `artifacts/local/capture-hotkey-017-physical-analysis.json`. Nonzero motion/nonuniform depth distinguish this from the earlier menu capture, but the user did not identify camera/scene state for the key press. No world-stage, temporal coherence, motion direction/units or depth convention is inferred. Continued Present>=176400 with failed0 was logged after capture. Game remains running for controlled stationary/slow/fast-pan tests; five of six request slots remain at this checkpoint.
+
+## Completed three-capture comparison � September20
+
+User completed the requested sequence and exited Skyrim. Labels below follow the requested sequence; camera velocity was not independently measured. All nine files in bundles18080-136199593 (stationary),18080-136274515 (slow pan) and18080-136289546 (fast pan) pass independent SHA256/row/byte verification. All are2560x1440 formats10/34/44; colour/motion are finite.
+
+| Label | Raw MV magnitude median | Raw MV RMS | Distinct low24 depth values |
+|---|---:|---:|---:|
+| Stationary | 0.0000305518 | 0.000181517 | 1,648,943 |
+| Slow pan | 0.0000346722 | 0.000183831 | 1,363,755 |
+| Fast pan | 0.000447881 | 0.000495684 | 996,253 |
+
+`tools/re/compare_candidate_captures.py` generated local numerical evidence and a contact sheet in `artifacts/local/capture-pan-comparison/`; the sheet was visually inspected. Depth silhouettes correspond to visible structures/arms; the fast-pan motion has broad spatial response, while the first two show more localized motion. Stationary arms/foliage can animate. This supports useful world-buffer candidates but does not establish motion units/direction, jitter, depth convention or pre-UI/pre-SR placement. No further identical capture loop is needed.
+
+The stationary frame subsequently produced real finite output through the supplied DLSS runtime in the offline D3D11 DLAA replay. See `SR_REPLAY.md` for exact flags, limits and result. This lets subsequent work concentrate on the reference-derived live input/hook contract.
