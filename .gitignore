@@ -12,3 +12,4 @@
 __pycache__/
 CMakeUserPresets.json
 runtime/local-*.json
+/tests/fixtures/patch-input.bin

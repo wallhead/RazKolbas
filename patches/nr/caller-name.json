@@ -1,0 +1,24 @@
+{
+  "id": "nr.caller-name.experiment",
+  "purpose": "Reproduce the observed caller-module name compatibility condition during native NR initialization",
+  "status": "EXPERIMENTAL_BOOTSTRAP_ONLY",
+  "shipping_enabled": false,
+  "target": {
+    "module": "nvngx_dlssnr.dll",
+    "sha256": "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206",
+    "architecture": "x64",
+    "file_size": 165840496,
+    "image_size": 165945344,
+    "file_version": "310.8.0.0",
+    "pdb_guid": "4413bf99-b777-416c-907a-c4e6fcf26fdd",
+    "pdb_age": 1
+  },
+  "location": {"kind": "unique named IAT import", "dll": "KERNEL32.dll", "symbol": "GetModuleFileNameW", "observed_iat_rva": "0xac080"},
+  "original": "ASLR-normalized pointer: must equal GetProcAddress(kernel32.dll, GetModuleFileNameW) in this process",
+  "replacement": "callerNameProxy in RazKolbasNrBootstrapProbe; substitutes nvngx.dll only for the probe executable's module handle",
+  "abi": "DWORD WINAPI(HMODULE, LPWSTR, DWORD); naturally aligned 8-byte pointer CAS; no instruction relocation",
+  "activation": "Standalone probe only, after exact-hash runtime load and before Init_Ext; proxy state is immutable and code stays alive until process exit",
+  "rollback": "Compare-and-exchange only while slot still equals our proxy; restore before FreeLibrary; on ownership conflict do not unload runtime or override new owner",
+  "evidence": ["docs/re/NR_BOOTSTRAP.md", "Fallout 1.65 InstallModuleNameHook 0x32c70", "caller proxy 0x33e10", "Prepare 0x341d0", "RestoreModuleNameHook 0x34e80"],
+  "observed": {"without_patch_init": "0xbad00002", "with_patch_init": "0x00000001", "with_patch_shutdown": "0x00000001", "feature_create": "NOT RUN", "evaluate": "NOT RUN", "gpu_output": "NOT RUN"}
+}

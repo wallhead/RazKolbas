@@ -9,7 +9,9 @@ The complete T01–T24 plan in `../RazKolbas_Codex_Handoff/docs/plans/2026-09-19
 | T01 | Inventory and environment tools implemented; host dependency sources pinned; production vendor SDK selection open | 4 inventory regressions PASS; 57 extracted files VERIFIED; original archives MISSING_REFERENCE | NOT RUN |
 | T02 | Native-only SKSE DLL, guarded lifecycle, logging, build presets, CI and explicit staging implemented | Debug DLL built; 3 CTest groups PASS, including actual DLL load/export checks | Skyrim load NOT RUN |
 | T03 | Shared variant-typed INI schema, requested SR policy, transactions and temporal invariants implemented; full FG pairing/resource contracts remain open | 7 Debug CTest groups PASS; invalid numbers/enums, locked file, failed replacement, reset epoch and generated frames covered | NOT RUN |
-| T04–T24 | Not implemented, except early T08 static investigation | NOT RUN | NOT RUN |
+| T04 | Partial: exact-hash planner, owned executable patch/restore, atomic pointer leases and reversible working-copy file tooling | 10 Debug CTest groups PASS, including executable/concurrent fixtures and disk regressions | Game patches NOT RUN |
+| T08 | Early static RE and native Init_Ext/shutdown probe; exact caller-name shim implemented experimentally | Probe built and hash-gated | RTX 4080 SUPER: original init 0xBAD00002, shim init/shutdown 0x1; create/evaluate/output NOT RUN |
+| T05–T07, T09–T24 | Not implemented | NOT RUN | NOT RUN |
 
 ## Commands run
 
@@ -30,4 +32,4 @@ The complete T01–T24 plan in `../RazKolbas_Codex_Handoff/docs/plans/2026-09-19
 
 ## Next action
 
-T03: implement shared settings, capability and temporal policy. T08 static RE has started: the matched reference contains an NR module-name IAT shim. Full evidence and native probe remain in progress. A Skyrim test installation is still needed for game validation.
+T04: finish production patch descriptors and engine detour/quiescence integration; T05 needs the user-selected Skyrim test installation and exact executable hash. Independent T08 next probe: recover the parameter factory/vtable and resource callback ABI before feature 0x12 creation. See `re/NR_BOOTSTRAP.md`. T07 same-adapter interop remains an independent open task. No SR, FG, ENB, ReShade, ImGui or NR image output is implemented or advertised.
