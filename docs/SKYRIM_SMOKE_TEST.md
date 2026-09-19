@@ -1,6 +1,22 @@
 # Skyrim native-host test installation
 
-## Current installed test: 0.1.1 renderer observer
+## Current installed test: 0.1.2 presentation/resize observer
+
+Installed September 19 at 22:07 from source `691b0eb`, after confirming Skyrim was stopped. The enabled MO2 mod was updated; its existing INI was preserved byte for byte, with experimental observation already enabled. ENB/ReShade files and settings were not changed. Archive layout and installed hashes were verified, with no loose game Data plugin.
+
+- Package: `D:/TESV_EX/MO2/downloads/RazKolbas-0.1.2-swap-observer-691b0eb.zip`.
+- ZIP SHA-256: `378ea1b05d7c0ee9185fd7f9c609ea48a749c44277c7ea9d13b73ea47598180d`.
+- DLL SHA-256: `b427e3f69958448d957ff8583f4a1c6ba9933291333f42c1abea6ef3df046bec`.
+- INI SHA-256: `bce1346afa14199ba36b3040ccff5992d34c08f5f6223b4670eecd0e77de8365`.
+- Prior DLL/INI/meta backup: `artifacts/local/swap-observer-install-2026-09-19-220753/`.
+- Deployment record: `artifacts/local/swap-observer-install.json`.
+
+All 13 CTest groups pass in Debug and Release. Offline exact-ReShade validation passes 38 assertions; no ReShade code is executed by that audit. Game callbacks for this version are **NOT RUN**.
+
+Next test: launch through MO2 with ENB and ReShade enabled, reach the menu, load a save and play briefly, then exit normally. Fresh 0.1.2 logs should show `Installed reshade673.swapchain-observe-v1` and `Swap Present observation` (or Present1). Any resize or zero-count release is recorded separately; absence means that event was not observed. No video-settings change is required. SR/FG/NR remain inactive; this verifies presentation boundaries rather than image processing.
+
+
+## Previous test: 0.1.1 renderer observer
 
 On September 19 at 21:44, source commit `81fabde` Release replaced the managed MO2 plugin after confirming Skyrim was stopped. The existing INI was preserved with only `ExperimentalPatches=true` opted in. The active profile still enables `+RazKolbas`. Both installed files match the staged package; no loose game Data plugin exists.
 
