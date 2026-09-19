@@ -1,0 +1,437 @@
+[
+  {
+    "rva": "0x49dd0",
+    "encoding": "ascii",
+    "text": "Read SL_DLSS_OVERRIDE DRS key (%s profile): %u"
+  },
+  {
+    "rva": "0x49e18",
+    "encoding": "ascii",
+    "text": "Read SL_DLSS_OVERRIDE DRS key (global profile): %u"
+  },
+  {
+    "rva": "0x4cd98",
+    "encoding": "ascii",
+    "text": "DLSS-NR performance mode %u is not supported"
+  },
+  {
+    "rva": "0x4cdc8",
+    "encoding": "ascii",
+    "text": "setDLSSNRScalingRatio"
+  },
+  {
+    "rva": "0x4ce48",
+    "encoding": "ascii",
+    "text": "DLSSNRComputeScalingRatioCallback"
+  },
+  {
+    "rva": "0x4ce70",
+    "encoding": "ascii",
+    "text": "NGX DLSSNR scaling-ratio computation callback is missing"
+  },
+  {
+    "rva": "0x4ceb0",
+    "encoding": "ascii",
+    "text": "NGX DLSSNR scaling-ratio computation callback failed - error %u"
+  },
+  {
+    "rva": "0x4cf48",
+    "encoding": "ascii",
+    "text": "DLSSNR.Width"
+  },
+  {
+    "rva": "0x4cf58",
+    "encoding": "ascii",
+    "text": "DLSSNR.Height"
+  },
+  {
+    "rva": "0x4cf68",
+    "encoding": "ascii",
+    "text": "DLSSNR.Hint.Render.Preset"
+  },
+  {
+    "rva": "0x4d060",
+    "encoding": "ascii",
+    "text": "Detected DLSS-NR output resolution change from %ux%u to %ux%u, recreating NGX feature"
+  },
+  {
+    "rva": "0x4d0b8",
+    "encoding": "ascii",
+    "text": "Detected DLSS-NR preset change, recreating NGX feature"
+  },
+  {
+    "rva": "0x4d0f0",
+    "encoding": "ascii",
+    "text": "Detected DLSS-NR performance mode change, recreating NGX feature"
+  },
+  {
+    "rva": "0x4d168",
+    "encoding": "ascii",
+    "text": "Failed to create DLSS-NR NGX feature"
+  },
+  {
+    "rva": "0x4d190",
+    "encoding": "ascii",
+    "text": "Created DLSS-NR NGX feature %ux%u preset=%u performanceMode=%u"
+  },
+  {
+    "rva": "0x4d1d0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Color"
+  },
+  {
+    "rva": "0x4d1e0",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVec"
+  },
+  {
+    "rva": "0x4d1f0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Depth"
+  },
+  {
+    "rva": "0x4d200",
+    "encoding": "ascii",
+    "text": "DLSSNR.Output"
+  },
+  {
+    "rva": "0x4d210",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMask"
+  },
+  {
+    "rva": "0x4d228",
+    "encoding": "ascii",
+    "text": "DLSSNR.Backbuffer"
+  },
+  {
+    "rva": "0x4d240",
+    "encoding": "ascii",
+    "text": "DLSSNR.UI"
+  },
+  {
+    "rva": "0x4d250",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlpha"
+  },
+  {
+    "rva": "0x4d260",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionField"
+  },
+  {
+    "rva": "0x4d288",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectHeight"
+  },
+  {
+    "rva": "0x4d2a8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectWidth"
+  },
+  {
+    "rva": "0x4d2c8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseY"
+  },
+  {
+    "rva": "0x4d2e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseX"
+  },
+  {
+    "rva": "0x4d308",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectHeight"
+  },
+  {
+    "rva": "0x4d328",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectWidth"
+  },
+  {
+    "rva": "0x4d340",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseY"
+  },
+  {
+    "rva": "0x4d358",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseX"
+  },
+  {
+    "rva": "0x4d370",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleX"
+  },
+  {
+    "rva": "0x4d388",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleY"
+  },
+  {
+    "rva": "0x4d3a0",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectHeight"
+  },
+  {
+    "rva": "0x4d3c0",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectWidth"
+  },
+  {
+    "rva": "0x4d3e0",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseY"
+  },
+  {
+    "rva": "0x4d400",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseX"
+  },
+  {
+    "rva": "0x4d420",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthInverted"
+  },
+  {
+    "rva": "0x4d438",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectHeight"
+  },
+  {
+    "rva": "0x4d458",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectWidth"
+  },
+  {
+    "rva": "0x4d478",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseY"
+  },
+  {
+    "rva": "0x4d498",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseX"
+  },
+  {
+    "rva": "0x4d4b8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectHeight"
+  },
+  {
+    "rva": "0x4d4d8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectWidth"
+  },
+  {
+    "rva": "0x4d4f8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectBaseY"
+  },
+  {
+    "rva": "0x4d518",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectBaseX"
+  },
+  {
+    "rva": "0x4d538",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectHeight"
+  },
+  {
+    "rva": "0x4d558",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectWidth"
+  },
+  {
+    "rva": "0x4d578",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectBaseY"
+  },
+  {
+    "rva": "0x4d598",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectBaseX"
+  },
+  {
+    "rva": "0x4d5b8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectHeight"
+  },
+  {
+    "rva": "0x4d5d0",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectWidth"
+  },
+  {
+    "rva": "0x4d5e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectBaseY"
+  },
+  {
+    "rva": "0x4d600",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectBaseX"
+  },
+  {
+    "rva": "0x4d618",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectHeight"
+  },
+  {
+    "rva": "0x4d638",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectWidth"
+  },
+  {
+    "rva": "0x4d658",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectBaseY"
+  },
+  {
+    "rva": "0x4d678",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectBaseX"
+  },
+  {
+    "rva": "0x4d698",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectHeight"
+  },
+  {
+    "rva": "0x4d6d0",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectWidth"
+  },
+  {
+    "rva": "0x4d700",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectBaseY"
+  },
+  {
+    "rva": "0x4d730",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectBaseX"
+  },
+  {
+    "rva": "0x4d760",
+    "encoding": "ascii",
+    "text": "DLSSNR.Intensity"
+  },
+  {
+    "rva": "0x4d778",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalToneStrength"
+  },
+  {
+    "rva": "0x4d798",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalStructureStrength"
+  },
+  {
+    "rva": "0x4d7b8",
+    "encoding": "ascii",
+    "text": "DLSSNR.GlobalToneStrength"
+  },
+  {
+    "rva": "0x4d7d8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UseAutoMask"
+  },
+  {
+    "rva": "0x4d7f0",
+    "encoding": "ascii",
+    "text": "DLSSNR.SkinStructureStrength"
+  },
+  {
+    "rva": "0x4d810",
+    "encoding": "ascii",
+    "text": "DLSSNR.Style"
+  },
+  {
+    "rva": "0x4d820",
+    "encoding": "ascii",
+    "text": "DLSSNR.Reset"
+  },
+  {
+    "rva": "0x4d830",
+    "encoding": "ascii",
+    "text": "DLSSNR.UICorrection"
+  },
+  {
+    "rva": "0x4d848",
+    "encoding": "ascii",
+    "text": "Failed to evaluate DLSS-NR NGX feature"
+  },
+  {
+    "rva": "0x4d870",
+    "encoding": "ascii",
+    "text": "slDLSSNRSetOptions"
+  },
+  {
+    "rva": "0x4d9d0",
+    "encoding": "ascii",
+    "text": "kBufferTypeHUDLessColor"
+  },
+  {
+    "rva": "0x4e410",
+    "encoding": "ascii",
+    "text": "Failed to get DLSSNR constants for viewport %u frame %u"
+  },
+  {
+    "rva": "0x4e538",
+    "encoding": "ascii",
+    "text": "DLSSNR runtime creation failed for viewport %u"
+  },
+  {
+    "rva": "0x4e568",
+    "encoding": "ascii",
+    "text": "DLSSNR runtime created for viewport %u"
+  },
+  {
+    "rva": "0x4e750",
+    "encoding": "ascii",
+    "text": "DLSSNR mvec: extent=[%u,%u %ux%u] resource=[%ux%u]"
+  },
+  {
+    "rva": "0x4e788",
+    "encoding": "ascii",
+    "text": "DLSSNR runtime destroyed for viewport %u"
+  },
+  {
+    "rva": "0x4e810",
+    "encoding": "ascii",
+    "text": "DLSS-NR feature is not supported. Please check if you have a valid nvngx_dlssnr.dll or your driver supports DLSS-NR."
+  },
+  {
+    "rva": "0x5a640",
+    "encoding": "ascii",
+    "text": ".?AV<lambda_1>@?7??destroyNgxFeature@DLSSNRBackendNGX@dlssnr@sl@@AEAAX_N@Z@"
+  },
+  {
+    "rva": "0x5b090",
+    "encoding": "ascii",
+    "text": ".?AV?$_Func_impl_no_alloc@V<lambda_1>@?7??destroyNgxFeature@DLSSNRBackendNGX@dlssnr@sl@@AEAAX_N@Z@X$$V@std@@"
+  },
+  {
+    "rva": "0x5b140",
+    "encoding": "ascii",
+    "text": ".?AVIDLSSNRBackend@dlssnr@sl@@"
+  },
+  {
+    "rva": "0x5b170",
+    "encoding": "ascii",
+    "text": ".?AVDLSSNRBackendNGX@dlssnr@sl@@"
+  },
+  {
+    "rva": "0x60190",
+    "encoding": "utf16le",
+    "text": "SL.DLSS_NR PLUGIN - PRODUCTION"
+  },
+  {
+    "rva": "0x60224",
+    "encoding": "utf16le",
+    "text": "SL.DLSS_NR"
+  }
+]

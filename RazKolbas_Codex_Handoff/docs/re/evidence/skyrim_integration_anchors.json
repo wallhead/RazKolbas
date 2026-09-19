@@ -1,0 +1,80 @@
+[
+  {
+    "at": "0x1580c1",
+    "function_rva": "0x157b60",
+    "string_rva": "0x338ec8",
+    "text": "ReShadeCreateEffectRuntime"
+  },
+  {
+    "at": "0x15810d",
+    "function_rva": "0x157b60",
+    "string_rva": "0x339c18",
+    "text": "Hook ReShadeCreateEffectRuntime Failed! {}"
+  },
+  {
+    "at": "0x159010",
+    "function_rva": "0x157b60",
+    "string_rva": "0x339e20",
+    "text": "Installed upscaler hooks"
+  },
+  {
+    "at": "0x1f3cb6",
+    "function_rva": "0x1f3c80",
+    "string_rva": "0x336fb0",
+    "text": "void __cdecl SkyrimUpscaler::SetupMotionVector(struct ID3D11Texture2D *)"
+  },
+  {
+    "at": "0x1f3d31",
+    "function_rva": "0x1f3c80",
+    "string_rva": "0x337000",
+    "text": "Create mTempMotionVectors failed! ErrorCode: {}"
+  },
+  {
+    "at": "0x1f3dd4",
+    "function_rva": "0x1f3c80",
+    "string_rva": "0x337030",
+    "text": "Create mTempMotionVectorsFullSize failed! ErrorCode: {}"
+  },
+  {
+    "at": "0x1f76e0",
+    "function_rva": "0x1f7467",
+    "string_rva": "0x336cf0",
+    "text": "Create render-res mTempMotionVectors failed! ErrorCode: {}"
+  },
+  {
+    "at": "0x1f824d",
+    "function_rva": "0x1f8220",
+    "string_rva": "0x3361e8",
+    "text": "ENBGetSDKVersion"
+  },
+  {
+    "at": "0x1f8496",
+    "function_rva": "0x1f8480",
+    "string_rva": "0x3361e8",
+    "text": "ENBGetSDKVersion"
+  },
+  {
+    "at": "0x1ff16b",
+    "function_rva": "0x1ff050",
+    "string_rva": "0x3371c8",
+    "text": "InitDLSSNR failed."
+  },
+  {
+    "at": "0x1ffc09",
+    "function_rva": "0x1ffbc0",
+    "string_rva": "0x339620",
+    "text": "bool __cdecl hk_ReShadeCreateEffectRuntime(enum reshade::api::device_api,void *,void *,void *,const char *,struct reshade::api::effect_runtime **)"
+  },
+  {
+    "at": "0x1ffc38",
+    "function_rva": "0x1ffbc0",
+    "string_rva": "0x3396b8",
+    "text": "Hooked ReShade render_effects"
+  },
+  {
+    "at": "0x1ffd75",
+    "function_rva": "0x1ffbc0",
+    "string_rva": "0x3396d8",
+    "text": "hk_ReShadeCreateEffectRuntime result: {}"
+  }
+]

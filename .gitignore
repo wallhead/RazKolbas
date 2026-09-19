@@ -1,0 +1,14 @@
+/artifacts/
+/build/
+/reference/
+/.superpowers/
+/package/
+/SkyrimUpscalerAIOBuild16-Hotfix1/
+/Upscaling Custom 108772 1.65 2026-09-13T17-12Z DzMlEf9Og/
+*.7z
+*.pdb
+*.dll
+*.i64
+__pycache__/
+CMakeUserPresets.json
+runtime/local-*.json

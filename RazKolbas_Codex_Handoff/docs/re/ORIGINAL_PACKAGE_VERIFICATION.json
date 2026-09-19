@@ -1,0 +1,531 @@
+{
+  "analysis_date": "2026-09-19",
+  "scope": "Archive integrity, static evidence and document/package validation ONLY",
+  "windows_plugin_build": "NOT RUN \u2014 no plugin implemented in this research task",
+  "gpu_runtime_tests": "NOT RUN",
+  "skyrim_enb_reshade_tests": "NOT RUN",
+  "checks": [
+    {
+      "check": "Original archive hash: SkyrimUpscalerAIOBuild16-Hotfix1(1).7z",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Original archive hash: Upscaling Custom 108772 1.65 2026-09-13T17-12Z DzMlEf9Og(2).7z",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/SKSE/Plugins/SkyrimUpscaler_preload.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/SKSE/Plugins/SkyrimUpscaler.ini",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_framegeneration_dx12.pdb",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_loader_dx12.pdb",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/SKSE/Plugins/SkyrimUpscaler.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_framegeneration_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_loader_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/amd_fidelityfx_upscaler_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/ffx_backend_dx11_x64.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/ffx_fsr3upscaler_x64.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/ffx_fsr3_x64.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/libxell.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/libxess.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/libxess_dx11.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/libxess_fg.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/nvngx_dlss.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/nvngx_dlssnr.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/PDPerfPlugin.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/nvngx_dlssg.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/sl.common.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/sl.dlss_g.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/sl.interposer.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/sl.pcl.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: skyrim/UpscalerBasePlugin/Streamline/sl.reflex.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Manifest file count: skyrim",
+      "result": "PASS",
+      "detail": "25"
+    },
+    {
+      "check": "Extracted file hash: fallout/Textures/Effects/ColorBlackUtility.DDS",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/amd_fidelityfx_framegeneration_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/amd_fidelityfx_loader_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/amd_fidelityfx_upscaler_dx12.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/nvngx_dlss.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/nvngx_dlssg.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/nvngx_dlssnr.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.common.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.dlss.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.dlss_g.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.dlss_nr.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.interposer.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.nis.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.pcl.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.reflex.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling.dll",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/BSImagespaceShaderSSLRRaytracing.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/FrameGeneration/CopyDepthToSharedBufferCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/DilateMotionVectorCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/GenerateDLSSTransparencyMaskCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/FrameGeneration/GenerateSharedBuffersCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/OverrideDepthCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/OverrideLinearDepthCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/PipboyTemporalMaskCS.hlsl",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/sl.dlss_g.dll.i64",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/Meshes/Effects/CameraAttachedFX/CameraAttach_WetArmorView.nif",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling.pdb",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/LICENSE.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/nis.license.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/nvngx_dlss.license.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/Streamline/reflex.license.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Extracted file hash: fallout/F4SE/Plugins/Upscaling/ReShade-SDK-LICENSE.txt",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Manifest file count: fallout",
+      "result": "PASS",
+      "detail": "32"
+    },
+    {
+      "check": "Fallout PDB GUID and age match DLL",
+      "result": "PASS",
+      "detail": "7057e107-1a03-4c53-ab14-7cd63ad16f3e, age 71"
+    },
+    {
+      "check": "PD export InitDLSSNR",
+      "result": "PASS",
+      "detail": "0x4fdb0"
+    },
+    {
+      "check": "PD export EvaluateDLSSNR",
+      "result": "PASS",
+      "detail": "0x4fde0"
+    },
+    {
+      "check": "PD export ReleaseDLSSNR",
+      "result": "PASS",
+      "detail": "0x4fea0"
+    },
+    {
+      "check": "Resolve selector reads +0x114",
+      "result": "PASS",
+      "detail": "83 b9 14 01 00 00 02"
+    },
+    {
+      "check": "Evaluate copy loop iteration count is 2",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Evaluate 0x80 source increment",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Evaluate final tail uses qword at +0x30",
+      "result": "PASS",
+      "detail": "2*0x80 + 3*0x10 + 8 = 0x138 copied bytes; not a C++ sizeof claim"
+    },
+    {
+      "check": "Skyrim delayed NR and SR imports present",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "NR runtime hashes equal",
+      "result": "PASS",
+      "detail": "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206"
+    },
+    {
+      "check": "Every included disassembly byte line matches original DLL",
+      "result": "PASS",
+      "detail": "329 verified lines"
+    },
+    {
+      "check": "Current Fallout symbol: DX12SwapChain::ResizeBuffersInternal",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Current Fallout symbol: Streamline::PrepareDirectDLSSNR",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Current Fallout symbol: nvngx::dlss_nr::D3D12Backend::Evaluate",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Current Fallout resize wrappers dispatch to actual resize",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Current Fallout NR lambda calls direct evaluation",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "All evidence JSON parses",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Research script Python syntax",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Proposed INI parses with unique keys and sections",
+      "result": "PASS",
+      "detail": "General, Adapter, Upscaling, FrameGeneration, NeuralRendering, Compatibility, Presentation, Interface, Diagnostics"
+    },
+    {
+      "check": "FG and NR safe example defaults",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: skyrim_integration_anchors.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: skyrim_nr_before_sr.asm",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: skyrim_nr_caller.asm",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: fallout_rendering_xrefs.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: pd_nr_abi.asm",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: fallout_pdb_identity.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: pd_resolve_selector.asm",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: 03_SkyrimUnifiedUpscaler.ini.example",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: pe_inventory.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: skyrim_selected_xrefs.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: skyrim_resolve_setting.asm",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: archive_hashes.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: fallout_project_symbols.tsv",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Report evidence/file reference: fallout_nr_dispatch_xrefs.json",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: 02_CODEX_IMPLEMENTATION_PROMPT.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: 01_REVERSE_ENGINEERING_REPORT.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: README.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: 04_ACCEPTANCE_MATRIX.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: README.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Balanced fenced blocks: README.md",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Required handoff files exist",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "No binary/model/PDB/archive/font redistribution",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "No raw unfiltered PDB/strings dumps",
+      "result": "PASS",
+      "detail": ""
+    }
+  ],
+  "passed": 104,
+  "failed": 0
+}

@@ -1,0 +1,158 @@
+[
+  {
+    "at": "0x9e55",
+    "function_rva": "0x9e30",
+    "string_rva": "0xc9838",
+    "text": "DX12 OpenSharedHandle Failed : no D3D12 device"
+  },
+  {
+    "at": "0x9e88",
+    "function_rva": "0x9e30",
+    "string_rva": "0xc9890",
+    "text": "DX12 OpenSharedHandle Success : 0x%08x"
+  },
+  {
+    "at": "0x9e91",
+    "function_rva": "0x9e30",
+    "string_rva": "0xc9868",
+    "text": "DX12 OpenSharedHandle Failed : 0x%08x"
+  },
+  {
+    "at": "0xb2e0",
+    "function_rva": "0xb2a0",
+    "string_rva": "0xc9cc8",
+    "text": "OpenSharedHandle failed: 0x%08x"
+  },
+  {
+    "at": "0xb6de",
+    "function_rva": "0xb480",
+    "string_rva": "0xc9de0",
+    "text": "OpenSharedHandle GPU2 cross-adapter heap failed: 0x%08x"
+  },
+  {
+    "at": "0xb6e9",
+    "function_rva": "0xb480",
+    "string_rva": "0xc9da8",
+    "text": "CreateSharedHandle (cross-adapter heap) failed: 0x%08x"
+  },
+  {
+    "at": "0xbce7",
+    "function_rva": "0xbc40",
+    "string_rva": "0xc9f10",
+    "text": "D3D12Interop: OpenSharedFence copy fence on D3D11 failed: 0x%08x"
+  },
+  {
+    "at": "0xbd3b",
+    "function_rva": "0xbc40",
+    "string_rva": "0xc9f60",
+    "text": "D3D12Interop: OpenSharedHandle copy fence on companion failed: 0x%08x"
+  },
+  {
+    "at": "0xbd5a",
+    "function_rva": "0xbc40",
+    "string_rva": "0xc9ec8",
+    "text": "D3D12Interop: CreateSharedHandle local fence failed: 0x%08x"
+  },
+  {
+    "at": "0xf3e1",
+    "function_rva": "0xf181",
+    "string_rva": "0xcb118",
+    "text": "s_D3D12Device->CreateSharedHandle Failed ErrorCode: 0x%08x"
+  },
+  {
+    "at": "0xf41f",
+    "function_rva": "0xf181",
+    "string_rva": "0xcb158",
+    "text": "Failed to OpenSharedFence ErrorCode: 0x%08x"
+  },
+  {
+    "at": "0xf5c2",
+    "function_rva": "0xf181",
+    "string_rva": "0xcb210",
+    "text": "CreateSharedHandle GPU1-only fence failed: 0x%08x"
+  },
+  {
+    "at": "0xf608",
+    "function_rva": "0xf181",
+    "string_rva": "0xcb250",
+    "text": "OpenSharedHandle GPU1-only fence on local device failed: 0x%08x"
+  },
+  {
+    "at": "0x1116e",
+    "function_rva": "0x11050",
+    "string_rva": "0xc9810",
+    "text": "DX11 OpenSharedHandle Success : 0x%08x"
+  },
+  {
+    "at": "0x11175",
+    "function_rva": "0x11050",
+    "string_rva": "0xc97e8",
+    "text": "DX11 OpenSharedHandle Failed : 0x%08x"
+  },
+  {
+    "at": "0x18bf3",
+    "function_rva": "0x18bf3",
+    "string_rva": "0xcc700",
+    "text": "Streamline TagResources_General skipped: depth or motionVectors is null."
+  },
+  {
+    "at": "0x488fe",
+    "function_rva": "0x488ca",
+    "string_rva": "0xd3090",
+    "text": "MotionVectors"
+  },
+  {
+    "at": "0x48b59",
+    "function_rva": "0x488ca",
+    "string_rva": "0xd32c8",
+    "text": "MotionVectors3D"
+  },
+  {
+    "at": "0x48bf4",
+    "function_rva": "0x488ca",
+    "string_rva": "0xd3358",
+    "text": "MotionVectorsReflection"
+  },
+  {
+    "at": "0x48e26",
+    "function_rva": "0x48dc0",
+    "string_rva": "0xd3090",
+    "text": "MotionVectors"
+  },
+  {
+    "at": "0x49081",
+    "function_rva": "0x48dc0",
+    "string_rva": "0xd32c8",
+    "text": "MotionVectors3D"
+  },
+  {
+    "at": "0x4911c",
+    "function_rva": "0x48dc0",
+    "string_rva": "0xd3358",
+    "text": "MotionVectorsReflection"
+  },
+  {
+    "at": "0x49356",
+    "function_rva": "0x492f0",
+    "string_rva": "0xd3090",
+    "text": "MotionVectors"
+  },
+  {
+    "at": "0x495b1",
+    "function_rva": "0x492f0",
+    "string_rva": "0xd32c8",
+    "text": "MotionVectors3D"
+  },
+  {
+    "at": "0x4964c",
+    "function_rva": "0x492f0",
+    "string_rva": "0xd3358",
+    "text": "MotionVectorsReflection"
+  },
+  {
+    "at": "0x54bb0",
+    "function_rva": "0x549b0",
+    "string_rva": "0xd4fb0",
+    "text": "FSR3_InputMotionVectors"
+  }
+]

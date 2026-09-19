@@ -1,0 +1,1972 @@
+[
+  {
+    "rva": "0x65ca8",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.DLAA"
+  },
+  {
+    "rva": "0x65cc8",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Quality"
+  },
+  {
+    "rva": "0x65ce8",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Balanced"
+  },
+  {
+    "rva": "0x65d10",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Performance"
+  },
+  {
+    "rva": "0x65d38",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.UltraPerformance"
+  },
+  {
+    "rva": "0xc9f10",
+    "encoding": "ascii",
+    "text": "D3D12Interop: OpenSharedFence copy fence on D3D11 failed: 0x%08x"
+  },
+  {
+    "rva": "0xca0b0",
+    "encoding": "ascii",
+    "text": "D3D12Interop: CreateFence on local GPU failed: 0x%08x"
+  },
+  {
+    "rva": "0xca0f0",
+    "encoding": "ascii",
+    "text": "D3D12Interop: local D3D12 device created on game GPU for NR/bounce."
+  },
+  {
+    "rva": "0xca608",
+    "encoding": "ascii",
+    "text": "D3D11Fence"
+  },
+  {
+    "rva": "0xca618",
+    "encoding": "ascii",
+    "text": "D3D12Fence"
+  },
+  {
+    "rva": "0xca628",
+    "encoding": "ascii",
+    "text": "D3D12GpuFence"
+  },
+  {
+    "rva": "0xca9d0",
+    "encoding": "ascii",
+    "text": "D3D12Interop: recover could not recreate local D3D12 (NR on game GPU may stay off); companion Present will continue"
+  },
+  {
+    "rva": "0xcb0e0",
+    "encoding": "ascii",
+    "text": "Failed to CreateFence shared (flags=0x%x) 0x%08x"
+  },
+  {
+    "rva": "0xcb158",
+    "encoding": "ascii",
+    "text": "Failed to OpenSharedFence ErrorCode: 0x%08x"
+  },
+  {
+    "rva": "0xcb1c0",
+    "encoding": "ascii",
+    "text": "Failed to CreateFence."
+  },
+  {
+    "rva": "0xcb1d8",
+    "encoding": "ascii",
+    "text": "Failed to CreateFence GPU1-only (flags=0x%x) 0x%08x"
+  },
+  {
+    "rva": "0xcb290",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper resources for type %d created!"
+  },
+  {
+    "rva": "0xcb380",
+    "encoding": "ascii",
+    "text": "CreateShareTexture: failed to create local NR D3D11 staging %dx%d fmt=%d"
+  },
+  {
+    "rva": "0xcb3d0",
+    "encoding": "ascii",
+    "text": "CreateShareTexture: local-only NR share %dx%d fmt=%d kind=0x%x"
+  },
+  {
+    "rva": "0xcb410",
+    "encoding": "ascii",
+    "text": "CreateShareTexture: local-only NR share failed %dx%d fmt=%d"
+  },
+  {
+    "rva": "0xcb938",
+    "encoding": "ascii",
+    "text": "slReflexGetState"
+  },
+  {
+    "rva": "0xcb950",
+    "encoding": "ascii",
+    "text": "slReflexSleep"
+  },
+  {
+    "rva": "0xcb960",
+    "encoding": "ascii",
+    "text": "slReflexSetOptions"
+  },
+  {
+    "rva": "0xcb978",
+    "encoding": "ascii",
+    "text": "slDLSSGetOptimalSettings"
+  },
+  {
+    "rva": "0xcb998",
+    "encoding": "ascii",
+    "text": "slDLSSGetState"
+  },
+  {
+    "rva": "0xcb9a8",
+    "encoding": "ascii",
+    "text": "slDLSSSetOptions"
+  },
+  {
+    "rva": "0xcb9c0",
+    "encoding": "ascii",
+    "text": "slDLSSGGetState"
+  },
+  {
+    "rva": "0xcb9d0",
+    "encoding": "ascii",
+    "text": "slDLSSGSetOptions"
+  },
+  {
+    "rva": "0xcbae0",
+    "encoding": "ascii",
+    "text": "Replace Streamline Frame Generation SwapChain"
+  },
+  {
+    "rva": "0xcbb10",
+    "encoding": "ascii",
+    "text": "Replace Streamline Frame Generation SwapChain success"
+  },
+  {
+    "rva": "0xcbb48",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain"
+  },
+  {
+    "rva": "0xcbb80",
+    "encoding": "ascii",
+    "text": "FrameGenMethod_Streamline_DX12::CreateSwapChainProxy: %d x %d Format: %d BufferCount: %d hr=0x%08x out=%p"
+  },
+  {
+    "rva": "0xcbbf0",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain failed 0x%08x"
+  },
+  {
+    "rva": "0xcbc30",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain success"
+  },
+  {
+    "rva": "0xcbc68",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain For Hwnd"
+  },
+  {
+    "rva": "0xcbca0",
+    "encoding": "ascii",
+    "text": "FrameGenMethod_Streamline_DX12::CreateSwapChainProxyForHwnd: %d x %d Format: %d BufferCount: %d slHr=0x%08x out=%p"
+  },
+  {
+    "rva": "0xcbd20",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain For Hwnd failed 0x%08x"
+  },
+  {
+    "rva": "0xcbd68",
+    "encoding": "ascii",
+    "text": "Create Streamline Frame Generation SwapChain For Hwnd success"
+  },
+  {
+    "rva": "0xcbeb0",
+    "encoding": "ascii",
+    "text": "eErrorReflexAPI"
+  },
+  {
+    "rva": "0xcc3d8",
+    "encoding": "ascii",
+    "text": "Reflex is supported on this system."
+  },
+  {
+    "rva": "0xcc400",
+    "encoding": "ascii",
+    "text": "Reflex is not fully functional on this system."
+  },
+  {
+    "rva": "0xcc4a8",
+    "encoding": "ascii",
+    "text": "slIsFeatureSupported_DLSSG"
+  },
+  {
+    "rva": "0xcc4c8",
+    "encoding": "ascii",
+    "text": "DLSS-G is supported on this system."
+  },
+  {
+    "rva": "0xcc4f0",
+    "encoding": "ascii",
+    "text": "DLSS-G is not fully functional on this system."
+  },
+  {
+    "rva": "0xcc5f8",
+    "encoding": "ascii",
+    "text": "SL not initialised or DLSSG not available."
+  },
+  {
+    "rva": "0xcc768",
+    "encoding": "ascii",
+    "text": "SL not initialised or Reflex not available."
+  },
+  {
+    "rva": "0xcc798",
+    "encoding": "ascii",
+    "text": "Reflex_Options"
+  },
+  {
+    "rva": "0xcc7a8",
+    "encoding": "ascii",
+    "text": "Reflex_Sleep"
+  },
+  {
+    "rva": "0xcc820",
+    "encoding": "ascii",
+    "text": "DLSS-G Dynamic Multi Frame Generation is supported!"
+  },
+  {
+    "rva": "0xcc8b0",
+    "encoding": "ascii",
+    "text": "DLSS-G Status error {}"
+  },
+  {
+    "rva": "0xcd0c8",
+    "encoding": "ascii",
+    "text": "XeSS-FG warning: %s."
+  },
+  {
+    "rva": "0xcd1e8",
+    "encoding": "ascii",
+    "text": "Unable to set XeLL context"
+  },
+  {
+    "rva": "0xcd208",
+    "encoding": "ascii",
+    "text": "FrameGenMethod FSR3 ffxFsr3ContextCreate Success!"
+  },
+  {
+    "rva": "0xcd240",
+    "encoding": "ascii",
+    "text": "XeSS FG Feature gets released!"
+  },
+  {
+    "rva": "0xcd260",
+    "encoding": "ascii",
+    "text": "Failed to destroy XeSS-FG swap chain context"
+  },
+  {
+    "rva": "0xcd290",
+    "encoding": "ascii",
+    "text": "Failed to destroy XeLL context"
+  },
+  {
+    "rva": "0xcd350",
+    "encoding": "ascii",
+    "text": "Replacing XeSS FG SwapChain"
+  },
+  {
+    "rva": "0xcd370",
+    "encoding": "ascii",
+    "text": "Unable to initialize XeSS-FG context"
+  },
+  {
+    "rva": "0xcd3c0",
+    "encoding": "ascii",
+    "text": "Unable to get XeSS-FG swap chain properties"
+  },
+  {
+    "rva": "0xcd3f0",
+    "encoding": "ascii",
+    "text": "Replace XeSS FG SwapChain success"
+  },
+  {
+    "rva": "0xcd418",
+    "encoding": "ascii",
+    "text": "Create XeSS Frame Geneartion SwapChain"
+  },
+  {
+    "rva": "0xcd440",
+    "encoding": "ascii",
+    "text": "Unable to initialize XeSS-FG context with Error Code: %d"
+  },
+  {
+    "rva": "0xcd480",
+    "encoding": "ascii",
+    "text": "Create XeSS Frame Geneartion SwapChain success"
+  },
+  {
+    "rva": "0xcd4e8",
+    "encoding": "ascii",
+    "text": "Create XeSS Frame Geneartion SwapChain For Hwnd"
+  },
+  {
+    "rva": "0xcd518",
+    "encoding": "ascii",
+    "text": "Create XeSS Frame Geneartion SwapChain For Hwnd success"
+  },
+  {
+    "rva": "0xcd550",
+    "encoding": "ascii",
+    "text": "Failed to get last presentation status from XeSS-FG"
+  },
+  {
+    "rva": "0xcd588",
+    "encoding": "ascii",
+    "text": "XeSS-FG frame generation failed with error code: %d"
+  },
+  {
+    "rva": "0xcdde0",
+    "encoding": "ascii",
+    "text": "Latewarp::EvaluateLatewarp: failed to create standalone shared textures."
+  },
+  {
+    "rva": "0xce0d8",
+    "encoding": "ascii",
+    "text": "DLSS.Indicator.Invert.X.Axis"
+  },
+  {
+    "rva": "0xce0f8",
+    "encoding": "ascii",
+    "text": "DLSS.Indicator.Invert.Y.Axis"
+  },
+  {
+    "rva": "0xce148",
+    "encoding": "ascii",
+    "text": "DLSSNRComputeScalingRatioCallback"
+  },
+  {
+    "rva": "0xce170",
+    "encoding": "ascii",
+    "text": "DLSSNR.ScalingRatio"
+  },
+  {
+    "rva": "0xce188",
+    "encoding": "ascii",
+    "text": "DLSSNR.Width"
+  },
+  {
+    "rva": "0xce198",
+    "encoding": "ascii",
+    "text": "DLSSNR.Height"
+  },
+  {
+    "rva": "0xce1a8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Hint.Render.Preset"
+  },
+  {
+    "rva": "0xce1c8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Color"
+  },
+  {
+    "rva": "0xce1d8",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVec"
+  },
+  {
+    "rva": "0xce1e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Depth"
+  },
+  {
+    "rva": "0xce1f8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Output"
+  },
+  {
+    "rva": "0xce208",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMask"
+  },
+  {
+    "rva": "0xce220",
+    "encoding": "ascii",
+    "text": "DLSSNR.UI"
+  },
+  {
+    "rva": "0xce230",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlpha"
+  },
+  {
+    "rva": "0xce240",
+    "encoding": "ascii",
+    "text": "DLSSNR.Backbuffer"
+  },
+  {
+    "rva": "0xce258",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionField"
+  },
+  {
+    "rva": "0xce280",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectHeight"
+  },
+  {
+    "rva": "0xce2a0",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectWidth"
+  },
+  {
+    "rva": "0xce2c0",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseY"
+  },
+  {
+    "rva": "0xce2e0",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseX"
+  },
+  {
+    "rva": "0xce300",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectHeight"
+  },
+  {
+    "rva": "0xce320",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectWidth"
+  },
+  {
+    "rva": "0xce338",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseY"
+  },
+  {
+    "rva": "0xce350",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseX"
+  },
+  {
+    "rva": "0xce368",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectHeight"
+  },
+  {
+    "rva": "0xce388",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectWidth"
+  },
+  {
+    "rva": "0xce3a8",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseY"
+  },
+  {
+    "rva": "0xce3c8",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseX"
+  },
+  {
+    "rva": "0xce3e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectHeight"
+  },
+  {
+    "rva": "0xce408",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectWidth"
+  },
+  {
+    "rva": "0xce428",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseY"
+  },
+  {
+    "rva": "0xce448",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseX"
+  },
+  {
+    "rva": "0xce468",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectHeight"
+  },
+  {
+    "rva": "0xce488",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectWidth"
+  },
+  {
+    "rva": "0xce4a8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectBaseY"
+  },
+  {
+    "rva": "0xce4c8",
+    "encoding": "ascii",
+    "text": "DLSSNR.ControlMaskSubrectBaseX"
+  },
+  {
+    "rva": "0xce4e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectHeight"
+  },
+  {
+    "rva": "0xce500",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectWidth"
+  },
+  {
+    "rva": "0xce518",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectBaseY"
+  },
+  {
+    "rva": "0xce530",
+    "encoding": "ascii",
+    "text": "DLSSNR.UISubrectBaseX"
+  },
+  {
+    "rva": "0xce548",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectHeight"
+  },
+  {
+    "rva": "0xce568",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectWidth"
+  },
+  {
+    "rva": "0xce588",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectBaseY"
+  },
+  {
+    "rva": "0xce5a8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UIAlphaSubrectBaseX"
+  },
+  {
+    "rva": "0xce5c8",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectHeight"
+  },
+  {
+    "rva": "0xce5e8",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectWidth"
+  },
+  {
+    "rva": "0xce608",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectBaseY"
+  },
+  {
+    "rva": "0xce628",
+    "encoding": "ascii",
+    "text": "DLSSNR.BackbufferSubrectBaseX"
+  },
+  {
+    "rva": "0xce648",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectHeight"
+  },
+  {
+    "rva": "0xce680",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectWidth"
+  },
+  {
+    "rva": "0xce6b0",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectBaseY"
+  },
+  {
+    "rva": "0xce6e0",
+    "encoding": "ascii",
+    "text": "DLSSNR.BidirectionalDistortionFieldSubrectBaseX"
+  },
+  {
+    "rva": "0xce710",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleX"
+  },
+  {
+    "rva": "0xce728",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleY"
+  },
+  {
+    "rva": "0xce740",
+    "encoding": "ascii",
+    "text": "DLSSNR.Intensity"
+  },
+  {
+    "rva": "0xce758",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalToneStrength"
+  },
+  {
+    "rva": "0xce778",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalStructureStrength"
+  },
+  {
+    "rva": "0xce798",
+    "encoding": "ascii",
+    "text": "DLSSNR.SkinStructureStrength"
+  },
+  {
+    "rva": "0xce7b8",
+    "encoding": "ascii",
+    "text": "DLSSNR.UseAutoMask"
+  },
+  {
+    "rva": "0xce7d0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Style"
+  },
+  {
+    "rva": "0xce7e0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Reset"
+  },
+  {
+    "rva": "0xce7f0",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthInverted"
+  },
+  {
+    "rva": "0xce808",
+    "encoding": "ascii",
+    "text": "DLSSNR.Enabled"
+  },
+  {
+    "rva": "0xce818",
+    "encoding": "ascii",
+    "text": "DLSSNR.UICorrection"
+  },
+  {
+    "rva": "0xce830",
+    "encoding": "ascii",
+    "text": "DLSSNR: SEH in NVSDK_NGX_D3D12_Init code=0x%08lx"
+  },
+  {
+    "rva": "0xce868",
+    "encoding": "ascii",
+    "text": "DLSSNR: SEH in NVSDK_NGX_D3D12_Shutdown1 code=0x%08lx"
+  },
+  {
+    "rva": "0xce8a0",
+    "encoding": "ascii",
+    "text": "DLSSNR: SEH in NGX_D3D12_CREATE_DLSSNR_EXT code=0x%08lx"
+  },
+  {
+    "rva": "0xce8d8",
+    "encoding": "ascii",
+    "text": "DLSSNR: SEH in NGX_D3D12_EVALUATE_DLSSNR_EXT code=0x%08lx"
+  },
+  {
+    "rva": "0xce920",
+    "encoding": "ascii",
+    "text": "DLSSNR: D3D12Interop is not ready (missing device or command queue)."
+  },
+  {
+    "rva": "0xce968",
+    "encoding": "ascii",
+    "text": "DLSSNR: cannot initialize NGX without a D3D12 device."
+  },
+  {
+    "rva": "0xce9a0",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to load/hook nvngx_dlssnr.dll."
+  },
+  {
+    "rva": "0xce9d0",
+    "encoding": "ascii",
+    "text": "DLSSNR snippet Init failed = 0x%08x, continuing if CreateFeature is available"
+  },
+  {
+    "rva": "0xcea20",
+    "encoding": "ascii",
+    "text": "DLSSNR %s DeviceRemovedReason=0x%08x"
+  },
+  {
+    "rva": "0xcea48",
+    "encoding": "ascii",
+    "text": "DLSSNR NGX_DLSSNR_GET_SCALING_RATIO = 0x%08x ratio=%.4f"
+  },
+  {
+    "rva": "0xcea80",
+    "encoding": "ascii",
+    "text": "DLSSNR: BeginLocalCommandList failed for CreateFeature"
+  },
+  {
+    "rva": "0xceac0",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_CREATE_DLSSNR_EXT (local) (%d x %d) failed = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xceb10",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_CREATE_DLSSNR_EXT local failed"
+  },
+  {
+    "rva": "0xceb40",
+    "encoding": "ascii",
+    "text": "DLSSNR: BeginCommandList failed (lost=%d device=%p queue=%p list=%p fence=%p), recreating SwapChain resources"
+  },
+  {
+    "rva": "0xcebb0",
+    "encoding": "ascii",
+    "text": "DLSSNR: BeginCommandList still failed while creating feature"
+  },
+  {
+    "rva": "0xcebf0",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_CREATE_DLSSNR_EXT (%d x %d) failed = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xcec38",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_CREATE_DLSSNR_EXT failed"
+  },
+  {
+    "rva": "0xcec60",
+    "encoding": "ascii",
+    "text": "DLSSNR feature id=%d created (%d x %d) ratio=%.4f"
+  },
+  {
+    "rva": "0xceca0",
+    "encoding": "ascii",
+    "text": "DLSSNR: running on game GPU (local D3D12) adapterIndex=%d localDevice=%p companionDevice=%p"
+  },
+  {
+    "rva": "0xced00",
+    "encoding": "ascii",
+    "text": "DLSSNR: running on companion GPU adapterIndex=%d companionDevice=%p"
+  },
+  {
+    "rva": "0xced50",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to create in-place color copy target slot=%d (%dx%d fmt=%d)"
+  },
+  {
+    "rva": "0xceda0",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to create local committed NR output (%dx%d fmt=%d)"
+  },
+  {
+    "rva": "0xcede8",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to rebuild feature at work size %dx%d"
+  },
+  {
+    "rva": "0xcee20",
+    "encoding": "ascii",
+    "text": "DLSSNR: using external input scale %.3f work=%dx%d"
+  },
+  {
+    "rva": "0xcee58",
+    "encoding": "ascii",
+    "text": "DLSSNR: create %s PSO failed 0x%08x"
+  },
+  {
+    "rva": "0xcee80",
+    "encoding": "ascii",
+    "text": "DLSSNR: serialize resolve root signature failed 0x%08x"
+  },
+  {
+    "rva": "0xceeb8",
+    "encoding": "ascii",
+    "text": "DLSSNR: create resolve root signature failed 0x%08x"
+  },
+  {
+    "rva": "0xcef28",
+    "encoding": "ascii",
+    "text": "DLSSNR: create resolve descriptor heap failed 0x%08x"
+  },
+  {
+    "rva": "0xcef60",
+    "encoding": "ascii",
+    "text": "DLSSNR: create resolve constant buffer failed 0x%08x"
+  },
+  {
+    "rva": "0xcef98",
+    "encoding": "ascii",
+    "text": "DLSSNR: map resolve constant buffer failed 0x%08x"
+  },
+  {
+    "rva": "0xcefd0",
+    "encoding": "ascii",
+    "text": "DLSSNR: resolve pipeline unavailable, falling back to 1:1"
+  },
+  {
+    "rva": "0xcf010",
+    "encoding": "ascii",
+    "text": "DLSSNR: resolve scratch alloc failed, falling back to 1:1"
+  },
+  {
+    "rva": "0xcf050",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT failed = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xcf090",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT failed"
+  },
+  {
+    "rva": "0xcf0b8",
+    "encoding": "ascii",
+    "text": "DLSSNR debug: overwrite output with color = %d"
+  },
+  {
+    "rva": "0xcf0e8",
+    "encoding": "ascii",
+    "text": "DLSSNR debug: overwrite output with UIAlpha = %d"
+  },
+  {
+    "rva": "0xcf120",
+    "encoding": "ascii",
+    "text": "DLSSNR: debug overwrite pipeline unavailable"
+  },
+  {
+    "rva": "0xcf150",
+    "encoding": "ascii",
+    "text": "DLSSNR: work-surface alloc failed, falling back to one pass"
+  },
+  {
+    "rva": "0xcf190",
+    "encoding": "ascii",
+    "text": "DLSSNR: extra pass %u failed, keeping %u pass(es)"
+  },
+  {
+    "rva": "0xcf1c8",
+    "encoding": "ascii",
+    "text": "DLSSNR debug: color overwrite requested but color is null"
+  },
+  {
+    "rva": "0xcf208",
+    "encoding": "ascii",
+    "text": "DLSSNR debug: UIAlpha overwrite requested but uiAlpha is null"
+  },
+  {
+    "rva": "0xcf248",
+    "encoding": "ascii",
+    "text": "DLSSNR: UI compose pipeline unavailable, skipping UI composite"
+  },
+  {
+    "rva": "0xcf288",
+    "encoding": "ascii",
+    "text": "DLSSNR: UI compose scratch alloc failed, skipping UI composite"
+  },
+  {
+    "rva": "0xcf2e0",
+    "encoding": "ascii",
+    "text": "DLSSNR: missing output share pair for immediate evaluate."
+  },
+  {
+    "rva": "0xcf320",
+    "encoding": "ascii",
+    "text": "DLSSNR: BeginLocalCommandList failed for immediate evaluate."
+  },
+  {
+    "rva": "0xcf360",
+    "encoding": "ascii",
+    "text": "DLSSNR: skip immediate local eval, missing committed staging (output=%p color=%p depth=%p motion=%p)"
+  },
+  {
+    "rva": "0xcf3c8",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT immediate local D3D11 failed"
+  },
+  {
+    "rva": "0xcf408",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT immediate D3D11 failed"
+  },
+  {
+    "rva": "0xcf440",
+    "encoding": "ascii",
+    "text": "DLSSNR: immediate D3D12 evaluate missing output."
+  },
+  {
+    "rva": "0xcf478",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT immediate D3D12 failed"
+  },
+  {
+    "rva": "0xcf4b0",
+    "encoding": "ascii",
+    "text": "DLSSNR: Evaluate called before Init for id=%d"
+  },
+  {
+    "rva": "0xcf4e0",
+    "encoding": "ascii",
+    "text": "DLSSNR: EnsureFeatureMatchesEval failed for id=%d"
+  },
+  {
+    "rva": "0xcf518",
+    "encoding": "ascii",
+    "text": "DLSSNR: skip present eval, committed color/output missing"
+  },
+  {
+    "rva": "0xcf558",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT present failed"
+  },
+  {
+    "rva": "0xcf588",
+    "encoding": "ascii",
+    "text": "DLSSNR: BeginLocalCommandList failed for present evaluate."
+  },
+  {
+    "rva": "0xcf5c8",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to copy NT-shared backbuffer to local staging"
+  },
+  {
+    "rva": "0xcf610",
+    "encoding": "ascii",
+    "text": "DLSSNR: skip local eval, depth=%p motion=%p (need committed GPU1 staging, not NT-shared)"
+  },
+  {
+    "rva": "0xcf670",
+    "encoding": "ascii",
+    "text": "DLSSNR: skip local eval, committed color/output missing"
+  },
+  {
+    "rva": "0xcf6a8",
+    "encoding": "ascii",
+    "text": "NGX_D3D12_EVALUATE_DLSSNR_EXT local present failed"
+  },
+  {
+    "rva": "0xcf6e8",
+    "encoding": "ascii",
+    "text": "DLSSNR: ReinitAfterDeviceRecreate %s"
+  },
+  {
+    "rva": "0xcf710",
+    "encoding": "ascii",
+    "text": "DLSSNR extra pass %u ReleaseFeature failed = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xcf778",
+    "encoding": "ascii",
+    "text": "DLSSNR extra pass %u released"
+  },
+  {
+    "rva": "0xcf798",
+    "encoding": "ascii",
+    "text": "DLSSNR: extra pass %u would not create; running %u pass(es)"
+  },
+  {
+    "rva": "0xcf7d8",
+    "encoding": "ascii",
+    "text": "DLSSNR extra pass %u created (%d x %d)"
+  },
+  {
+    "rva": "0xcf800",
+    "encoding": "ascii",
+    "text": "DLSSNR snippet ReleaseFeature id=%d failed = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xcf860",
+    "encoding": "ascii",
+    "text": "DLSSNR feature id=%d released."
+  },
+  {
+    "rva": "0xcf880",
+    "encoding": "ascii",
+    "text": "DLSSNR: snippet Shutdown1=0x%08x, lib Shutdown1=0x%08x device=%p lost=%d"
+  },
+  {
+    "rva": "0xcf8d0",
+    "encoding": "ascii",
+    "text": "DLSSNR: snippet Shutdown1 result=0x%08x device=%p lost=%d"
+  },
+  {
+    "rva": "0xcf90c",
+    "encoding": "ascii",
+    "text": "DLSSNR"
+  },
+  {
+    "rva": "0xcfa38",
+    "encoding": "ascii",
+    "text": "DLSS\\nvngx_dlssnr.dll"
+  },
+  {
+    "rva": "0xcfa68",
+    "encoding": "ascii",
+    "text": "\\DLSS\\nvngx_dlssnr.dll"
+  },
+  {
+    "rva": "0xcfe88",
+    "encoding": "ascii",
+    "text": "DLSSNRGetStatsCallback"
+  },
+  {
+    "rva": "0xd1318",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_DX11WrapperForDX12"
+  },
+  {
+    "rva": "0xd19d8",
+    "encoding": "ascii",
+    "text": "ReShadeRegisterAddon"
+  },
+  {
+    "rva": "0xd19f0",
+    "encoding": "ascii",
+    "text": "ReShadeUnregisterAddon"
+  },
+  {
+    "rva": "0xd1a30",
+    "encoding": "ascii",
+    "text": "SwapChain is nullptr!"
+  },
+  {
+    "rva": "0xd1a48",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy mBackBuffer[%d]: Address: 0x%08x"
+  },
+  {
+    "rva": "0xd1a80",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy: Creating Fake HDR Buffer DXGI_FORMAT_R16G16B16A16_FLOAT"
+  },
+  {
+    "rva": "0xd1ad0",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy: cached hwnd=%p"
+  },
+  {
+    "rva": "0xd1b00",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy: detached inner swapchain drained extra=%d finalLeftover=%u"
+  },
+  {
+    "rva": "0xd1b50",
+    "encoding": "ascii",
+    "text": "ReplaceInnerSwapChain GetBuffer[%d] failed 0x%08x"
+  },
+  {
+    "rva": "0xd1b90",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy: replaced inner swapchain %p %dx%d buffers=%d"
+  },
+  {
+    "rva": "0xd1be0",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper: cross-adapter Present on GPU2. Compare frame times with the monitor DP on GPU2 vs GPU1 (DWM blit)."
+  },
+  {
+    "rva": "0xd1c60",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper mRealBackBuffer[%d]: Address: 0x%08x"
+  },
+  {
+    "rva": "0xd1cc0",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper: failed to create isolated D3D11 backbuffer %d"
+  },
+  {
+    "rva": "0xd1d10",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper: game GetBuffer is isolated D3D11 SHARED (not opened on D3D12) fmt=%d bind=0x%x misc=0x%x %dx%d"
+  },
+  {
+    "rva": "0xd1d90",
+    "encoding": "ascii",
+    "text": "DXGISwapChainDX11Wrapper: released companion-shared backbuffers"
+  },
+  {
+    "rva": "0xd1dd0",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy::Present failed hr=0x%08x DeviceRemovedReason=0x%08x lastPresentFence=%llu"
+  },
+  {
+    "rva": "0xd1e30",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy::ResizeBuffers: Creating Fake HDR Buffer DXGI_FORMAT_R16G16B16A16_FLOAT"
+  },
+  {
+    "rva": "0xd2450",
+    "encoding": "ascii",
+    "text": "TDR recover: CreateSwapChainForHwnd (naked) failed 0x%08x"
+  },
+  {
+    "rva": "0xd2490",
+    "encoding": "ascii",
+    "text": "TDR recover: QueryInterface IDXGISwapChain4 failed 0x%08x"
+  },
+  {
+    "rva": "0xd24d0",
+    "encoding": "ascii",
+    "text": "TDR recover: ReplaceInnerSwapChain (naked) failed"
+  },
+  {
+    "rva": "0xd25b0",
+    "encoding": "ascii",
+    "text": "TDR recover: FG CreateSwapChainProxyForHwnd returned null hr=0x%08x"
+  },
+  {
+    "rva": "0xd2660",
+    "encoding": "ascii",
+    "text": "TDR recover: keeping local-GPU NR feature"
+  },
+  {
+    "rva": "0xd2690",
+    "encoding": "ascii",
+    "text": "TDR recover: NR reinit failed"
+  },
+  {
+    "rva": "0xd26b0",
+    "encoding": "ascii",
+    "text": "TDR recover: NR reinitialized"
+  },
+  {
+    "rva": "0xd26d0",
+    "encoding": "ascii",
+    "text": "TDR recover: FG+NR restore complete (fg=%d nr=%d)"
+  },
+  {
+    "rva": "0xd2710",
+    "encoding": "ascii",
+    "text": "TDR recover: picture path restored, waiting %d presents before FG/NR"
+  },
+  {
+    "rva": "0xd2a18",
+    "encoding": "ascii",
+    "text": "TDR recover: cooldown done, restoring FG+NR"
+  },
+  {
+    "rva": "0xd2b48",
+    "encoding": "ascii",
+    "text": "Creating FrameGenMethod_FSR3_FFXAPI Graphic API: D3D11"
+  },
+  {
+    "rva": "0xd2b80",
+    "encoding": "ascii",
+    "text": "Creating FrameGenMethod_FSR3_FFXAPI Graphic API: D3D12"
+  },
+  {
+    "rva": "0xd2bb8",
+    "encoding": "ascii",
+    "text": "Creating FrameGenMethod_FSR3_FFXAPI Graphic API: VULKAN"
+  },
+  {
+    "rva": "0xd2bf0",
+    "encoding": "ascii",
+    "text": "Using FSR4 Frame Generation."
+  },
+  {
+    "rva": "0xd2c80",
+    "encoding": "ascii",
+    "text": "FSR3 FG Feature gets released!"
+  },
+  {
+    "rva": "0xd2cd0",
+    "encoding": "ascii",
+    "text": "Replace FSR3 Frame Interpolation Swapchain"
+  },
+  {
+    "rva": "0xd2d38",
+    "encoding": "ascii",
+    "text": "Replace FSR3 Frame Interpolation Swapchain success"
+  },
+  {
+    "rva": "0xd2d70",
+    "encoding": "ascii",
+    "text": "Create FSR3 Frame Interpolation SwapChain"
+  },
+  {
+    "rva": "0xd2da0",
+    "encoding": "ascii",
+    "text": "Couldn't create the FFXAPI FG SwapChain (dx12): %d"
+  },
+  {
+    "rva": "0xd2dd8",
+    "encoding": "ascii",
+    "text": "Create FSR3 Frame Interpolation SwapChain success"
+  },
+  {
+    "rva": "0xd2e40",
+    "encoding": "ascii",
+    "text": "FrameGenMethod_FSR3_FFXAPI Couldn't get the vulkan frame interpolation queue"
+  },
+  {
+    "rva": "0xd2eb8",
+    "encoding": "ascii",
+    "text": "vkCreateSwapchainKHR"
+  },
+  {
+    "rva": "0xd2ed0",
+    "encoding": "ascii",
+    "text": "[vulkan] vkCreateSwapchainKHRProxy Error: VkResult = {}"
+  },
+  {
+    "rva": "0xd2f10",
+    "encoding": "ascii",
+    "text": "ffx::CreateContext for Frame Generation SwapChain failed! ErrorCode: %d"
+  },
+  {
+    "rva": "0xd2f58",
+    "encoding": "ascii",
+    "text": "FrameGenMethod_FSR3_FFXAPI is not initialized!"
+  },
+  {
+    "rva": "0xd3038",
+    "encoding": "ascii",
+    "text": "DLSS.Feature.Create.Flags"
+  },
+  {
+    "rva": "0xd3058",
+    "encoding": "ascii",
+    "text": "DLSS.Enable.Output.Subrects"
+  },
+  {
+    "rva": "0xd3120",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Bias.Current.Color.Mask"
+  },
+  {
+    "rva": "0xd3370",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Color.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd3390",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Color.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd33b0",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Depth.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd33d0",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Depth.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd33f0",
+    "encoding": "ascii",
+    "text": "DLSS.Input.MV.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd3410",
+    "encoding": "ascii",
+    "text": "DLSS.Input.MV.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd3430",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Translucency.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd3458",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Translucency.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd3480",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Bias.Current.Color.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd34b0",
+    "encoding": "ascii",
+    "text": "DLSS.Input.Bias.Current.Color.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd34e0",
+    "encoding": "ascii",
+    "text": "DLSS.Output.Subrect.Base.X"
+  },
+  {
+    "rva": "0xd3500",
+    "encoding": "ascii",
+    "text": "DLSS.Output.Subrect.Base.Y"
+  },
+  {
+    "rva": "0xd3520",
+    "encoding": "ascii",
+    "text": "DLSS.Render.Subrect.Dimensions.Width"
+  },
+  {
+    "rva": "0xd3548",
+    "encoding": "ascii",
+    "text": "DLSS.Render.Subrect.Dimensions.Height"
+  },
+  {
+    "rva": "0xd3570",
+    "encoding": "ascii",
+    "text": "DLSS.Pre.Exposure"
+  },
+  {
+    "rva": "0xd3588",
+    "encoding": "ascii",
+    "text": "DLSS.Exposure.Scale"
+  },
+  {
+    "rva": "0xd35a0",
+    "encoding": "ascii",
+    "text": "DLSSOptimalSettingsCallback"
+  },
+  {
+    "rva": "0xd35d0",
+    "encoding": "ascii",
+    "text": "DLSS.Get.Dynamic.Max.Render.Width"
+  },
+  {
+    "rva": "0xd35f8",
+    "encoding": "ascii",
+    "text": "DLSS.Get.Dynamic.Max.Render.Height"
+  },
+  {
+    "rva": "0xd3620",
+    "encoding": "ascii",
+    "text": "DLSS.Get.Dynamic.Min.Render.Width"
+  },
+  {
+    "rva": "0xd3648",
+    "encoding": "ascii",
+    "text": "DLSS.Get.Dynamic.Min.Render.Height"
+  },
+  {
+    "rva": "0xd38e0",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS cannot be loaded due to outdated driver. Minimum Driver Version required : %u.%u"
+  },
+  {
+    "rva": "0xd3940",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS Minimum driver version was reported as : %u.%u"
+  },
+  {
+    "rva": "0xd3980",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS Minimum driver version was not reported."
+  },
+  {
+    "rva": "0xd39f0",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS not available on this hardward/platform., FeatureInitResult = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3a50",
+    "encoding": "ascii",
+    "text": "Attempt to InitializeDLSSFeature without NGX being initialized."
+  },
+  {
+    "rva": "0xd3a90",
+    "encoding": "ascii",
+    "text": "Creating DLSS instance: (%d x %d) -> (%d x %d)"
+  },
+  {
+    "rva": "0xd3ac0",
+    "encoding": "ascii",
+    "text": "id = %d Failed to create DLSS Features = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3b00",
+    "encoding": "ascii",
+    "text": "id = %d NGX_D3D11_CREATE_DLSS_EXT = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3b38",
+    "encoding": "ascii",
+    "text": "id = %d NGX_D3D12_CREATE_DLSS_EXT = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3b70",
+    "encoding": "ascii",
+    "text": "Before NGX_VULKAN_CREATE_DLSS_EXT"
+  },
+  {
+    "rva": "0xd3b98",
+    "encoding": "ascii",
+    "text": "After NGX_VULKAN_CREATE_DLSS_EXT"
+  },
+  {
+    "rva": "0xd3bc0",
+    "encoding": "ascii",
+    "text": "id = %d NGX_VULKAN_CREATE_DLSS_EXT = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3bf8",
+    "encoding": "ascii",
+    "text": "Attempt to ReleaseDLSSFeatures without NGX being initialized."
+  },
+  {
+    "rva": "0xd3c38",
+    "encoding": "ascii",
+    "text": "DLSS Feature id=%d gets released!"
+  },
+  {
+    "rva": "0xd3dc0",
+    "encoding": "ascii",
+    "text": "DLSS is not available - could not evaluate SuperSampling"
+  },
+  {
+    "rva": "0xd3e00",
+    "encoding": "ascii",
+    "text": "Failed to NVSDK_NGX_D3D11_EvaluateFeature for DLSS, code = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3e50",
+    "encoding": "ascii",
+    "text": "Failed to NVSDK_NGX_D3D12_EvaluateFeature for DLSS, code = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3ea0",
+    "encoding": "ascii",
+    "text": "Failed to NGX_VULKAN_EVALUATE_DLSS_EXT for DLSS, code = 0x%08x, info: %ls"
+  },
+  {
+    "rva": "0xd3ef0",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Performance"
+  },
+  {
+    "rva": "0xd3f18",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Balanced"
+  },
+  {
+    "rva": "0xd3f40",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.Quality"
+  },
+  {
+    "rva": "0xd3f60",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.UltraPerformance"
+  },
+  {
+    "rva": "0xd3f90",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.UltraQuality"
+  },
+  {
+    "rva": "0xd3fb8",
+    "encoding": "ascii",
+    "text": "DLSS.Hint.Render.Preset.DLAA"
+  },
+  {
+    "rva": "0xd4280",
+    "encoding": "ascii",
+    "text": "ffxGetSwapchainDX12"
+  },
+  {
+    "rva": "0xd42b0",
+    "encoding": "ascii",
+    "text": "ffxReplaceSwapchainForFrameinterpolationDX12"
+  },
+  {
+    "rva": "0xd42e0",
+    "encoding": "ascii",
+    "text": "ffxGetDX12SwapchainPtr"
+  },
+  {
+    "rva": "0xd42f8",
+    "encoding": "ascii",
+    "text": "ffxCreateFrameinterpolationSwapchainForHwndDX12"
+  },
+  {
+    "rva": "0xd4328",
+    "encoding": "ascii",
+    "text": "ffxCreateFrameinterpolationSwapchainDX12"
+  },
+  {
+    "rva": "0xd4410",
+    "encoding": "ascii",
+    "text": "ffxSetFrameGenerationConfigToSwapchainDX12"
+  },
+  {
+    "rva": "0xd4510",
+    "encoding": "ascii",
+    "text": "ffxFsr3ContextDispatchUpscale"
+  },
+  {
+    "rva": "0xd4548",
+    "encoding": "ascii",
+    "text": "ffxFsr3DispatchFrameGeneration"
+  },
+  {
+    "rva": "0xd4568",
+    "encoding": "ascii",
+    "text": "ffxFsr3ConfigureFrameGeneration"
+  },
+  {
+    "rva": "0xd4588",
+    "encoding": "ascii",
+    "text": "ffxFsr3ContextDispatchFrameGenerationPrepare"
+  },
+  {
+    "rva": "0xd45e0",
+    "encoding": "ascii",
+    "text": "FSR3Interface Inited!"
+  },
+  {
+    "rva": "0xd4650",
+    "encoding": "ascii",
+    "text": "DLSSNR Init: adapterIndex=%d onCompanion=%d (companion already exists=%d); NR will run on %s"
+  },
+  {
+    "rva": "0xd46c8",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to create companion D3D12 device."
+  },
+  {
+    "rva": "0xd4700",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to create local D3D12 device on game GPU."
+  },
+  {
+    "rva": "0xd4740",
+    "encoding": "ascii",
+    "text": "DLSSNR: failed to create D3D12 interop queue."
+  },
+  {
+    "rva": "0xd4ab0",
+    "encoding": "ascii",
+    "text": "DLSS\\nvngx_dlss.dll"
+  },
+  {
+    "rva": "0xd4cd0",
+    "encoding": "ascii",
+    "text": "FSR 3.1 Upscaling"
+  },
+  {
+    "rva": "0xd4cf0",
+    "encoding": "ascii",
+    "text": "FSR 4 Upscaling"
+  },
+  {
+    "rva": "0xd4e38",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_FSR3_DX11"
+  },
+  {
+    "rva": "0xd4ec8",
+    "encoding": "ascii",
+    "text": "FSR Feature id=%d gets released!"
+  },
+  {
+    "rva": "0xd5038",
+    "encoding": "ascii",
+    "text": "ffxFsr3ContextDispatchUpscale Failed! ErrorCode: 0x%08x"
+  },
+  {
+    "rva": "0xd5110",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_FSR3_FFXAPI Graphic API: D3D11"
+  },
+  {
+    "rva": "0xd5148",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_FSR3_FFXAPI Graphic API: VULKAN"
+  },
+  {
+    "rva": "0xd5180",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_FSR3_FFXAPI Graphic API: D3D12"
+  },
+  {
+    "rva": "0xd51f0",
+    "encoding": "ascii",
+    "text": "Using FSR4 Upscaling."
+  },
+  {
+    "rva": "0xd5208",
+    "encoding": "ascii",
+    "text": "ffxFsr3ContextDispatchUpscale Failed! ErrorCode: %d"
+  },
+  {
+    "rva": "0xd53d8",
+    "encoding": "ascii",
+    "text": "[XeSS Runtime]: %s"
+  },
+  {
+    "rva": "0xd5700",
+    "encoding": "ascii",
+    "text": "XeSSInterface Inited!"
+  },
+  {
+    "rva": "0xd5730",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_XeSS DX12"
+  },
+  {
+    "rva": "0xd5758",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_XeSS DX11"
+  },
+  {
+    "rva": "0xd5780",
+    "encoding": "ascii",
+    "text": "XeSS: Could not get version information. Result - %s."
+  },
+  {
+    "rva": "0xd57b8",
+    "encoding": "ascii",
+    "text": "Creating UpscaleMethod_XeSS Vulkan"
+  },
+  {
+    "rva": "0xd57e0",
+    "encoding": "ascii",
+    "text": "XeSS: Version - %s."
+  },
+  {
+    "rva": "0xd5808",
+    "encoding": "ascii",
+    "text": "XeSS: Could not set logging callback. Result - %s."
+  },
+  {
+    "rva": "0xd5840",
+    "encoding": "ascii",
+    "text": "XeSS: XeSS is not supported on this device. Result - %s."
+  },
+  {
+    "rva": "0xd5880",
+    "encoding": "ascii",
+    "text": "XeSS: XeSS context created. Result - %s."
+  },
+  {
+    "rva": "0xd58b0",
+    "encoding": "ascii",
+    "text": "XeSS: Could not set velocity scale. Result - %s."
+  },
+  {
+    "rva": "0xd58e8",
+    "encoding": "ascii",
+    "text": "XeSS: Initialized."
+  },
+  {
+    "rva": "0xd5900",
+    "encoding": "ascii",
+    "text": "XeSS: Could not initialize. Result - %s."
+  },
+  {
+    "rva": "0xd5930",
+    "encoding": "ascii",
+    "text": "XeSS: Failed to execute. Result - %s."
+  },
+  {
+    "rva": "0xe08f4",
+    "encoding": "ascii",
+    "text": "xefgSwapChainSetLatencyReduction"
+  },
+  {
+    "rva": "0xe0918",
+    "encoding": "ascii",
+    "text": "xefgSwapChainD3D12TagFrameResource"
+  },
+  {
+    "rva": "0xe093e",
+    "encoding": "ascii",
+    "text": "xefgSwapChainD3D12InitFromSwapChainDesc"
+  },
+  {
+    "rva": "0xe0968",
+    "encoding": "ascii",
+    "text": "xefgSwapChainGetLastPresentStatus"
+  },
+  {
+    "rva": "0xe098c",
+    "encoding": "ascii",
+    "text": "xefgSwapChainSetEnabled"
+  },
+  {
+    "rva": "0xe09a6",
+    "encoding": "ascii",
+    "text": "xefgSwapChainGetProperties"
+  },
+  {
+    "rva": "0xe09c4",
+    "encoding": "ascii",
+    "text": "xefgSwapChainD3D12GetSwapChainPtr"
+  },
+  {
+    "rva": "0xe09e8",
+    "encoding": "ascii",
+    "text": "xefgSwapChainSetPresentId"
+  },
+  {
+    "rva": "0xe0a04",
+    "encoding": "ascii",
+    "text": "xefgSwapChainSetLoggingCallback"
+  },
+  {
+    "rva": "0xe0a26",
+    "encoding": "ascii",
+    "text": "xefgSwapChainD3D12CreateContext"
+  },
+  {
+    "rva": "0xe0a48",
+    "encoding": "ascii",
+    "text": "xefgSwapChainTagFrameConstants"
+  },
+  {
+    "rva": "0xe0a6a",
+    "encoding": "ascii",
+    "text": "xefgSwapChainD3D12InitFromSwapChain"
+  },
+  {
+    "rva": "0xe0a90",
+    "encoding": "ascii",
+    "text": "xefgSwapChainDestroy"
+  },
+  {
+    "rva": "0xe10d5",
+    "encoding": "ascii",
+    "text": "CreateSwapChainProxy"
+  },
+  {
+    "rva": "0xe10ea",
+    "encoding": "ascii",
+    "text": "CreateSwapChainProxyForHwnd"
+  },
+  {
+    "rva": "0xe1106",
+    "encoding": "ascii",
+    "text": "EvaluateDLSSNR"
+  },
+  {
+    "rva": "0xe1115",
+    "encoding": "ascii",
+    "text": "EvaluateFrameGeneration"
+  },
+  {
+    "rva": "0xe113e",
+    "encoding": "ascii",
+    "text": "EvaluateUpscaler"
+  },
+  {
+    "rva": "0xe11f6",
+    "encoding": "ascii",
+    "text": "GetSwapChainProxy"
+  },
+  {
+    "rva": "0xe1208",
+    "encoding": "ascii",
+    "text": "GetUpscaleMethodName"
+  },
+  {
+    "rva": "0xe121d",
+    "encoding": "ascii",
+    "text": "InitDLSSNR"
+  },
+  {
+    "rva": "0xe1252",
+    "encoding": "ascii",
+    "text": "InitUpscaler"
+  },
+  {
+    "rva": "0xe125f",
+    "encoding": "ascii",
+    "text": "IsDLSSNRAvailable"
+  },
+  {
+    "rva": "0xe128b",
+    "encoding": "ascii",
+    "text": "IsUpscaleMethodAvailable"
+  },
+  {
+    "rva": "0xe1a17",
+    "encoding": "ascii",
+    "text": "ReleaseDLSSNR"
+  },
+  {
+    "rva": "0xe1a25",
+    "encoding": "ascii",
+    "text": "ReleaseUpscaleFeature"
+  },
+  {
+    "rva": "0xe1a49",
+    "encoding": "ascii",
+    "text": "SetDLSSPreset"
+  },
+  {
+    "rva": "0xe1a72",
+    "encoding": "ascii",
+    "text": "SetFrameGeneration"
+  },
+  {
+    "rva": "0xe1ad8",
+    "encoding": "ascii",
+    "text": "SetupUpscaleParams"
+  },
+  {
+    "rva": "0xe1b27",
+    "encoding": "ascii",
+    "text": "vkCreateSwapchainKHRProxy"
+  },
+  {
+    "rva": "0xcb008",
+    "encoding": "utf16le",
+    "text": "Upscaling"
+  },
+  {
+    "rva": "0xcb038",
+    "encoding": "utf16le",
+    "text": "SwapChain"
+  },
+  {
+    "rva": "0xd0740",
+    "encoding": "utf16le",
+    "text": "Active DLSS-G wrapper provider: patched=%d path=%s"
+  },
+  {
+    "rva": "0xd4f3e",
+    "encoding": "utf16le",
+    "text": "xFSR3_InputDepth"
+  },
+  {
+    "rva": "0xd4f60",
+    "encoding": "utf16le",
+    "text": "FSR3_Input_Color"
+  },
+  {
+    "rva": "0xd4f88",
+    "encoding": "utf16le",
+    "text": "FSR3_InputExposure"
+  },
+  {
+    "rva": "0xd4fb0",
+    "encoding": "utf16le",
+    "text": "FSR3_InputMotionVectors"
+  },
+  {
+    "rva": "0xd4fe0",
+    "encoding": "utf16le",
+    "text": "FSR3_Output_Color"
+  },
+  {
+    "rva": "0xd5008",
+    "encoding": "utf16le",
+    "text": "FSR3_InputReactiveMap"
+  },
+  {
+    "rva": "0xd506e",
+    "encoding": "utf16le",
+    "text": "xFSR3_TransparencyAndCompositionMap"
+  },
+  {
+    "rva": "0xe5188",
+    "encoding": "ascii",
+    "text": ".?AVDLSSNRParameterProxy@@"
+  },
+  {
+    "rva": "0xe51e8",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethodBase@@"
+  },
+  {
+    "rva": "0xe5210",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleAPI_Vulkan@@"
+  },
+  {
+    "rva": "0xe5238",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleAPI@@"
+  },
+  {
+    "rva": "0xe5260",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethod_DLSS@@"
+  },
+  {
+    "rva": "0xe5290",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethod_DX11WrapperForDX12@@"
+  },
+  {
+    "rva": "0xe52c8",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain1@@"
+  },
+  {
+    "rva": "0xe52f0",
+    "encoding": "ascii",
+    "text": ".?AUDXGISwapChainDX11Wrapper@@"
+  },
+  {
+    "rva": "0xe5320",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain2@@"
+  },
+  {
+    "rva": "0xe5348",
+    "encoding": "ascii",
+    "text": ".?AUDXGISwapChainProxy@@"
+  },
+  {
+    "rva": "0xe5378",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain@@"
+  },
+  {
+    "rva": "0xe53a0",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain3@@"
+  },
+  {
+    "rva": "0xe53c8",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain4@@"
+  },
+  {
+    "rva": "0xe5448",
+    "encoding": "ascii",
+    "text": ".?AUDXGISwapChainLatewarp@@"
+  },
+  {
+    "rva": "0xe54b0",
+    "encoding": "ascii",
+    "text": ".?AVFrameGenMethod_FSR3_FFXAPI@@"
+  },
+  {
+    "rva": "0xe54e8",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleAPI_D3D11@@"
+  },
+  {
+    "rva": "0xe5510",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleAPI_D3D12@@"
+  },
+  {
+    "rva": "0xe5708",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethod_FSR3_DX11@@"
+  },
+  {
+    "rva": "0xe5738",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethod_FSR3_FFXAPI@@"
+  },
+  {
+    "rva": "0xe5768",
+    "encoding": "ascii",
+    "text": ".?AVUpscaleMethod_XeSS@@"
+  }
+]

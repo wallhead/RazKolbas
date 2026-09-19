@@ -1,0 +1,1122 @@
+[
+  {
+    "rva": "0x28951e",
+    "encoding": "ascii",
+    "text": "mOD:V"
+  },
+  {
+    "rva": "0x32e7d0",
+    "encoding": "ascii",
+    "text": "long __cdecl DXGISwapChainProxy::SetColorSpace1(enum DXGI_COLOR_SPACE_TYPE)"
+  },
+  {
+    "rva": "0x32e820",
+    "encoding": "ascii",
+    "text": "DXGISwapChainProxy::SetColorSpace1: {}"
+  },
+  {
+    "rva": "0x32ea40",
+    "encoding": "ascii",
+    "text": "ReShadeRegisterAddon"
+  },
+  {
+    "rva": "0x32ea58",
+    "encoding": "ascii",
+    "text": "ReShadeUnregisterAddon"
+  },
+  {
+    "rva": "0x32ea70",
+    "encoding": "ascii",
+    "text": "Skyrim Upscaler AIO Build"
+  },
+  {
+    "rva": "0x32ea90",
+    "encoding": "ascii",
+    "text": "Enabling DLSS/FSR3/XeSS upscaling and DLSS MFG/FSR3 FG/XeFG in Skyrim."
+  },
+  {
+    "rva": "0x32ead8",
+    "encoding": "ascii",
+    "text": "ReShadeRegisterEvent"
+  },
+  {
+    "rva": "0x32eaf0",
+    "encoding": "ascii",
+    "text": "ReShadeUnregisterEvent"
+  },
+  {
+    "rva": "0x3320f0",
+    "encoding": "ascii",
+    "text": "Skyrim Upscaler Tabs"
+  },
+  {
+    "rva": "0x332358",
+    "encoding": "ascii",
+    "text": "Upscaling"
+  },
+  {
+    "rva": "0x332378",
+    "encoding": "ascii",
+    "text": "Enable Upscaling"
+  },
+  {
+    "rva": "0x3323c0",
+    "encoding": "ascii",
+    "text": "Community Shaders Upscaling detected"
+  },
+  {
+    "rva": "0x332412",
+    "encoding": "ascii",
+    "text": " Upscaling "
+  },
+  {
+    "rva": "0x332490",
+    "encoding": "ascii",
+    "text": "Community Shaders Upscaling is installed. This plugin's upscaling is disabled and resolution is treated as native. Use Community Shaders for upscaling settings."
+  },
+  {
+    "rva": "0x332770",
+    "encoding": "ascii",
+    "text": "FSR3 Upscaling"
+  },
+  {
+    "rva": "0x332780",
+    "encoding": "ascii",
+    "text": "FSR3.1"
+  },
+  {
+    "rva": "0x332790",
+    "encoding": "ascii",
+    "text": "FSR3.1 Upscaling"
+  },
+  {
+    "rva": "0x3327a8",
+    "encoding": "ascii",
+    "text": "FSR 3.1 Upscaling"
+  },
+  {
+    "rva": "0x3327c0",
+    "encoding": "ascii",
+    "text": "FSR3.1.5"
+  },
+  {
+    "rva": "0x3327d8",
+    "encoding": "ascii",
+    "text": "FSR 3.1.5 Upscaling"
+  },
+  {
+    "rva": "0x332800",
+    "encoding": "ascii",
+    "text": "FSR4 Upscaling"
+  },
+  {
+    "rva": "0x332810",
+    "encoding": "ascii",
+    "text": "FSR 4 Upscaling"
+  },
+  {
+    "rva": "0x332820",
+    "encoding": "ascii",
+    "text": "FSR3.1"
+  },
+  {
+    "rva": "0x332838",
+    "encoding": "ascii",
+    "text": "FSR3.1 Upscaling (DX11)"
+  },
+  {
+    "rva": "0x332850",
+    "encoding": "ascii",
+    "text": "FSR 3.1 Upscaling (DX11)"
+  },
+  {
+    "rva": "0x332870",
+    "encoding": "ascii",
+    "text": "FSR3.1.5"
+  },
+  {
+    "rva": "0x332888",
+    "encoding": "ascii",
+    "text": "FSR 3.1.5 Upscaling (DX11)"
+  },
+  {
+    "rva": "0x3328c8",
+    "encoding": "ascii",
+    "text": "FSR4 Upscaling (DX12 Interop)"
+  },
+  {
+    "rva": "0x3328e8",
+    "encoding": "ascii",
+    "text": "FSR 4 Upscaling (DX12 Interop)"
+  },
+  {
+    "rva": "0x332918",
+    "encoding": "ascii",
+    "text": "Upscaling Type"
+  },
+  {
+    "rva": "0x3329f0",
+    "encoding": "ascii",
+    "text": "DLSS: NVIDIA tech for RTX GPUs only"
+  },
+  {
+    "rva": "0x332a14",
+    "encoding": "ascii",
+    "text": "FSR : AMD tech that works for all GPUs"
+  },
+  {
+    "rva": "0x332a3b",
+    "encoding": "ascii",
+    "text": "XeSS: Intel tech that works for all GPUs, but works best on Intel Arc GPU"
+  },
+  {
+    "rva": "0x332d38",
+    "encoding": "ascii",
+    "text": "DLSS Preset"
+  },
+  {
+    "rva": "0x333080",
+    "encoding": "ascii",
+    "text": "ReShade"
+  },
+  {
+    "rva": "0x3330a8",
+    "encoding": "ascii",
+    "text": "Render ReShade Before Upscaling"
+  },
+  {
+    "rva": "0x3330d9",
+    "encoding": "ascii",
+    "text": "ReShade"
+  },
+  {
+    "rva": "0x333120",
+    "encoding": "ascii",
+    "text": "Whether to apply ReShade effects to the render resoluition image "
+  },
+  {
+    "rva": "0x3332a0",
+    "encoding": "ascii",
+    "text": "Auto Exposure in NVIDIA DLSS automatically adjusts image exposure to enhance visual quality, "
+  },
+  {
+    "rva": "0x3337b8",
+    "encoding": "ascii",
+    "text": "DLSS "
+  },
+  {
+    "rva": "0x3337d0",
+    "encoding": "ascii",
+    "text": "DLSS Neural Rendering"
+  },
+  {
+    "rva": "0x3337ee",
+    "encoding": "ascii",
+    "text": " DLSS NR"
+  },
+  {
+    "rva": "0x3337f8",
+    "encoding": "ascii",
+    "text": "Enable DLSS NR"
+  },
+  {
+    "rva": "0x333810",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS "
+  },
+  {
+    "rva": "0x333870",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS Neural Rendering. Requires a compatible NVIDIA GPU and nvngx_dlssnr.dll."
+  },
+  {
+    "rva": "0x3338e0",
+    "encoding": "ascii",
+    "text": "NR Before Upscaling"
+  },
+  {
+    "rva": "0x33390c",
+    "encoding": "ascii",
+    "text": "DLSS NR "
+  },
+  {
+    "rva": "0x333951",
+    "encoding": "ascii",
+    "text": "DLSS NR "
+  },
+  {
+    "rva": "0x3339a0",
+    "encoding": "ascii",
+    "text": "When enabled, DLSS NR runs on the render-resolution color before upscaling."
+  },
+  {
+    "rva": "0x3339ec",
+    "encoding": "ascii",
+    "text": "When disabled, DLSS NR runs on the upscaled result at Present."
+  },
+  {
+    "rva": "0x333a90",
+    "encoding": "ascii",
+    "text": "NR Preset"
+  },
+  {
+    "rva": "0x333aa6",
+    "encoding": "ascii",
+    "text": " NR feature "
+  },
+  {
+    "rva": "0x333b30",
+    "encoding": "ascii",
+    "text": "Network preset used when creating the NR feature."
+  },
+  {
+    "rva": "0x333bc8",
+    "encoding": "ascii",
+    "text": "NR Style"
+  },
+  {
+    "rva": "0x333be8",
+    "encoding": "ascii",
+    "text": "NR Intensity"
+  },
+  {
+    "rva": "0x333c10",
+    "encoding": "ascii",
+    "text": "NR Local Tone Strength"
+  },
+  {
+    "rva": "0x333c40",
+    "encoding": "ascii",
+    "text": "NR Local Structure Strength"
+  },
+  {
+    "rva": "0x333c78",
+    "encoding": "ascii",
+    "text": "NR Skin Structure Strength"
+  },
+  {
+    "rva": "0x333cb0",
+    "encoding": "ascii",
+    "text": "NR Auto Skin Mask"
+  },
+  {
+    "rva": "0x333cc8",
+    "encoding": "ascii",
+    "text": "NR UI "
+  },
+  {
+    "rva": "0x333cd8",
+    "encoding": "ascii",
+    "text": "NR UI Correction"
+  },
+  {
+    "rva": "0x333d40",
+    "encoding": "ascii",
+    "text": "NR Resolve Method"
+  },
+  {
+    "rva": "0x333ef0",
+    "encoding": "ascii",
+    "text": "NR Input Scale"
+  },
+  {
+    "rva": "0x333f60",
+    "encoding": "ascii",
+    "text": "1.0 = no downsample. Below 1.0 NR runs at a lower input resolution."
+  },
+  {
+    "rva": "0x333fc0",
+    "encoding": "ascii",
+    "text": "NR Color Is HDR"
+  },
+  {
+    "rva": "0x333fe0",
+    "encoding": "ascii",
+    "text": "NR Transfer Strength"
+  },
+  {
+    "rva": "0x334078",
+    "encoding": "ascii",
+    "text": "NR Colour Strength"
+  },
+  {
+    "rva": "0x3340a0",
+    "encoding": "ascii",
+    "text": "NR Max Ratio"
+  },
+  {
+    "rva": "0x334128",
+    "encoding": "ascii",
+    "text": "NR White Point"
+  },
+  {
+    "rva": "0x334231",
+    "encoding": "ascii",
+    "text": " DLSS NR "
+  },
+  {
+    "rva": "0x334260",
+    "encoding": "ascii",
+    "text": "Latewarp warps the last finished frame with the latest camera. Requires a restart. Disables DLSS NR and frame generation. Upscaling is unchanged."
+  },
+  {
+    "rva": "0x334385",
+    "encoding": "ascii",
+    "text": "DLSS NR "
+  },
+  {
+    "rva": "0x3343a8",
+    "encoding": "ascii",
+    "text": "Latewarp is enabled. DLSS NR and frame generation are skipped."
+  },
+  {
+    "rva": "0x334478",
+    "encoding": "ascii",
+    "text": "FSR Frame Generation"
+  },
+  {
+    "rva": "0x3344a0",
+    "encoding": "ascii",
+    "text": "DLSS Frame Generation"
+  },
+  {
+    "rva": "0x3344c8",
+    "encoding": "ascii",
+    "text": "XeSS Frame Generation"
+  },
+  {
+    "rva": "0x3345b0",
+    "encoding": "ascii",
+    "text": "FSR Frame Generation: AMD tech that works for all GPUs"
+  },
+  {
+    "rva": "0x3345e7",
+    "encoding": "ascii",
+    "text": "DLSS Frame Generation: NVIDIA tech for RTX 40 and above only"
+  },
+  {
+    "rva": "0x334624",
+    "encoding": "ascii",
+    "text": "XeSS Frame Generation: Intel tech that works for all GPUs, but works best on Intel Arc GPU"
+  },
+  {
+    "rva": "0x334b3c",
+    "encoding": "ascii",
+    "text": " DLSS NR "
+  },
+  {
+    "rva": "0x334c70",
+    "encoding": "ascii",
+    "text": "Selects the DXGI adapter used for DLSS NR."
+  },
+  {
+    "rva": "0x334e38",
+    "encoding": "ascii",
+    "text": "DLSS FG is not functional, fallback to FSR FG."
+  },
+  {
+    "rva": "0x334fc0",
+    "encoding": "ascii",
+    "text": "Only RTX 50 series supports more than 2x when using DLSS FG."
+  },
+  {
+    "rva": "0x335010",
+    "encoding": "ascii",
+    "text": "Enable HUD Fix"
+  },
+  {
+    "rva": "0x335030",
+    "encoding": "ascii",
+    "text": "HUD Fix Method"
+  },
+  {
+    "rva": "0x335050",
+    "encoding": "ascii",
+    "text": "HUD Opacity"
+  },
+  {
+    "rva": "0x335378",
+    "encoding": "ascii",
+    "text": "Show FSR Upscaling Debug View"
+  },
+  {
+    "rva": "0x33539e",
+    "encoding": "ascii",
+    "text": "FSR3.1"
+  },
+  {
+    "rva": "0x3353c0",
+    "encoding": "ascii",
+    "text": "Shows debug view for FSR upscaling."
+  },
+  {
+    "rva": "0x335408",
+    "encoding": "ascii",
+    "text": "Show FSR Framegen Debug View"
+  },
+  {
+    "rva": "0x335440",
+    "encoding": "ascii",
+    "text": "Show FSR Debug View"
+  },
+  {
+    "rva": "0x3354c0",
+    "encoding": "ascii",
+    "text": "Shows debug view for FSR upscaling when frame generation is disabled."
+  },
+  {
+    "rva": "0x335598",
+    "encoding": "ascii",
+    "text": "Upscale Time -> "
+  },
+  {
+    "rva": "0x335658",
+    "encoding": "ascii",
+    "text": "Upscaling Cost Time"
+  },
+  {
+    "rva": "0x3358b8",
+    "encoding": "ascii",
+    "text": "Skyrim Upscaler FSR3 Build"
+  },
+  {
+    "rva": "0x335926",
+    "encoding": "ascii",
+    "text": "DLSS mod"
+  },
+  {
+    "rva": "0x335948",
+    "encoding": "ascii",
+    "text": "DLSS2/FSR2/XeSS"
+  },
+  {
+    "rva": "0x33595a",
+    "encoding": "ascii",
+    "text": "DLSS3"
+  },
+  {
+    "rva": "0x335a67",
+    "encoding": "ascii",
+    "text": "I'm the developer for a lot of DLSS mods. "
+  },
+  {
+    "rva": "0x335a92",
+    "encoding": "ascii",
+    "text": "I am modding DLSS2/FSR2/XeSS as well as DLSS Frame Generation into games, "
+  },
+  {
+    "rva": "0x335b62",
+    "encoding": "ascii",
+    "text": "enabling the chances for DLSS mods for more games."
+  },
+  {
+    "rva": "0x335da0",
+    "encoding": "ascii",
+    "text": "void __cdecl SettingGUI::InitIMGUI(struct IDXGISwapChain *,struct ID3D11Device *,struct ID3D11DeviceContext *)"
+  },
+  {
+    "rva": "0x335e70",
+    "encoding": "ascii",
+    "text": "Upscaler"
+  },
+  {
+    "rva": "0x335e88",
+    "encoding": "ascii",
+    "text": "DLSS NR not loaded or not supported!"
+  },
+  {
+    "rva": "0x3361e8",
+    "encoding": "ascii",
+    "text": "ENBGetSDKVersion"
+  },
+  {
+    "rva": "0x3362e0",
+    "encoding": "ascii",
+    "text": "mUpscaleType"
+  },
+  {
+    "rva": "0x336300",
+    "encoding": "ascii",
+    "text": "mQualityLevel"
+  },
+  {
+    "rva": "0x336310",
+    "encoding": "ascii",
+    "text": "mDLSSPreset"
+  },
+  {
+    "rva": "0x336320",
+    "encoding": "ascii",
+    "text": "mRenderReShadeBeforeUpscaling"
+  },
+  {
+    "rva": "0x336340",
+    "encoding": "ascii",
+    "text": "mAutoExposure"
+  },
+  {
+    "rva": "0x336350",
+    "encoding": "ascii",
+    "text": "mHideUIForScreenshots"
+  },
+  {
+    "rva": "0x336368",
+    "encoding": "ascii",
+    "text": "mSharpening"
+  },
+  {
+    "rva": "0x336378",
+    "encoding": "ascii",
+    "text": "mSharpness"
+  },
+  {
+    "rva": "0x336388",
+    "encoding": "ascii",
+    "text": "mUseOptimalMipLodBias"
+  },
+  {
+    "rva": "0x3363a0",
+    "encoding": "ascii",
+    "text": "mMipLodBias"
+  },
+  {
+    "rva": "0x3363b8",
+    "encoding": "ascii",
+    "text": "mTargetResolutionScale"
+  },
+  {
+    "rva": "0x3363d0",
+    "encoding": "ascii",
+    "text": "mGameAdapterName"
+  },
+  {
+    "rva": "0x3363e8",
+    "encoding": "ascii",
+    "text": "mToggleFrameGen"
+  },
+  {
+    "rva": "0x336400",
+    "encoding": "ascii",
+    "text": "mToggleDLSSNR"
+  },
+  {
+    "rva": "0x336410",
+    "encoding": "ascii",
+    "text": "mDebug"
+  },
+  {
+    "rva": "0x336418",
+    "encoding": "ascii",
+    "text": "mFrameGenType"
+  },
+  {
+    "rva": "0x336428",
+    "encoding": "ascii",
+    "text": "mAdapterName"
+  },
+  {
+    "rva": "0x336438",
+    "encoding": "ascii",
+    "text": "mAdapterIndex"
+  },
+  {
+    "rva": "0x336448",
+    "encoding": "ascii",
+    "text": "mEnableFrameGeneration"
+  },
+  {
+    "rva": "0x336460",
+    "encoding": "ascii",
+    "text": "mEnableDynamicMFG"
+  },
+  {
+    "rva": "0x336478",
+    "encoding": "ascii",
+    "text": "mDynamicTargetFrameRate"
+  },
+  {
+    "rva": "0x336490",
+    "encoding": "ascii",
+    "text": "mEnableHUDFix"
+  },
+  {
+    "rva": "0x3364a0",
+    "encoding": "ascii",
+    "text": "mHUDFixMethod"
+  },
+  {
+    "rva": "0x3364b0",
+    "encoding": "ascii",
+    "text": "mFPSCap"
+  },
+  {
+    "rva": "0x3364b8",
+    "encoding": "ascii",
+    "text": "mFGFrames"
+  },
+  {
+    "rva": "0x3364c8",
+    "encoding": "ascii",
+    "text": "mEnableDLSSNR"
+  },
+  {
+    "rva": "0x3364d8",
+    "encoding": "ascii",
+    "text": "DLSS NR"
+  },
+  {
+    "rva": "0x3364e0",
+    "encoding": "ascii",
+    "text": "mDLSSNRAdapterName"
+  },
+  {
+    "rva": "0x3364f8",
+    "encoding": "ascii",
+    "text": "mDLSSNRBeforeUpscaling"
+  },
+  {
+    "rva": "0x336510",
+    "encoding": "ascii",
+    "text": "mDLSSNRPreset"
+  },
+  {
+    "rva": "0x336520",
+    "encoding": "ascii",
+    "text": "mDLSSNRStyle"
+  },
+  {
+    "rva": "0x336530",
+    "encoding": "ascii",
+    "text": "mDLSSNRIntensity"
+  },
+  {
+    "rva": "0x336548",
+    "encoding": "ascii",
+    "text": "mDLSSNRLocalToneStrength"
+  },
+  {
+    "rva": "0x336568",
+    "encoding": "ascii",
+    "text": "mDLSSNRLocalStructureStrength"
+  },
+  {
+    "rva": "0x336588",
+    "encoding": "ascii",
+    "text": "mDLSSNRSkinStructureStrength"
+  },
+  {
+    "rva": "0x3365a8",
+    "encoding": "ascii",
+    "text": "mDLSSNRUseAutoMask"
+  },
+  {
+    "rva": "0x3365c0",
+    "encoding": "ascii",
+    "text": "mDLSSNRUICorrection"
+  },
+  {
+    "rva": "0x3365d8",
+    "encoding": "ascii",
+    "text": "mDLSSNRResolveMethod"
+  },
+  {
+    "rva": "0x3365f0",
+    "encoding": "ascii",
+    "text": "mDLSSNRInputResolutionScale"
+  },
+  {
+    "rva": "0x336610",
+    "encoding": "ascii",
+    "text": "mDLSSNRTransferStrength"
+  },
+  {
+    "rva": "0x336628",
+    "encoding": "ascii",
+    "text": "mDLSSNRColourStrength"
+  },
+  {
+    "rva": "0x336640",
+    "encoding": "ascii",
+    "text": "mDLSSNRMaxRatio"
+  },
+  {
+    "rva": "0x336650",
+    "encoding": "ascii",
+    "text": "mDLSSNRWhitePoint"
+  },
+  {
+    "rva": "0x336668",
+    "encoding": "ascii",
+    "text": "mDLSSNRColorIsHdr"
+  },
+  {
+    "rva": "0x336680",
+    "encoding": "ascii",
+    "text": "mDLSSNRPass"
+  },
+  {
+    "rva": "0x3366b0",
+    "encoding": "ascii",
+    "text": "mToggleMenu"
+  },
+  {
+    "rva": "0x3366c0",
+    "encoding": "ascii",
+    "text": "mFontSize"
+  },
+  {
+    "rva": "0x3366d8",
+    "encoding": "ascii",
+    "text": "mLanguage"
+  },
+  {
+    "rva": "0x336740",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::LoadINI(void)"
+  },
+  {
+    "rva": "0x336788",
+    "encoding": "ascii",
+    "text": "Data\\SKSE\\Plugins\\SkyrimUpscaler.ini"
+  },
+  {
+    "rva": "0x336802",
+    "encoding": "ascii",
+    "text": "  \"Upscaling\": {"
+  },
+  {
+    "rva": "0x336839",
+    "encoding": "ascii",
+    "text": "  \"Upscaling\": {"
+  },
+  {
+    "rva": "0x336872",
+    "encoding": "ascii",
+    "text": "  \"Upscaling\": {"
+  },
+  {
+    "rva": "0x336b60",
+    "encoding": "ascii",
+    "text": "BorderlessUpscale"
+  },
+  {
+    "rva": "0x336ba8",
+    "encoding": "ascii",
+    "text": "\"Upscaling\""
+  },
+  {
+    "rva": "0x336be0",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::DetectCommunityShaders(void)"
+  },
+  {
+    "rva": "0x336c20",
+    "encoding": "ascii",
+    "text": "Community Shaders: dll={} Upscaling.ini={} disabledAtBoot={} enb={} mCSUpscaling={}"
+  },
+  {
+    "rva": "0x336c78",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::CaptureCSDepthAndMotion(void)"
+  },
+  {
+    "rva": "0x336d78",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::ResolveCSHDRTextures(void)"
+  },
+  {
+    "rva": "0x336e18",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::UpdateTargetSize(void)"
+  },
+  {
+    "rva": "0x336e50",
+    "encoding": "ascii",
+    "text": "UpdateTargetSize (CS Upscaling native) {}x{}"
+  },
+  {
+    "rva": "0x336ea0",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::SetupDepth(struct ID3D11Texture2D *)"
+  },
+  {
+    "rva": "0x336fb0",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::SetupMotionVector(struct ID3D11Texture2D *)"
+  },
+  {
+    "rva": "0x337068",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::CheckUIBuffer(void)"
+  },
+  {
+    "rva": "0x337138",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::Init(void)"
+  },
+  {
+    "rva": "0x337188",
+    "encoding": "ascii",
+    "text": "void __cdecl SkyrimUpscaler::InitDLSSNeuralRendering(void)"
+  },
+  {
+    "rva": "0x3371c8",
+    "encoding": "ascii",
+    "text": "InitDLSSNR failed."
+  },
+  {
+    "rva": "0x338ec8",
+    "encoding": "ascii",
+    "text": "ReShadeCreateEffectRuntime"
+  },
+  {
+    "rva": "0x338ee8",
+    "encoding": "ascii",
+    "text": "ReShadeUpdateAndPresentEffectRuntime"
+  },
+  {
+    "rva": "0x339150",
+    "encoding": "ascii",
+    "text": "long __cdecl hk_IDXGIFactory_CreateSwapChain_Real(struct IDXGIFactory2 *,struct IUnknown *,struct DXGI_SWAP_CHAIN_DESC *,struct IDXGISwapChain **)"
+  },
+  {
+    "rva": "0x339228",
+    "encoding": "ascii",
+    "text": "UpscalerHooks::Install - Failed to enable hooks!"
+  },
+  {
+    "rva": "0x339260",
+    "encoding": "ascii",
+    "text": "long __cdecl hk_IDXGIFactory_CreateSwapChain(struct IDXGIFactory2 *,struct IUnknown *,struct DXGI_SWAP_CHAIN_DESC *,struct IDXGISwapChain **)"
+  },
+  {
+    "rva": "0x3392f0",
+    "encoding": "ascii",
+    "text": "hk_IDXGIFactory_CreateSwapChain created original SwapChain : {} x {} Format: {} BufferCount: {}"
+  },
+  {
+    "rva": "0x339350",
+    "encoding": "ascii",
+    "text": "Latewarp CreateSwapChainProxy failed hr=0x{:08X}"
+  },
+  {
+    "rva": "0x339388",
+    "encoding": "ascii",
+    "text": "InitLatewarp succeeded, CreateSwapChainProxy hr=0x{:08X}"
+  },
+  {
+    "rva": "0x339470",
+    "encoding": "ascii",
+    "text": "hk_IDXGIFactory_CreateSwapChain created proxy SwapChain : {} x {} Format: {} BufferCount: {}"
+  },
+  {
+    "rva": "0x339620",
+    "encoding": "ascii",
+    "text": "bool __cdecl hk_ReShadeCreateEffectRuntime(enum reshade::api::device_api,void *,void *,void *,const char *,struct reshade::api::effect_runtime **)"
+  },
+  {
+    "rva": "0x3396b8",
+    "encoding": "ascii",
+    "text": "Hooked ReShade render_effects"
+  },
+  {
+    "rva": "0x3396d8",
+    "encoding": "ascii",
+    "text": "hk_ReShadeCreateEffectRuntime result: {}"
+  },
+  {
+    "rva": "0x339780",
+    "encoding": "ascii",
+    "text": "long __cdecl UpscalerHooks::D3D11CreateDeviceAndSwapChain_Hook::thunk(struct IDXGIAdapter *,enum D3D_DRIVER_TYPE,struct HINSTANCE__ *,unsigned int,const enum D3D_FEATURE_LEVEL *,unsigned int,unsigned int,struct DXGI_SWAP_CHAIN_DESC *,struct IDXGISwapChain **,struct ID3D11Device **,enum D3D_FEATURE_LEVEL *,struct ID3D11DeviceContext **)"
+  },
+  {
+    "rva": "0x339908",
+    "encoding": "ascii",
+    "text": "Calling original D3D11CreateDeviceAndSwapChain"
+  },
+  {
+    "rva": "0x3399a8",
+    "encoding": "ascii",
+    "text": "UpscalerHooks::Install - Failed to initialize minhook!"
+  },
+  {
+    "rva": "0x3399e0",
+    "encoding": "ascii",
+    "text": "ReShadeCustomVersion"
+  },
+  {
+    "rva": "0x3399f8",
+    "encoding": "ascii",
+    "text": "void __cdecl UpscalerHooks::Install(void)"
+  },
+  {
+    "rva": "0x339a28",
+    "encoding": "ascii",
+    "text": "Custom ReShade detected."
+  },
+  {
+    "rva": "0x339a48",
+    "encoding": "ascii",
+    "text": "ReShade detected."
+  },
+  {
+    "rva": "0x339bd8",
+    "encoding": "ascii",
+    "text": "ReShade64.dll"
+  },
+  {
+    "rva": "0x339be8",
+    "encoding": "ascii",
+    "text": "Hook ReShade CreateDXGIFactory1 Failed! {}"
+  },
+  {
+    "rva": "0x339c18",
+    "encoding": "ascii",
+    "text": "Hook ReShadeCreateEffectRuntime Failed! {}"
+  },
+  {
+    "rva": "0x339c48",
+    "encoding": "ascii",
+    "text": "Hook ReShadeUpdateAndPresentEffectRuntime Failed! {}"
+  },
+  {
+    "rva": "0x339c80",
+    "encoding": "ascii",
+    "text": "D3D11CreateDeviceAndSwapChain_Hook {}"
+  },
+  {
+    "rva": "0x339f98",
+    "encoding": "ascii",
+    "text": "/../../UpscalerBasePlugin/"
+  },
+  {
+    "rva": "0x33a4b0",
+    "encoding": "ascii",
+    "text": "SkyrimUpscaler"
+  },
+  {
+    "rva": "0x372b32",
+    "encoding": "ascii",
+    "text": "IsUpscaleMethodAvailable"
+  },
+  {
+    "rva": "0x372ba2",
+    "encoding": "ascii",
+    "text": "EvaluateUpscaler"
+  },
+  {
+    "rva": "0x372bf0",
+    "encoding": "ascii",
+    "text": "EvaluateFrameGeneration"
+  },
+  {
+    "rva": "0x372c0a",
+    "encoding": "ascii",
+    "text": "EvaluateDLSSNR"
+  },
+  {
+    "rva": "0x372c1c",
+    "encoding": "ascii",
+    "text": "SetFrameGeneration"
+  },
+  {
+    "rva": "0x372c7e",
+    "encoding": "ascii",
+    "text": "InitUpscaler"
+  },
+  {
+    "rva": "0x372c8e",
+    "encoding": "ascii",
+    "text": "ReleaseDLSSNR"
+  },
+  {
+    "rva": "0x372c9e",
+    "encoding": "ascii",
+    "text": "IsDLSSNRAvailable"
+  },
+  {
+    "rva": "0x372cb2",
+    "encoding": "ascii",
+    "text": "InitDLSSNR"
+  },
+  {
+    "rva": "0x372cf2",
+    "encoding": "ascii",
+    "text": "CreateSwapChainProxy"
+  },
+  {
+    "rva": "0x372f6a",
+    "encoding": "ascii",
+    "text": "SkyrimUpscaler.dll"
+  },
+  {
+    "rva": "0x336290",
+    "encoding": "utf16le",
+    "text": "Data\\SKSE\\Plugins\\SkyrimUpscaler.ini"
+  },
+  {
+    "rva": "0x336990",
+    "encoding": "utf16le",
+    "text": "Data\\Shaders\\Features\\Upscaling.ini"
+  },
+  {
+    "rva": "0x336df0",
+    "encoding": "utf16le",
+    "text": "EvaluateUpscaling"
+  },
+  {
+    "rva": "0x339708",
+    "encoding": "utf16le",
+    "text": "SkyrimUpscaler.dll"
+  },
+  {
+    "rva": "0x3784a8",
+    "encoding": "ascii",
+    "text": "SkyrimUpscaler"
+  },
+  {
+    "rva": "0x37b7a0",
+    "encoding": "ascii",
+    "text": ".?AUDXGISwapChainProxy@@"
+  },
+  {
+    "rva": "0x37b7d0",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain3@@"
+  },
+  {
+    "rva": "0x37b7f8",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain2@@"
+  },
+  {
+    "rva": "0x37b820",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain4@@"
+  },
+  {
+    "rva": "0x37b848",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain@@"
+  },
+  {
+    "rva": "0x37b8c8",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain1@@"
+  },
+  {
+    "rva": "0xd95160",
+    "encoding": "utf16le",
+    "text": "SkyrimUpscaler"
+  },
+  {
+    "rva": "0xd951d0",
+    "encoding": "utf16le",
+    "text": "SkyrimUpscaler"
+  },
+  {
+    "rva": "0xd9524c",
+    "encoding": "utf16le",
+    "text": "SkyrimUpscaler"
+  }
+]

@@ -1,0 +1,127 @@
+[
+  {
+    "path": "SKSE/Plugins/SkyrimUpscaler_preload.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "SKSE/Plugins/SkyrimUpscaler.ini",
+    "size": 7450,
+    "sha256": "2994323186989ce98f75a2cc58aaaa424e4c9abb050ea72027996d37de19fd35"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_framegeneration_dx12.pdb",
+    "size": 4984832,
+    "sha256": "b06ad134fdb346f98c263cbe135fe62648fa629ff6c8e2ee8d0ac69004c6985f"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_loader_dx12.pdb",
+    "size": 1028096,
+    "sha256": "3e1b32a5eec4860ed9ea0e5f457e5b55429fe68240e6228fe08ed225038e8583"
+  },
+  {
+    "path": "SKSE/Plugins/SkyrimUpscaler.dll",
+    "size": 14211584,
+    "sha256": "94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_dx12.dll",
+    "size": 6664192,
+    "sha256": "a0c72c0071d8da338dcd91bc2d85d0ff628131bded3206ff9a1ab1d819a55763"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_framegeneration_dx12.dll",
+    "size": 38245640,
+    "sha256": "3f5e674a59b400756e98ef31fd583a4eb08ad567ec8dee362886bc96e55ed347"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_loader_dx12.dll",
+    "size": 25864,
+    "sha256": "2f36843c3bb8c059621c10574e586a883ef337f2a549c67ecf3a82b3959ac238"
+  },
+  {
+    "path": "UpscalerBasePlugin/amd_fidelityfx_upscaler_dx12.dll",
+    "size": 41036800,
+    "sha256": "2604c0b392072d715b400b2f89434274de31995a4b6e68ce38250ebbd3f6c5fc"
+  },
+  {
+    "path": "UpscalerBasePlugin/ffx_backend_dx11_x64.dll",
+    "size": 8428032,
+    "sha256": "d6005576edeb783b0e109aa160ffe06671cc801b84b7bf841cb521ef4b053c5f"
+  },
+  {
+    "path": "UpscalerBasePlugin/ffx_fsr3upscaler_x64.dll",
+    "size": 40960,
+    "sha256": "dbd5e7a1a6cb3074617c8e82c1d12ce49721a013ab382385d5b4657edda7f62d"
+  },
+  {
+    "path": "UpscalerBasePlugin/ffx_fsr3_x64.dll",
+    "size": 28672,
+    "sha256": "2734c4ffa563f675df9ccb33c6cd6af60ca014e0c7d3eea284816befa83bd12a"
+  },
+  {
+    "path": "UpscalerBasePlugin/libxell.dll",
+    "size": 359792,
+    "sha256": "5ce63652eee5720203e0e41cc97eb45ee541c499c8a51d4bdb1e8fe4eaef4890"
+  },
+  {
+    "path": "UpscalerBasePlugin/libxess.dll",
+    "size": 77788528,
+    "sha256": "a49f487f15a815c1242b659182cc9365b6aff2d94051d25d5379316bdb11a2dd"
+  },
+  {
+    "path": "UpscalerBasePlugin/libxess_dx11.dll",
+    "size": 156024,
+    "sha256": "249c87dea58aa9d6f6b5309d5acaf6b95e77bb8055735a3f162e3d24af086733"
+  },
+  {
+    "path": "UpscalerBasePlugin/libxess_fg.dll",
+    "size": 45541752,
+    "sha256": "7fa2116e987a6fcc621e7be791461ca49988490ee3a4bc008ebb9796a057e1db"
+  },
+  {
+    "path": "UpscalerBasePlugin/nvngx_dlss.dll",
+    "size": 58956400,
+    "sha256": "c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e"
+  },
+  {
+    "path": "UpscalerBasePlugin/nvngx_dlssnr.dll",
+    "size": 165840496,
+    "sha256": "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206"
+  },
+  {
+    "path": "UpscalerBasePlugin/PDPerfPlugin.dll",
+    "size": 962048,
+    "sha256": "8ef7dc27fafbb89ba4b0ea46d16b749fb8b02f512e211976dc1929c915ed324d"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/nvngx_dlssg.dll",
+    "size": 7453808,
+    "sha256": "5d5cbf14d2727d47f93fd10bf77bd91708ae122482a6f86fd564971641ebd47b"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/sl.common.dll",
+    "size": 830592,
+    "sha256": "a4b2b5acbe49fbc6d44dd432cac19cd53218f698b2539dc7ed0fb268c72cfc8d"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/sl.dlss_g.dll",
+    "size": 625792,
+    "sha256": "b8b5effd7debdb750abd216de43385fb653261712bc315d85eba68811fb3ee02"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/sl.interposer.dll",
+    "size": 651392,
+    "sha256": "27b2190057994c0b287c2c5716953bf1586f6499ac12fbbb2092b9aaf8396570"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/sl.pcl.dll",
+    "size": 360064,
+    "sha256": "12aa4e76c28a27c735e4ecb3072f44d09428acb107b70ac38e4bd48ddb05f88d"
+  },
+  {
+    "path": "UpscalerBasePlugin/Streamline/sl.reflex.dll",
+    "size": 382080,
+    "sha256": "ecf12973cdcec2ffced2ea77b1c7e45f4d387e7c864ddb5531b66a6f947effb3"
+  }
+]

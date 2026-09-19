@@ -1,0 +1,162 @@
+[
+  {
+    "path": "Textures/Effects/ColorBlackUtility.DDS",
+    "size": 1520,
+    "sha256": "07900699344d08ecf02cbb47950bf1fa91b28afaebf57f1ea01638935d730de5"
+  },
+  {
+    "path": "F4SE/Plugins/amd_fidelityfx_framegeneration_dx12.dll",
+    "size": 38246160,
+    "sha256": "8deaf970b84dac8f761fefa546e73517e02b34a6bb05a590a74e7faea03baa4a"
+  },
+  {
+    "path": "F4SE/Plugins/amd_fidelityfx_loader_dx12.dll",
+    "size": 25864,
+    "sha256": "d98c027fbd4cc074a1c48574eecd58ded2bc9e4cb6bfc5c28d6595ab5037d371"
+  },
+  {
+    "path": "F4SE/Plugins/amd_fidelityfx_upscaler_dx12.dll",
+    "size": 15605520,
+    "sha256": "ec7ed3ca674e288240e6f04b986342aece47454c41d9b0959449e82e22bd7f6d"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/nvngx_dlss.dll",
+    "size": 58956912,
+    "sha256": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/nvngx_dlssg.dll",
+    "size": 7460976,
+    "sha256": "ff6e90eb78b827927dff5b4ecc6b1c870c2e9bca29ed9f48c7d348cc9e170b82"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/nvngx_dlssnr.dll",
+    "size": 165840496,
+    "sha256": "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.common.dll",
+    "size": 843392,
+    "sha256": "82924a8954dd671e09351c5de0eb87ad0eb25b944cc9f9ab955ca1d9950de15d"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.dlss.dll",
+    "size": 422016,
+    "sha256": "73bf52c0cfaa5900a8f3f4a91306e4625e7cca696dfb305aae44c9f97b582e1f"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.dlss_g.dll",
+    "size": 636032,
+    "sha256": "f4a6b2b14dcc0b1485989e430d3b4e3a44ac1800b92ba1ad74f476e64fb2b09c"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.dlss_nr.dll",
+    "size": 401024,
+    "sha256": "9f6672e5e0170dc118a3188d21bda187e1fc1aa3502895b21ab846d23165c11d"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.interposer.dll",
+    "size": 652928,
+    "sha256": "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.nis.dll",
+    "size": 1155712,
+    "sha256": "556870e456d268601188919927b3b122f76b25f9b221cc4b15d3ef649f0ad27b"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.pcl.dll",
+    "size": 360064,
+    "sha256": "f13d51cfa05f4cd514df2026049e2db8adf359221713170ad386fd499915b582"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.reflex.dll",
+    "size": 388736,
+    "sha256": "0ce9725e3e03ea9e7f81d008b57f33ee365973d2e349131c8b1c3e3378fe2db0"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling.dll",
+    "size": 1515520,
+    "sha256": "f2633bcf11f618569eac77d1c7e6bf136a498fdb53f5eb1f205bfbb3a74cac7b"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/BSImagespaceShaderSSLRRaytracing.hlsl",
+    "size": 82835,
+    "sha256": "50207f6625e7e26463faa4b7522c505abd6f912c2b55fe8bbb2d2075aaaba11f"
+  },
+  {
+    "path": "F4SE/Plugins/FrameGeneration/CopyDepthToSharedBufferCS.hlsl",
+    "size": 360,
+    "sha256": "93203d13b64d171cdc1948d0efdb6ae9ce4866bf777770abf2858aabf7c1b66f"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/DilateMotionVectorCS.hlsl",
+    "size": 3191,
+    "sha256": "3aa5d776b472fafcfca5e89ab652fdb8357a3870a226b678c9836916c81ad9ec"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/GenerateDLSSTransparencyMaskCS.hlsl",
+    "size": 881,
+    "sha256": "d685624f497e9144a932f04d4fcf7172b6dd7b3fdad0ed9521b7366ff83a50e2"
+  },
+  {
+    "path": "F4SE/Plugins/FrameGeneration/GenerateSharedBuffersCS.hlsl",
+    "size": 1104,
+    "sha256": "d2b4e6ef73d817e713cacfb0f27033f5079394995c216585b0cbf86cdcda5525"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/OverrideDepthCS.hlsl",
+    "size": 478,
+    "sha256": "ceb77a19b0ffa03badbe26e3a1da538c4e5e202994333924e0955d9d8a16e8b3"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/OverrideLinearDepthCS.hlsl",
+    "size": 641,
+    "sha256": "915219fd3d9c2bf449ae8be55095d7233908dadf07f05234eb4135edb473d688"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/PipboyTemporalMaskCS.hlsl",
+    "size": 643,
+    "sha256": "bf11bae9eaec8e64bbd19ab49f29f0d5fd3e885f52375a1b7c141bc3bdcd1496"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/sl.dlss_g.dll.i64",
+    "size": 11192161,
+    "sha256": "1055b2b191fea08dd17c4432d2ce8651b610c5b9d3158ad95e3949b17a3fbf97"
+  },
+  {
+    "path": "Meshes/Effects/CameraAttachedFX/CameraAttach_WetArmorView.nif",
+    "size": 70850,
+    "sha256": "1ba9fb171cd71bef53ce356d7deb517bedf71c7329fef5047ec67c6e530e1d41"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling.pdb",
+    "size": 27824128,
+    "sha256": "8af288763ee2230d7df49be5ba48199e021a0e9b14e13380419c8b2bf9275ac6"
+  },
+  {
+    "path": "F4SE/Plugins/LICENSE.txt",
+    "size": 1136,
+    "sha256": "c93d509cd69d50698796c9c3274247352736ef122a3197ace2010f0978e21aa6"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/nis.license.txt",
+    "size": 1199,
+    "sha256": "f80ecfbce8a84a5b4c1c59dc5a9f0ee9cf5a989c9fba3a9486ee874f7595a454"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/nvngx_dlss.license.txt",
+    "size": 26727,
+    "sha256": "3027f23ca5a46dd9cb8183fbd522983a86f64d7daac5982912bf9f214671f294"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/Streamline/reflex.license.txt",
+    "size": 20504,
+    "sha256": "ebf83c07fb3b2939908c3795d887afde3161c89a28ba391724efc784ce1bdabe"
+  },
+  {
+    "path": "F4SE/Plugins/Upscaling/ReShade-SDK-LICENSE.txt",
+    "size": 1481,
+    "sha256": "237ded5b8344f820113efab1e65e91e1f159d9202c5b4856606a0590d3ffdab0"
+  }
+]

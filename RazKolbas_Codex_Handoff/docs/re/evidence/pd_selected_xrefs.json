@@ -1,0 +1,159 @@
+[
+  {
+    "rva": "0x4fbe0",
+    "end": "0x4fda5",
+    "name": "IsDLSSNRAvailable",
+    "references": [
+      {
+        "at": "0x4fc19",
+        "op": "call",
+        "target": "0x61340",
+        "name": "sub_0x61340"
+      },
+      {
+        "at": "0x4fc3b",
+        "op": "string",
+        "target": "0xcfa20",
+        "text": "nvngx_dlssnr.dll"
+      },
+      {
+        "at": "0x4fc48",
+        "op": "call",
+        "target": "0x51f10",
+        "name": "sub_0x51f10"
+      },
+      {
+        "at": "0x4fc63",
+        "op": "call",
+        "target": "0x61340",
+        "name": "sub_0x61340"
+      },
+      {
+        "at": "0x4fc80",
+        "op": "string",
+        "target": "0xcfa38",
+        "text": "DLSS\\nvngx_dlssnr.dll"
+      },
+      {
+        "at": "0x4fca5",
+        "op": "call",
+        "target": "0x51f10",
+        "name": "sub_0x51f10"
+      },
+      {
+        "at": "0x4fcb1",
+        "op": "jmp",
+        "target": "0x4fcbc",
+        "name": "sub_0x4fcbc"
+      },
+      {
+        "at": "0x4fcf0",
+        "op": "call",
+        "target": "0x616f4",
+        "name": "sub_0x616f4"
+      },
+      {
+        "at": "0x4fd42",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x4fd49",
+        "op": "call",
+        "target": "0x616f4",
+        "name": "sub_0x616f4"
+      },
+      {
+        "at": "0x4fd86",
+        "op": "call",
+        "target": "0x611d0",
+        "name": "sub_0x611d0"
+      }
+    ]
+  },
+  {
+    "rva": "0x4fdb0",
+    "end": "0x4fdd1",
+    "name": "InitDLSSNR",
+    "references": []
+  },
+  {
+    "rva": "0x4fde0",
+    "end": "0x4fe9a",
+    "name": "EvaluateDLSSNR",
+    "references": []
+  },
+  {
+    "rva": "0x4fea0",
+    "end": "0x4feb9",
+    "name": "ReleaseDLSSNR",
+    "references": []
+  },
+  {
+    "rva": "0x2cc10",
+    "end": "0x2ce0c",
+    "name": "sub_0x2cc10",
+    "references": [
+      {
+        "at": "0x2cc3d",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cc53",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cc69",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cc82",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2ccc8",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cce4",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2ccf9",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cd15",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      },
+      {
+        "at": "0x2cd31",
+        "op": "call",
+        "target": "0x298b0",
+        "name": "sub_0x298b0"
+      }
+    ]
+  },
+  {
+    "rva": "0x29e10",
+    "end": "0x29e30",
+    "name": "sub_0x29e10",
+    "references": []
+  }
+]

@@ -1,0 +1,1777 @@
+[
+  {
+    "rva": "0xc3d98",
+    "encoding": "ascii",
+    "text": "eErrorReflexAPI"
+  },
+  {
+    "rva": "0xc4130",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Game swapchain candidate rejected hwnd={} size={}x{}"
+  },
+  {
+    "rva": "0xc4178",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Game swapchain candidate hwnd={} size={}x{}"
+  },
+  {
+    "rva": "0xc41c0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Skipping factory swapchain hook because the D3D12 proxy swapchain is already active"
+  },
+  {
+    "rva": "0xc4230",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Skipping factory swapchain hook because no game swapchain candidate is available; hwnd={} size={}x{}"
+  },
+  {
+    "rva": "0xc42b0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Skipping non-game swapchain hwnd={} size={}x{} expectedHwnd={} expectedSize={}x{}"
+  },
+  {
+    "rva": "0xc4330",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Streamline proxy disabled because FidelityFX frame generation will own the swapchain"
+  },
+  {
+    "rva": "0xc43b8",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Factory swapchain hook requested"
+  },
+  {
+    "rva": "0xc43f0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] slSetD3DDevice(D3D12 native) failed: {}"
+  },
+  {
+    "rva": "0xc4430",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation selected force={} dlssgAvailable={}"
+  },
+  {
+    "rva": "0xc4480",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Failed to create ENB D3D12 proxy swapchain: {}"
+  },
+  {
+    "rva": "0xc44c0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Falling back to the original DXGI factory swapchain"
+  },
+  {
+    "rva": "0xc4517",
+    "encoding": "ascii",
+    "text": "i[DX12SwapChain] Installed IDXGIFactory::CreateSwapChain hook"
+  },
+  {
+    "rva": "0xc4560",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] IDXGI factory could not be resolved; D3D12 proxy will not be available"
+  },
+  {
+    "rva": "0xc45c0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Factory hook created D3D12 proxy swapchain; skipping D3D11 Streamline initialization"
+  },
+  {
+    "rva": "0xc4628",
+    "encoding": "ascii",
+    "text": "D3D11CreateDeviceAndSwapChain"
+  },
+  {
+    "rva": "0xc4d00",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SideAimAni.dll has invalid PE headers; Unicode WndProc compatibility was not installed"
+  },
+  {
+    "rva": "0xc4db0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SideAimAni.dll WndProc signature is unsupported; Unicode WndProc compatibility was not installed"
+  },
+  {
+    "rva": "0xc4e70",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SideAimAni.dll ANSI WndProc imports could not be resolved"
+  },
+  {
+    "rva": "0xc4ec0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SideAimAni.dll WndProc signature references do not match its imports"
+  },
+  {
+    "rva": "0xc4f60",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SideAimAni.dll WndProc imports were already modified; Unicode compatibility was not installed"
+  },
+  {
+    "rva": "0xc4fd0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Could not patch SideAimAni.dll WndProc imports"
+  },
+  {
+    "rva": "0xc5010",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Installed SideAimAni.dll Unicode WndProc compatibility"
+  },
+  {
+    "rva": "0xc5138",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] slGetNativeInterface({}) failed: {}"
+  },
+  {
+    "rva": "0xc5170",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Streamline proxy check {} proxy={} interface={} native={}"
+  },
+  {
+    "rva": "0xc529e",
+    "encoding": "ascii",
+    "text": "Ht[DX12SwapChain] slSetD3DDevice(D3D12) failed: {}"
+  },
+  {
+    "rva": "0xc52e0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Could not upgrade D3D12 device for Streamline: {}"
+  },
+  {
+    "rva": "0xc5350",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] D3D12 command queue created via {} device: queue={}"
+  },
+  {
+    "rva": "0xc53d0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Could not upgrade DXGI factory for Streamline: {}"
+  },
+  {
+    "rva": "0xc5420",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation swapchain will be created during swapchain initialization"
+  },
+  {
+    "rva": "0xc5490",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation swapchain created for hwnd: swapchain={}"
+  },
+  {
+    "rva": "0xc54f0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation swapchain creation failed; falling back to a regular D3D12 swapchain"
+  },
+  {
+    "rva": "0xc5568",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Swapchain created via {} factory: swapchain={}"
+  },
+  {
+    "rva": "0xc55b8",
+    "encoding": "ascii",
+    "text": "factoryForSwapChain"
+  },
+  {
+    "rva": "0xc55e0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Could not upgrade swapchain for Streamline: {}"
+  },
+  {
+    "rva": "0xc5620",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Swapchain explicitly upgraded for Streamline: swapchain={}"
+  },
+  {
+    "rva": "0xc5690",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] D3D12 swapchain is not a Streamline proxy; DLSS-G Present interception may not run on this swapchain"
+  },
+  {
+    "rva": "0xc5710",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Creation validation attempt={} requested={} application={} output={} observedByReShade={}"
+  },
+  {
+    "rva": "0xc5780",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Cannot safely disable DLSS-G hooks for FP16 FidelityFX fallback"
+  },
+  {
+    "rva": "0xc57d0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] R16G16B16A16_FLOAT output (format=10): DLSS FG unavailable; recreating with FidelityFX FG instead. DLSS SR and Reflex remain available."
+  },
+  {
+    "rva": "0xc5870",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Output format did not converge; refusing incompatible interop buffers"
+  },
+  {
+    "rva": "0xc58d0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Recreating through SDK with negotiated format={}"
+  },
+  {
+    "rva": "0xc5920",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Created D3D12 Streamline swapchain {}x{} format={} buffers={} flags={} desktopRefreshHz={:.3f}"
+  },
+  {
+    "rva": "0xc5990",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Could not install PCL stats window proc hook: {}"
+  },
+  {
+    "rva": "0xc59d8",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Installed PCL stats window proc hook"
+  },
+  {
+    "rva": "0xc5a18",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Suspended temporal features reason={}"
+  },
+  {
+    "rva": "0xc5a50",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Resumed temporal features; next evaluation will reset history"
+  },
+  {
+    "rva": "0xc5ab0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] {} resource restoration failed: {}"
+  },
+  {
+    "rva": "0xc5af8",
+    "encoding": "ascii",
+    "text": "[ENB scene resize] Allocation failed: {}"
+  },
+  {
+    "rva": "0xc5b28",
+    "encoding": "ascii",
+    "text": "[ENB scene resize] Failed hr=0x{:08X}; rollback hr=0x{:08X}"
+  },
+  {
+    "rva": "0xc5b68",
+    "encoding": "ascii",
+    "text": "[DLSS-NR] Scene quality change: preserve-native-resources={}"
+  },
+  {
+    "rva": "0xc5bb0",
+    "encoding": "ascii",
+    "text": "[ENB scene resize] Post-rebuild GPU drain failed; retaining former proxy"
+  },
+  {
+    "rva": "0xc5c00",
+    "encoding": "ascii",
+    "text": "[ENB scene resize] quality {} -> {} scene={}x{} display={}x{}; engine-window-resize=false real-swapchain-resize=false native-UI-preserved=true"
+  },
+  {
+    "rva": "0xc5cb0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] {} failed result=0x{:08X} width={} height={} format={} flags=0x{:X}"
+  },
+  {
+    "rva": "0xc5d08",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] {} completed {}x{} format={} buffers={}"
+  },
+  {
+    "rva": "0xc5f78",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Post-Present signal failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xc5fc0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Command fence reports device removal while waiting for {}"
+  },
+  {
+    "rva": "0xc6010",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] SetEventOnCompletion failed result=0x{:08X} value={}"
+  },
+  {
+    "rva": "0xc6060",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Command fence wait failed waitResult=0x{:08X} value={} completed={} removed=0x{:08X}"
+  },
+  {
+    "rva": "0xc60c8",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] GPU-idle signal failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xc61f0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native screen-space target {}x{}; scene {}x{}, generation={}"
+  },
+  {
+    "rva": "0xc6248",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native UI preparation failed: {}"
+  },
+  {
+    "rva": "0xc6320",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] Present failed result=0x{:08X}({}) d3d12Removed=0x{:08X}({}) d3d11Removed=0x{:08X}({}) sync={} flags=0x{:X} frameIndex={} queue={} swapchain={} thread={}"
+  },
+  {
+    "rva": "0xc63e0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] DLSS-G adjusted present sync {}->{} flags 0x{:X}->0x{:X}"
+  },
+  {
+    "rva": "0xc6430",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Preparation submitted ready={} input={}x{} mode={} passes={} fence={}"
+  },
+  {
+    "rva": "0xc6490",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation swapchain enabled at runtime"
+  },
+  {
+    "rva": "0xc64e0",
+    "encoding": "ascii",
+    "text": "[DX12SwapChain] FidelityFX frame generation swapchain could not be enabled"
+  },
+  {
+    "rva": "0xc7edd",
+    "encoding": "ascii",
+    "text": "[nueLevel(LinearClamp, (float2(p.xy[ENB domain] scene={}x{} display={}x{} quality={}; low-resolution ENB -> LDR NR -> SR -> native screen-space UI. Live quality changes resize scene resources only; HWND and real swapchain unchanged"
+  },
+  {
+    "rva": "0xc80f0",
+    "encoding": "ascii",
+    "text": "[ENB tiled lighting] Buffer {} is unavailable or still owned by a resource request"
+  },
+  {
+    "rva": "0xc8150",
+    "encoding": "ascii",
+    "text": "[ENB tiled lighting] Unexpected buffer {} layout; resize cancelled"
+  },
+  {
+    "rva": "0xc81a0",
+    "encoding": "ascii",
+    "text": "[ENB tiled lighting] Buffer {} allocation failed hr=0x{:08X}; retaining active buffers"
+  },
+  {
+    "rva": "0xc8218",
+    "encoding": "ascii",
+    "text": "[ENB tiled lighting] {} capacity {} -> {} tiles (8x8)"
+  },
+  {
+    "rva": "0xc9828",
+    "encoding": "ascii",
+    "text": "Materials\\Interface\\HUDGlassFlat.BGEM"
+  },
+  {
+    "rva": "0xc9850",
+    "encoding": "ascii",
+    "text": "[UI composite] HUDGlass uses engine frame composition; final alpha recomposition bypassed"
+  },
+  {
+    "rva": "0xc98b0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native Interface3D depth{} {}x{}"
+  },
+  {
+    "rva": "0xc9920",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native model targets for {}: {}x{}"
+  },
+  {
+    "rva": "0xc9950",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native model targets unavailable: {}"
+  },
+  {
+    "rva": "0xc9980",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native depth allocation failed: {}"
+  },
+  {
+    "rva": "0xc99b0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Pipboy depth3 {}x{}"
+  },
+  {
+    "rva": "0xc99d0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Native custom RT{} {}x{} -> {}x{}"
+  },
+  {
+    "rva": "0xc9a00",
+    "encoding": "ascii",
+    "text": "[ENB UI] Pipboy RT{} {}x{} -> {}x{}"
+  },
+  {
+    "rva": "0xc9a50",
+    "encoding": "ascii",
+    "text": "[ENB UI] Unexpected depth entry; native depth hook not installed"
+  },
+  {
+    "rva": "0xc9a98",
+    "encoding": "ascii",
+    "text": "[ENB UI] Installed depth gateway with absolute TLS load"
+  },
+  {
+    "rva": "0xc9b70",
+    "encoding": "ascii",
+    "text": "[ENB UI] Interface3D model call sites unavailable; model routing disabled"
+  },
+  {
+    "rva": "0xc9bc0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Incomplete Interface3D hooks; native custom path disabled"
+  },
+  {
+    "rva": "0xc9de0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Pip-Boy cursor constraint domain scaled x{:.4f} for promoted logical target"
+  },
+  {
+    "rva": "0xc9e40",
+    "encoding": "ascii",
+    "text": "[ENB UI] Pip-Boy cursor viewport rect not found; logical target synchronized without NG cursor repair"
+  },
+  {
+    "rva": "0xc9eb0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Scaled Pip-Boy NG constraints x{:.4f}, cursor rect 1920x1080 -> {}x{}"
+  },
+  {
+    "rva": "0xc9f00",
+    "encoding": "ascii",
+    "text": "[ENB UI] Pip-Boy logical target {}x{} -> {}x{} (RT60/61/depth3 physical extent)"
+  },
+  {
+    "rva": "0xca840",
+    "encoding": "ascii",
+    "text": "[ENB UI layout] Unexpected size read at {:X}; patch not installed"
+  },
+  {
+    "rva": "0xca890",
+    "encoding": "ascii",
+    "text": "[ENB UI layout] UI size storage is out of range; patch not installed"
+  },
+  {
+    "rva": "0xca8e0",
+    "encoding": "ascii",
+    "text": "[ENB UI layout] Stable display size {}x{}; Movie/crosshair reads patched={}; menu edge reads patched={}; LooksMenu reads patched={}; cursor reads patched={}"
+  },
+  {
+    "rva": "0xcaaa0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Width"
+  },
+  {
+    "rva": "0xcaab0",
+    "encoding": "ascii",
+    "text": "DLSSNR.Height"
+  },
+  {
+    "rva": "0xcaac0",
+    "encoding": "ascii",
+    "text": "DLSSNR.InputWidth"
+  },
+  {
+    "rva": "0xcaad8",
+    "encoding": "ascii",
+    "text": "DLSSNR.InputHeight"
+  },
+  {
+    "rva": "0xcaaf0",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputWidth"
+  },
+  {
+    "rva": "0xcab08",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputHeight"
+  },
+  {
+    "rva": "0xcab20",
+    "encoding": "ascii",
+    "text": "DLSSNR.Output.Width"
+  },
+  {
+    "rva": "0xcab38",
+    "encoding": "ascii",
+    "text": "DLSSNR.Output.Height"
+  },
+  {
+    "rva": "0xcab50",
+    "encoding": "ascii",
+    "text": "DLSSNR.ScalingRatio"
+  },
+  {
+    "rva": "0xcab68",
+    "encoding": "ascii",
+    "text": "DLSSNR.Scale"
+  },
+  {
+    "rva": "0xcab78",
+    "encoding": "ascii",
+    "text": "DLSSNR.Upscaling"
+  },
+  {
+    "rva": "0xcab90",
+    "encoding": "ascii",
+    "text": "DLSSNRComputeScalingRatioCallback"
+  },
+  {
+    "rva": "0xcabb8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Hint.Render.Preset"
+  },
+  {
+    "rva": "0xcabd8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Color"
+  },
+  {
+    "rva": "0xcabe8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Output"
+  },
+  {
+    "rva": "0xcabf8",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVec"
+  },
+  {
+    "rva": "0xcac08",
+    "encoding": "ascii",
+    "text": "DLSSNR.Depth"
+  },
+  {
+    "rva": "0xcac18",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseX"
+  },
+  {
+    "rva": "0xcac38",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectBaseY"
+  },
+  {
+    "rva": "0xcac58",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectWidth"
+  },
+  {
+    "rva": "0xcac78",
+    "encoding": "ascii",
+    "text": "DLSSNR.ColorSubrectHeight"
+  },
+  {
+    "rva": "0xcac98",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseX"
+  },
+  {
+    "rva": "0xcacb0",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectBaseY"
+  },
+  {
+    "rva": "0xcacc8",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectWidth"
+  },
+  {
+    "rva": "0xcace0",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecSubrectHeight"
+  },
+  {
+    "rva": "0xcad00",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleX"
+  },
+  {
+    "rva": "0xcad18",
+    "encoding": "ascii",
+    "text": "DLSSNR.MVecScaleY"
+  },
+  {
+    "rva": "0xcad30",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseX"
+  },
+  {
+    "rva": "0xcad50",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectBaseY"
+  },
+  {
+    "rva": "0xcad70",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectWidth"
+  },
+  {
+    "rva": "0xcad90",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthSubrectHeight"
+  },
+  {
+    "rva": "0xcadb0",
+    "encoding": "ascii",
+    "text": "DLSSNR.DepthInverted"
+  },
+  {
+    "rva": "0xcadc8",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseX"
+  },
+  {
+    "rva": "0xcade8",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectBaseY"
+  },
+  {
+    "rva": "0xcae08",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectWidth"
+  },
+  {
+    "rva": "0xcae28",
+    "encoding": "ascii",
+    "text": "DLSSNR.OutputSubrectHeight"
+  },
+  {
+    "rva": "0xcae48",
+    "encoding": "ascii",
+    "text": "DLSSNR.Enabled"
+  },
+  {
+    "rva": "0xcae58",
+    "encoding": "ascii",
+    "text": "DLSSNR.Reset"
+  },
+  {
+    "rva": "0xcae68",
+    "encoding": "ascii",
+    "text": "DLSSNR.Intensity"
+  },
+  {
+    "rva": "0xcae80",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalToneStrength"
+  },
+  {
+    "rva": "0xcaea0",
+    "encoding": "ascii",
+    "text": "DLSSNR.LocalStructureStrength"
+  },
+  {
+    "rva": "0xcaec0",
+    "encoding": "ascii",
+    "text": "DLSSNR.SkinStructureStrength"
+  },
+  {
+    "rva": "0xcaee0",
+    "encoding": "ascii",
+    "text": "DLSSNR.UseAutoMask"
+  },
+  {
+    "rva": "0xcaef8",
+    "encoding": "ascii",
+    "text": "DLSSNR.Style"
+  },
+  {
+    "rva": "0xcaf08",
+    "encoding": "ascii",
+    "text": "DLSSNR.UICorrection"
+  },
+  {
+    "rva": "0xcaf20",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Resource allocation failed hr=0x{:08X}"
+  },
+  {
+    "rva": "0xcaf58",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Residency priority failed hr=0x{:08X}"
+  },
+  {
+    "rva": "0xcaf90",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime export {} is missing"
+  },
+  {
+    "rva": "0xcafe8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime {} is missing"
+  },
+  {
+    "rva": "0xcb010",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Could not load {} error=0x{:08X}"
+  },
+  {
+    "rva": "0xcb1a8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Using shared NGX feature operations from {}"
+  },
+  {
+    "rva": "0xcb1f0",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Using feature operations exported by nvngx_dlssnr.dll"
+  },
+  {
+    "rva": "0xcb240",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] No loaded NGX module exposes the complete D3D12 feature operation set required by nvngx_dlssnr.dll"
+  },
+  {
+    "rva": "0xcb2b8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Could not identify the calling plugin module"
+  },
+  {
+    "rva": "0xcb2f8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime has an invalid DOS header"
+  },
+  {
+    "rva": "0xcb330",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime has an invalid PE header"
+  },
+  {
+    "rva": "0xcb368",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime has no import directory"
+  },
+  {
+    "rva": "0xcb3c0",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Could not patch the runtime module-name import"
+  },
+  {
+    "rva": "0xcb400",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Installed scoped nvngx.dll caller-name shim"
+  },
+  {
+    "rva": "0xcb440",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Runtime does not import GetModuleFileNameW"
+  },
+  {
+    "rva": "0xcb480",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] NVSDK_NGX_D3D12_Init_Ext failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xcb4d0",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Initialized nvngx_dlssnr.dll feature={} appId={} sdkVersion={}"
+  },
+  {
+    "rva": "0xcb598",
+    "encoding": "ascii",
+    "text": "DLSS.Feature.Create.Flags"
+  },
+  {
+    "rva": "0xcb5e8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Performance mode {} is unsupported"
+  },
+  {
+    "rva": "0xcb620",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] AllocateParameters failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xcb660",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Shared NGX CreateFeature returned 0x{:08X}; feature 18 was created by nvngx_dlssnr.dll"
+  },
+  {
+    "rva": "0xcb6d0",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] CreateFeature failed pass={} primaryResult=0x{:08X} snippetResult=0x{:08X} input={}x{} output={}x{} performanceMode={} preset={}"
+  },
+  {
+    "rva": "0xcb770",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Created NGX feature 18 pass={} input={}x{} output={}x{} performanceMode={} preset={}"
+  },
+  {
+    "rva": "0xcb7d8",
+    "encoding": "ascii",
+    "text": "DLSS.Indicator.Invert.X.Axis"
+  },
+  {
+    "rva": "0xcb7f8",
+    "encoding": "ascii",
+    "text": "DLSS.Indicator.Invert.Y.Axis"
+  },
+  {
+    "rva": "0xcb820",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Could not allocate pass {} intermediate {}x{} format={} result=0x{:08X}"
+  },
+  {
+    "rva": "0xcb880",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Could not obtain the D3D12 device"
+  },
+  {
+    "rva": "0xcb8c0",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Requested {} passes but only {} prepared; using the available independent histories"
+  },
+  {
+    "rva": "0xcb930",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] EvaluateFeature failed pass={} result=0x{:08X} color={}x{} guides={}x{} output={}x{} colorResource={}x{} outputResource={}x{} performanceMode={} reset={}; using original color for SR"
+  },
+  {
+    "rva": "0xcb9f8",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] ReleaseFeature failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xcba30",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] DestroyParameters failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xcba70",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Shutdown failed result=0x{:08X}"
+  },
+  {
+    "rva": "0xcc70c",
+    "encoding": "ascii",
+    "text": "DLSS-G"
+  },
+  {
+    "rva": "0xcc714",
+    "encoding": "ascii",
+    "text": "FSR FG"
+  },
+  {
+    "rva": "0xcca38",
+    "encoding": "ascii",
+    "text": "Upscaler: %s"
+  },
+  {
+    "rva": "0xccae8",
+    "encoding": "ascii",
+    "text": "Reflex: %s"
+  },
+  {
+    "rva": "0xccaf8",
+    "encoding": "ascii",
+    "text": "DLSS Quality: %s"
+  },
+  {
+    "rva": "0xccb10",
+    "encoding": "ascii",
+    "text": "DLSS Preset: %s"
+  },
+  {
+    "rva": "0xccb28",
+    "encoding": "ascii",
+    "text": "FSR Quality: %s"
+  },
+  {
+    "rva": "0xccce0",
+    "encoding": "ascii",
+    "text": "[ENB UI] OG Pipboy cursor retains renderer-derived viewport"
+  },
+  {
+    "rva": "0xccd40",
+    "encoding": "ascii",
+    "text": "[ENB UI] Unexpected AE cursor setup prologue; viewport correction unavailable"
+  },
+  {
+    "rva": "0xcdaf8",
+    "encoding": "ascii",
+    "text": "ReShadeRegisterAddon"
+  },
+  {
+    "rva": "0xcdb10",
+    "encoding": "ascii",
+    "text": "ReShadeUnregisterAddon"
+  },
+  {
+    "rva": "0xcdb40",
+    "encoding": "ascii",
+    "text": "ReShadeDepth"
+  },
+  {
+    "rva": "0xcdc08",
+    "encoding": "ascii",
+    "text": "ReShadeRegisterEvent"
+  },
+  {
+    "rva": "0xcf267",
+    "encoding": "ascii",
+    "text": "SslDLSSGetOptimalSettings"
+  },
+  {
+    "rva": "0xcf288",
+    "encoding": "ascii",
+    "text": "slDLSSGetState"
+  },
+  {
+    "rva": "0xcf298",
+    "encoding": "ascii",
+    "text": "slDLSSSetOptions"
+  },
+  {
+    "rva": "0xcf2b0",
+    "encoding": "ascii",
+    "text": "slDLSSGGetState"
+  },
+  {
+    "rva": "0xcf2c0",
+    "encoding": "ascii",
+    "text": "slDLSSGSetOptions"
+  },
+  {
+    "rva": "0xcf328",
+    "encoding": "ascii",
+    "text": "slReflexGetState"
+  },
+  {
+    "rva": "0xcf340",
+    "encoding": "ascii",
+    "text": "slReflexSleep"
+  },
+  {
+    "rva": "0xcf350",
+    "encoding": "ascii",
+    "text": "slReflexSetOptions"
+  },
+  {
+    "rva": "0xcf380",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS-G present API error hres=0x{:08X}"
+  },
+  {
+    "rva": "0xcfa40",
+    "encoding": "ascii",
+    "text": "DLSS-NR"
+  },
+  {
+    "rva": "0xcfa50",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS skipped: D3D11 DLSS SR is deprecated; use the D3D12 proxy path"
+  },
+  {
+    "rva": "0xcfab0",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS-G skipped: Streamline DLSS-G runtime is D3D12/Vulkan only"
+  },
+  {
+    "rva": "0xcfafc",
+    "encoding": "ascii",
+    "text": "Reflex"
+  },
+  {
+    "rva": "0xcfb20",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] D3D12 device is not ready; initialization remains deferred until evaluation"
+  },
+  {
+    "rva": "0xcfb80",
+    "encoding": "ascii",
+    "text": "[DLSS-NR Direct] Streamline DLSS-NR is unavailable; initializing the direct path now"
+  },
+  {
+    "rva": "0xcfbd8",
+    "encoding": "ascii",
+    "text": "slDLSSNRSetOptions"
+  },
+  {
+    "rva": "0xcfbf0",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not resolve slDLSSNRSetOptions: {}"
+  },
+  {
+    "rva": "0xcfc50",
+    "encoding": "ascii",
+    "text": "[Streamline] Reflex low latency {}"
+  },
+  {
+    "rva": "0xcfd00",
+    "encoding": "ascii",
+    "text": "[Streamline] Reflex sleep failed: {}"
+  },
+  {
+    "rva": "0xcfd30",
+    "encoding": "ascii",
+    "text": "[Reflex] Simulation {} interrupted by render frame {}; end marker omitted"
+  },
+  {
+    "rva": "0xcfed8",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not set Reflex mode {} markers={}: {}"
+  },
+  {
+    "rva": "0xcff20",
+    "encoding": "ascii",
+    "text": "[Presentation] DLSS-G runtime has no application VSync support; FG disabled while VSync On is selected"
+  },
+  {
+    "rva": "0xcfff0",
+    "encoding": "ascii",
+    "text": "[Streamline] Dynamic MFG requested but runtime reports unsupported; falling back to DLSS-G Auto mode"
+  },
+  {
+    "rva": "0xd0058",
+    "encoding": "ascii",
+    "text": "[DLSS-G] Cannot configure unknown backbuffer/HUD-less formats"
+  },
+  {
+    "rva": "0xd0098",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not set DLSS-G mode {}: {}"
+  },
+  {
+    "rva": "0xd00d0",
+    "encoding": "ascii",
+    "text": "[DLSS-G] options mode={} generated={} dynamicTarget={} render={}x{} output={}x{} uiInput={} uiRecomposition={} backbufferFormat={} hudlessFormat={}"
+  },
+  {
+    "rva": "0xd0168",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not disable DLSS-G: {}"
+  },
+  {
+    "rva": "0xd0198",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not tag DLSS-G resources: {}"
+  },
+  {
+    "rva": "0xd01c8",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not tag D3D12 DLSS-G resources: {}"
+  },
+  {
+    "rva": "0xd0200",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not clear D3D12 DLSS-G resource tags: {}"
+  },
+  {
+    "rva": "0xd0240",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not query DLSS-G state: {}"
+  },
+  {
+    "rva": "0xd0270",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS-G disable requested due to runtime status {}"
+  },
+  {
+    "rva": "0xd02b0",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not set D3D12 DLSS options: {}"
+  },
+  {
+    "rva": "0xd02f0",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not set D3D12 DLSS-NR options: {} performanceMode={} preset={} style={}"
+  },
+  {
+    "rva": "0xd04d0",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS-NR multipass is only available on the direct-NGX path; using one Streamline NR pass"
+  },
+  {
+    "rva": "0xd05c0",
+    "encoding": "ascii",
+    "text": "[Streamline] DLSS resource/extent contract rejected render={}x{} display={}x{} quality={}"
+  },
+  {
+    "rva": "0xd0620",
+    "encoding": "ascii",
+    "text": "[Streamline] After-SR DLSS-NR failed; preserving SR output"
+  },
+  {
+    "rva": "0xd0660",
+    "encoding": "ascii",
+    "text": "[Streamline] D3D12 DLSS-NR failed; running DLSS SR from the original color input"
+  },
+  {
+    "rva": "0xd0880",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not disable DLSS: {}"
+  },
+  {
+    "rva": "0xd08a8",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not disable DLSS-NR: {}"
+  },
+  {
+    "rva": "0xd08d8",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not free DLSS resources: {}"
+  },
+  {
+    "rva": "0xd0908",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not free DLSS-NR resources: {}"
+  },
+  {
+    "rva": "0xd0978",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not suspend DLSS-NR: {}"
+  },
+  {
+    "rva": "0xd09a8",
+    "encoding": "ascii",
+    "text": "[Streamline] Could not free suspended DLSS-NR resources: {}"
+  },
+  {
+    "rva": "0xd3270",
+    "encoding": "ascii",
+    "text": "[RTX40MFGUnlock] Active NGX provider selected from DLSS-G CreateFeature: {}"
+  },
+  {
+    "rva": "0xd3480",
+    "encoding": "ascii",
+    "text": "[RTX40MFGUnlock] Active NGX provider selected before DLSS-G CreateFeature: {}"
+  },
+  {
+    "rva": "0xd35c0",
+    "encoding": "ascii",
+    "text": "[RTX40MFGUnlock] Active DLSS-G wrapper: {}"
+  },
+  {
+    "rva": "0xd4fb0",
+    "encoding": "ascii",
+    "text": "Data\\MCM\\Settings\\Upscaling.ini"
+  },
+  {
+    "rva": "0xd51a0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Rebuilt Scaleform render-target cache for native generation {}"
+  },
+  {
+    "rva": "0xd51f0",
+    "encoding": "ascii",
+    "text": "[ENB scene resize] Quality {} not applied hr=0x{:08X}; retaining active quality {}"
+  },
+  {
+    "rva": "0xd5250",
+    "encoding": "ascii",
+    "text": "[ENB domain] Renderer::Begin framebuffer metadata {}x{} -> {}x{} (actual RT0); HWND/display unchanged"
+  },
+  {
+    "rva": "0xd52c8",
+    "encoding": "ascii",
+    "text": "[Upscaling] Loading-screen renderer repump aborted: {}"
+  },
+  {
+    "rva": "0xd5300",
+    "encoding": "ascii",
+    "text": "[Upscaling] Loading-screen renderer repump aborted by an unknown exception"
+  },
+  {
+    "rva": "0xd5350",
+    "encoding": "ascii",
+    "text": "ENBGetSDKVersion"
+  },
+  {
+    "rva": "0xd5368",
+    "encoding": "ascii",
+    "text": "FSR frame generation"
+  },
+  {
+    "rva": "0xd5380",
+    "encoding": "ascii",
+    "text": "[Upscaling] Texture memory upgrade limit {} -> {} MiB; output={}x{} render={}x{} format={} reserve={} MiB applied={} MiB; estimates resident/SR/FG/NR/UI/depth={}/{}/{}/{}/{}/{} MiB (cap=2048)"
+  },
+  {
+    "rva": "0xd5440",
+    "encoding": "ascii",
+    "text": "[Upscaling] Failed to create Bokeh RT{} proxy texture {}x{}: 0x{:08X}"
+  },
+  {
+    "rva": "0xd5498",
+    "encoding": "ascii",
+    "text": "[Upscaling] Inline shader compilation failed:"
+  },
+  {
+    "rva": "0xd54d0",
+    "encoding": "ascii",
+    "text": "[ENB UI] Restored overlay coordinates {}x{}; native-generation={} scene-resize-generation={}"
+  },
+  {
+    "rva": "0xd5540",
+    "encoding": "ascii",
+    "text": "[ENB UI] Installed native overlay and AntTweakBar coordinate domain"
+  },
+  {
+    "rva": "0xd5590",
+    "encoding": "ascii",
+    "text": "[ENB UI] Unsupported overlay layout; ENB menu native coordinates unavailable"
+  },
+  {
+    "rva": "0xd5600",
+    "encoding": "ascii",
+    "text": "[Reflex] Installed Main simulation hooks; previous OnIdle={:x}, Swap={:x}"
+  },
+  {
+    "rva": "0xd5650",
+    "encoding": "ascii",
+    "text": "Renderer::Begin frame pacing and ENB domains"
+  },
+  {
+    "rva": "0xd56f0",
+    "encoding": "ascii",
+    "text": "[ENB domain] Installed Renderer::Begin framebuffer metadata hook"
+  },
+  {
+    "rva": "0xd5740",
+    "encoding": "ascii",
+    "text": "[ENB domain] Renderer::Begin framebuffer call did not match; metadata hook NOT installed"
+  },
+  {
+    "rva": "0xd57a0",
+    "encoding": "ascii",
+    "text": "DrawWorld::FrameGenerationForward"
+  },
+  {
+    "rva": "0xd58b0",
+    "encoding": "ascii",
+    "text": "[Upscaling] Installed High FPS Physics Fix loading-loop compatibility for AE"
+  },
+  {
+    "rva": "0xd5900",
+    "encoding": "ascii",
+    "text": "iUpscaleMethodPreference"
+  },
+  {
+    "rva": "0xd5940",
+    "encoding": "ascii",
+    "text": "iFrameGenerationMode"
+  },
+  {
+    "rva": "0xd5958",
+    "encoding": "ascii",
+    "text": "iDLSSGGeneratedFrames"
+  },
+  {
+    "rva": "0xd59a0",
+    "encoding": "ascii",
+    "text": "iReflexMode"
+  },
+  {
+    "rva": "0xd59b0",
+    "encoding": "ascii",
+    "text": "iDLSSModelPreset"
+  },
+  {
+    "rva": "0xd59d4",
+    "encoding": "ascii",
+    "text": "DLSSNR"
+  },
+  {
+    "rva": "0xd5ae0",
+    "encoding": "ascii",
+    "text": "[ENB domain] Requested quality {}; active quality {} ({}x{}); scene-only resize queued, HWND/display unchanged"
+  },
+  {
+    "rva": "0xd5b50",
+    "encoding": "ascii",
+    "text": "[Upscaling] {} requires the D3D12 proxy swapchain. D3D11 SR upscaling is deprecated; native rendering will remain active."
+  },
+  {
+    "rva": "0xd5bd0",
+    "encoding": "ascii",
+    "text": "[Upscaling] DLSS was selected but Streamline DLSS is unavailable; FSR will remain active."
+  },
+  {
+    "rva": "0xd5c30",
+    "encoding": "ascii",
+    "text": "[Upscaling] Runtime upscaler switch requested: {} -> {}"
+  },
+  {
+    "rva": "0xd5c70",
+    "encoding": "ascii",
+    "text": "[Upscaling] DLSS-G requires the D3D12 proxy swapchain to be selected at startup. Keep iFrameGenerationMode enabled and restart the game."
+  },
+  {
+    "rva": "0xd5d38",
+    "encoding": "ascii",
+    "text": "bENBGPUTiming"
+  },
+  {
+    "rva": "0xd5e20",
+    "encoding": "ascii",
+    "text": "[Upscaling] {} request failed in {}; failures={}/{} blocked={} retryFrame={} currentFrame={} ui(menu={} item={} freezeBG={} freezePause={}) worldCamera(state={} reference={} jitter={} matrixFov={} fov={})"
+  },
+  {
+    "rva": "0xd627f",
+    "encoding": "ascii",
+    "text": "cbuffer UpscalingCB : register(b0)"
+  },
+  {
+    "rva": "0xd67b8",
+    "encoding": "ascii",
+    "text": "Creating UpscalingCB"
+  },
+  {
+    "rva": "0xd67d0",
+    "encoding": "ascii",
+    "text": "[Upscaling] Spatial fallback upscale failed after {}; preserving scaled render target state without SDK evaluation"
+  },
+  {
+    "rva": "0xd6848",
+    "encoding": "ascii",
+    "text": "[Upscaling] Cannot upscale RT{}: missing SRV"
+  },
+  {
+    "rva": "0xd6890",
+    "encoding": "ascii",
+    "text": "[ENB domain] RT{} is {}x{}, expected {}x{}; skipping SDK evaluation (present uses spatial resolve)"
+  },
+  {
+    "rva": "0xd6920",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D11 DLSS SR path is deprecated; using local spatial fallback for this frame"
+  },
+  {
+    "rva": "0xd6980",
+    "encoding": "ascii",
+    "text": "deprecated D3D11 DLSS path"
+  },
+  {
+    "rva": "0xd69a0",
+    "encoding": "ascii",
+    "text": "D3D12 FSR inputs"
+  },
+  {
+    "rva": "0xd69b8",
+    "encoding": "ascii",
+    "text": "D3D12 FSR input failure"
+  },
+  {
+    "rva": "0xd69d0",
+    "encoding": "ascii",
+    "text": "D3D12 FSR copyback failure"
+  },
+  {
+    "rva": "0xd69f0",
+    "encoding": "ascii",
+    "text": "D3D12 FSR evaluate failure"
+  },
+  {
+    "rva": "0xd6a10",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D11 FSR path is unavailable; using local spatial fallback for this frame"
+  },
+  {
+    "rva": "0xd6a68",
+    "encoding": "ascii",
+    "text": "unavailable D3D11 FSR path"
+  },
+  {
+    "rva": "0xd6a90",
+    "encoding": "ascii",
+    "text": "[Upscaling] Spatial fallback upscale failed; preserving scaled render target state without SDK evaluation"
+  },
+  {
+    "rva": "0xd6b00",
+    "encoding": "ascii",
+    "text": "D3D12 DLSS copyback failure"
+  },
+  {
+    "rva": "0xd6b20",
+    "encoding": "ascii",
+    "text": "D3D12 DLSS evaluate failure"
+  },
+  {
+    "rva": "0xd6bc0",
+    "encoding": "ascii",
+    "text": "[NR motion] Could not create conversion shader; NR skipped"
+  },
+  {
+    "rva": "0xd6c10",
+    "encoding": "ascii",
+    "text": "[Upscaling] Cannot capture DLSS-G HUD-less RT{}: missing SRV"
+  },
+  {
+    "rva": "0xd6c50",
+    "encoding": "ascii",
+    "text": "[ENB domain] Depth/motion allocations do not match scene {}x{}; temporal evaluation skipped"
+  },
+  {
+    "rva": "0xd6cb0",
+    "encoding": "ascii",
+    "text": "[Upscaling] DLSS guides do not cover the current render extent"
+  },
+  {
+    "rva": "0xd6cf0",
+    "encoding": "ascii",
+    "text": "[Upscaling] DLSS rejected stale/incomplete depth capture"
+  },
+  {
+    "rva": "0xd6d30",
+    "encoding": "ascii",
+    "text": "[NR motion] Conversion unavailable; SR retains raw guides: {}"
+  },
+  {
+    "rva": "0xd6db0",
+    "encoding": "ascii",
+    "text": "DLSS-G options"
+  },
+  {
+    "rva": "0xd6dc0",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D12 DLSS evaluate skipped frameIndex={} ready={} commandList={}"
+  },
+  {
+    "rva": "0xd6e10",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D12 DLSS inputs missing frameIndex={} input={} output={} mvec={} depth={} commandList={} pipboyMaskReady={} animatedTexture={} tokenIndex={} render={}x{} display={}x{} formats color={} mvec={} depth={}"
+  },
+  {
+    "rva": "0xd6ee8",
+    "encoding": "ascii",
+    "text": "D3D12 DLSS inputs"
+  },
+  {
+    "rva": "0xd6f00",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D12 DLSS frame token missing frameIndex={} requestedTokenIndex={} input={} output={} mvec={} depth={} render={}x{} display={}x{}"
+  },
+  {
+    "rva": "0xd6f90",
+    "encoding": "ascii",
+    "text": "D3D12 DLSS frame token"
+  },
+  {
+    "rva": "0xd6fb0",
+    "encoding": "ascii",
+    "text": "[Upscaling] D3D12 DLSS evaluate returned false frameIndex={} token={} input={} output={} mvec={} depth={} animatedTexture={} render={}x{} display={}x{} formats color={} mvec={} depth={}"
+  },
+  {
+    "rva": "0xd7070",
+    "encoding": "ascii",
+    "text": "D3D12 DLSS evaluate"
+  },
+  {
+    "rva": "0xd7088",
+    "encoding": "ascii",
+    "text": "D3D12 FSR evaluate"
+  },
+  {
+    "rva": "0xd70a0",
+    "encoding": "ascii",
+    "text": "FSR frame generation inputs"
+  },
+  {
+    "rva": "0xd70c0",
+    "encoding": "ascii",
+    "text": "FSR frame generation evaluate"
+  },
+  {
+    "rva": "0xd70e0",
+    "encoding": "ascii",
+    "text": "[Upscaling] Could not create FG dilation texture: no valid source texture"
+  },
+  {
+    "rva": "0xd7130",
+    "encoding": "ascii",
+    "text": "[DLSS-NR] SR-only Present completed for generation {}; NR permitted from next frame"
+  },
+  {
+    "rva": "0xd7190",
+    "encoding": "ascii",
+    "text": "[DLSS-NR] Guide release deferred by failed GPU drain; retaining resources"
+  },
+  {
+    "rva": "0xd9248",
+    "encoding": "ascii",
+    "text": "Upscaling.ToggleDLSSNR"
+  },
+  {
+    "rva": "0xd9278",
+    "encoding": "ascii",
+    "text": "Upscaling"
+  },
+  {
+    "rva": "0xd94c0",
+    "encoding": "ascii",
+    "text": "Unbind the DLSS Neural Rendering toggle hotkey."
+  },
+  {
+    "rva": "0xd94f0",
+    "encoding": "ascii",
+    "text": "[Menu] Could not save DLSS-NR hotkey state"
+  },
+  {
+    "rva": "0xd9530",
+    "encoding": "ascii",
+    "text": "[Menu] DLSS Neural Rendering {} by hotkey"
+  },
+  {
+    "rva": "0xd9560",
+    "encoding": "ascii",
+    "text": "[Menu] Could not save Upscaling settings"
+  },
+  {
+    "rva": "0xd95b8",
+    "encoding": "ascii",
+    "text": "AMD FSR"
+  },
+  {
+    "rva": "0xd95c0",
+    "encoding": "ascii",
+    "text": "NVIDIA DLSS"
+  },
+  {
+    "rva": "0xd97e0",
+    "encoding": "ascii",
+    "text": "Runtime: DLSS %s | DLSS-NR %s | DLSS Frame Generation %s | Reflex %s"
+  },
+  {
+    "rva": "0xd9830",
+    "encoding": "ascii",
+    "text": "Selects the preferred temporal upscaler. DLSS falls back to FSR when unavailable."
+  },
+  {
+    "rva": "0xd9888",
+    "encoding": "ascii",
+    "text": "Upscale Method"
+  },
+  {
+    "rva": "0xd98f0",
+    "encoding": "ascii",
+    "text": "Controls NVIDIA Image Scaling sharpen for DLSS and RCAS for FSR."
+  },
+  {
+    "rva": "0xd99b0",
+    "encoding": "ascii",
+    "text": "DLSS Model Preset"
+  },
+  {
+    "rva": "0xd99e0",
+    "encoding": "ascii",
+    "text": "DLSS Frame Generation is unavailable with R16G16B16A16_FLOAT (FP16, format 10) swapchain output."
+  },
+  {
+    "rva": "0xd9a50",
+    "encoding": "ascii",
+    "text": "When RenoDX or another color-format modification uses R16G16B16A16_FLOAT, FidelityFX Frame Generation is used instead when FG is enabled. DLSS upscaling remains available. DLSS multi-frame and Dynamic MFG settings do not apply."
+  },
+  {
+    "rva": "0xd9b40",
+    "encoding": "ascii",
+    "text": "Uses DLSS Frame Generation when available, otherwise FidelityFX Frame Generation (including FP16 output)."
+  },
+  {
+    "rva": "0xd9bb0",
+    "encoding": "ascii",
+    "text": "Controls the requested DLSS generated-frame multiplier. The runtime clamps unsupported values."
+  },
+  {
+    "rva": "0xd9d20",
+    "encoding": "ascii",
+    "text": "Controls NVIDIA Reflex low-latency mode. Frame generation forces at least On while active."
+  },
+  {
+    "rva": "0xd9d80",
+    "encoding": "ascii",
+    "text": "NVIDIA Reflex"
+  },
+  {
+    "rva": "0xd9da0",
+    "encoding": "ascii",
+    "text": "D3D12 output VSync, including FG. On disables DLSS-G if its runtime does not support VSync. Driver overrides still apply."
+  },
+  {
+    "rva": "0xd9e30",
+    "encoding": "ascii",
+    "text": "Reflex-independent frame-start pacing for D3D12 output. 0 disables; values below 10 become 10. Includes FG. Dynamic MFG uses its maximum multiplier conservatively and may run below the target. A cap alone does not prevent tearing; use VSync/VRR."
+  },
+  {
+    "rva": "0xd9f40",
+    "encoding": "ascii",
+    "text": "DLSS NR"
+  },
+  {
+    "rva": "0xd9f50",
+    "encoding": "ascii",
+    "text": "Runs experimental DLSS-NR at the selected stage. NR failure preserves the SR path."
+  },
+  {
+    "rva": "0xd9fa8",
+    "encoding": "ascii",
+    "text": "DLSS Neural Rendering"
+  },
+  {
+    "rva": "0xda048",
+    "encoding": "ascii",
+    "text": "NR Position"
+  },
+  {
+    "rva": "0xda060",
+    "encoding": "ascii",
+    "text": "Runs up to three independent direct-NGX NR histories. Streamline-native NR remains single-pass."
+  },
+  {
+    "rva": "0xda0c8",
+    "encoding": "ascii",
+    "text": "NR Passes"
+  },
+  {
+    "rva": "0xda108",
+    "encoding": "ascii",
+    "text": "NR Style"
+  },
+  {
+    "rva": "0xda148",
+    "encoding": "ascii",
+    "text": "NR Intensity"
+  },
+  {
+    "rva": "0xda230",
+    "encoding": "ascii",
+    "text": "Lets DLSS-NR infer its own screen-space control mask when no application mask is supplied."
+  },
+  {
+    "rva": "0xda3a8",
+    "encoding": "ascii",
+    "text": "DLSS NR Toggle Hotkey"
+  },
+  {
+    "rva": "0xda420",
+    "encoding": "ascii",
+    "text": "Shows D3D12 swapchain and upscaler status while DLSS or FSR is active."
+  },
+  {
+    "rva": "0xda560",
+    "encoding": "ascii",
+    "text": "[Menu] F4SE Menu Framework did not expose the plugin hotkey API; DLSS-NR hotkey is unavailable"
+  },
+  {
+    "rva": "0xda5c0",
+    "encoding": "ascii",
+    "text": " and DLSS-NR hotkey"
+  },
+  {
+    "rva": "0xda5e0",
+    "encoding": "ascii",
+    "text": "[Menu] Registered Upscaling settings{} with F4SE Menu Framework"
+  },
+  {
+    "rva": "0xda6d0",
+    "encoding": "ascii",
+    "text": "[ENB targets] Captured initial identities: motion logical={}, depth logical={}, linear-depth logical={}"
+  },
+  {
+    "rva": "0xda9a8",
+    "encoding": "ascii",
+    "text": "ENB detected"
+  },
+  {
+    "rva": "0xda9b8",
+    "encoding": "ascii",
+    "text": "ENB not detected"
+  },
+  {
+    "rva": "0x162176",
+    "encoding": "ascii",
+    "text": "Upscaling.dll"
+  },
+  {
+    "rva": "0xcd1e0",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/PipboyTemporalMaskCS.hlsl"
+  },
+  {
+    "rva": "0xcf3c0",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/Streamline/sl.interposer.dll"
+  },
+  {
+    "rva": "0xd5f20",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/DilateMotionVectorCS.hlsl"
+  },
+  {
+    "rva": "0xd5fc0",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/OverrideLinearDepthCS.hlsl"
+  },
+  {
+    "rva": "0xd6050",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/OverrideDepthCS.hlsl"
+  },
+  {
+    "rva": "0xd60f0",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/FrameGeneration/CopyDepthToSharedBufferCS.hlsl"
+  },
+  {
+    "rva": "0xd61a0",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/FrameGeneration/GenerateSharedBuffersCS.hlsl"
+  },
+  {
+    "rva": "0xd6730",
+    "encoding": "utf16le",
+    "text": "Data/F4SE/Plugins/Upscaling/BSImagespaceShaderSSLRRaytracing.hlsl"
+  },
+  {
+    "rva": "0x1665b8",
+    "encoding": "ascii",
+    "text": "Upscaling"
+  },
+  {
+    "rva": "0x167bb0",
+    "encoding": "ascii",
+    "text": ".?AV<lambda_1>@?4??OnToggleDLSSNRHotkey@?A0x6b393d31@@YAXXZ@"
+  },
+  {
+    "rva": "0x167f48",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain1@@"
+  },
+  {
+    "rva": "0x167f70",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain@@"
+  },
+  {
+    "rva": "0x167ff0",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain4@@"
+  },
+  {
+    "rva": "0x168018",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain3@@"
+  },
+  {
+    "rva": "0x168040",
+    "encoding": "ascii",
+    "text": ".?AUIDXGISwapChain2@@"
+  },
+  {
+    "rva": "0x168068",
+    "encoding": "ascii",
+    "text": ".?AUDXGISwapChainProxy@@"
+  },
+  {
+    "rva": "0x168098",
+    "encoding": "ascii",
+    "text": ".?AVUpscaling@@"
+  },
+  {
+    "rva": "0x168460",
+    "encoding": "ascii",
+    "text": ".?AV?$_Func_impl_no_alloc@V<lambda_1>@?4??OnToggleDLSSNRHotkey@?A0x6b393d31@@YAXXZ@X$$V@std@@"
+  }
+]

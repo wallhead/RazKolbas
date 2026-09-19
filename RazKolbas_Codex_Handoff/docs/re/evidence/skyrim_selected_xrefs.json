@@ -1,0 +1,379 @@
+[
+  {
+    "rva": "0x1f43e0",
+    "end": "0x1f4603",
+    "name": "sub_0x1f43e0",
+    "references": [
+      {
+        "at": "0x1f44c6",
+        "op": "call",
+        "target": "0x1f42d0",
+        "name": "sub_0x1f42d0"
+      },
+      {
+        "at": "0x1f44ea",
+        "op": "jmp",
+        "target": "0x1f451f",
+        "name": "sub_0x1f451f"
+      },
+      {
+        "at": "0x1f44ef",
+        "op": "call",
+        "target": "0x1f4330",
+        "name": "sub_0x1f4330"
+      },
+      {
+        "at": "0x1f45d1",
+        "op": "jmp",
+        "target": "0x1f45dc",
+        "name": "sub_0x1f45dc"
+      },
+      {
+        "at": "0x1f45e1",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!EvaluateDLSSNR"
+      }
+    ]
+  },
+  {
+    "rva": "0x1f4ca0",
+    "end": "0x1f5060",
+    "name": "sub_0x1f4ca0",
+    "references": [
+      {
+        "at": "0x1f4cc4",
+        "op": "call",
+        "target": "0x1546e0",
+        "name": "sub_0x1546e0"
+      },
+      {
+        "at": "0x1f4dbb",
+        "op": "jmp",
+        "target": "0x1f4dc4",
+        "name": "sub_0x1f4dc4"
+      },
+      {
+        "at": "0x1f4dfa",
+        "op": "jmp",
+        "target": "0x1f4e08",
+        "name": "sub_0x1f4e08"
+      },
+      {
+        "at": "0x1f4e1e",
+        "op": "jmp",
+        "target": "0x1f4e22",
+        "name": "sub_0x1f4e22"
+      },
+      {
+        "at": "0x1f4e2f",
+        "op": "jmp",
+        "target": "0x1f4e35",
+        "name": "sub_0x1f4e35"
+      },
+      {
+        "at": "0x1f4eaf",
+        "op": "call",
+        "target": "0x1ff050",
+        "name": "sub_0x1ff050"
+      },
+      {
+        "at": "0x1f4ed2",
+        "op": "call",
+        "target": "0x1f43e0",
+        "name": "sub_0x1f43e0"
+      },
+      {
+        "at": "0x1f4ee6",
+        "op": "jmp",
+        "target": "0x1f4ef1",
+        "name": "sub_0x1f4ef1"
+      },
+      {
+        "at": "0x1f5022",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!EvaluateUpscaler"
+      }
+    ]
+  },
+  {
+    "rva": "0x1ff050",
+    "end": "0x1ff210",
+    "name": "sub_0x1ff050",
+    "references": [
+      {
+        "at": "0x1ff082",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!ReleaseDLSSNR"
+      },
+      {
+        "at": "0x1ff08c",
+        "op": "jmp",
+        "target": "0x1ff18d",
+        "name": "sub_0x1ff18d"
+      },
+      {
+        "at": "0x1ff093",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!ReleaseDLSSNR"
+      },
+      {
+        "at": "0x1ff09d",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!IsDLSSNRAvailable"
+      },
+      {
+        "at": "0x1ff0c1",
+        "op": "jmp",
+        "target": "0x1ff0cc",
+        "name": "sub_0x1ff0cc"
+      },
+      {
+        "at": "0x1ff11b",
+        "op": "import",
+        "name": "PDPerfPlugin.dll!InitDLSSNR"
+      },
+      {
+        "at": "0x1ff128",
+        "op": "call",
+        "target": "0x1d0e50",
+        "name": "sub_0x1d0e50"
+      },
+      {
+        "at": "0x1ff12d",
+        "op": "string",
+        "target": "0x336700",
+        "text": "SkyrimUpscaler.cpp"
+      },
+      {
+        "at": "0x1ff158",
+        "op": "string",
+        "target": "0x337188",
+        "text": "void __cdecl SkyrimUpscaler::InitDLSSNeuralRendering(void)"
+      },
+      {
+        "at": "0x1ff16b",
+        "op": "string",
+        "target": "0x3371c8",
+        "text": "InitDLSSNR failed."
+      },
+      {
+        "at": "0x1ff188",
+        "op": "call",
+        "target": "0x12c170",
+        "name": "sub_0x12c170"
+      },
+      {
+        "at": "0x1ff200",
+        "op": "jmp",
+        "target": "0x1ff205",
+        "name": "sub_0x1ff205"
+      }
+    ]
+  },
+  {
+    "rva": "0x1f8220",
+    "end": "0x1f8480",
+    "name": "sub_0x1f8220",
+    "references": [
+      {
+        "at": "0x1f823b",
+        "op": "string",
+        "target": "0x336bb8",
+        "text": "d3d11.dll"
+      },
+      {
+        "at": "0x1f824d",
+        "op": "string",
+        "target": "0x3361e8",
+        "text": "ENBGetSDKVersion"
+      },
+      {
+        "at": "0x1f8272",
+        "op": "string",
+        "target": "0x336990",
+        "text": "Data\\Shaders\\Features\\Upscaling.ini"
+      },
+      {
+        "at": "0x1f828b",
+        "op": "jmp",
+        "target": "0x1f82aa",
+        "name": "sub_0x1f82aa"
+      },
+      {
+        "at": "0x1f8291",
+        "op": "string",
+        "target": "0x336bc8",
+        "text": "CommunityShaders.dll"
+      },
+      {
+        "at": "0x1f82a5",
+        "op": "jmp",
+        "target": "0x1f8268",
+        "name": "sub_0x1f8268"
+      },
+      {
+        "at": "0x1f82d2",
+        "op": "string",
+        "target": "0x3368b0",
+        "text": "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json"
+      },
+      {
+        "at": "0x1f82ed",
+        "op": "jmp",
+        "target": "0x1f82f1",
+        "name": "sub_0x1f82f1"
+      },
+      {
+        "at": "0x1f82f1",
+        "op": "string",
+        "target": "0x336920",
+        "text": "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json"
+      },
+      {
+        "at": "0x1f8305",
+        "op": "call",
+        "target": "0x1f9f70",
+        "name": "sub_0x1f9f70"
+      },
+      {
+        "at": "0x1f8315",
+        "op": "call",
+        "target": "0x1f84c0",
+        "name": "sub_0x1f84c0"
+      },
+      {
+        "at": "0x1f8377",
+        "op": "jmp",
+        "target": "0x1f8383",
+        "name": "sub_0x1f8383"
+      },
+      {
+        "at": "0x1f8383",
+        "op": "call",
+        "target": "0x1d0e50",
+        "name": "sub_0x1d0e50"
+      },
+      {
+        "at": "0x1f8388",
+        "op": "string",
+        "target": "0x336700",
+        "text": "SkyrimUpscaler.cpp"
+      },
+      {
+        "at": "0x1f83a0",
+        "op": "string",
+        "target": "0x336be0",
+        "text": "void __cdecl SkyrimUpscaler::DetectCommunityShaders(void)"
+      },
+      {
+        "at": "0x1f83ab",
+        "op": "string",
+        "target": "0x336c20",
+        "text": "Community Shaders: dll={} Upscaling.ini={} disabledAtBoot={} enb={} mCSUpscaling={}"
+      },
+      {
+        "at": "0x1f8402",
+        "op": "call",
+        "target": "0x1523c0",
+        "name": "sub_0x1523c0"
+      },
+      {
+        "at": "0x1f8454",
+        "op": "call",
+        "target": "0x1e7bfc",
+        "name": "sub_0x1e7bfc"
+      }
+    ]
+  },
+  {
+    "rva": "0x1ffbc0",
+    "end": "0x1ffdc0",
+    "name": "sub_0x1ffbc0",
+    "references": [
+      {
+        "at": "0x1ffbff",
+        "op": "string",
+        "target": "0x338f28",
+        "text": "UpscalerHooks.cpp"
+      },
+      {
+        "at": "0x1ffc09",
+        "op": "string",
+        "target": "0x339620",
+        "text": "bool __cdecl hk_ReShadeCreateEffectRuntime(enum reshade::api::device_api,void *,void *,void *,const char *,struct reshade::api::effect_runtime **)"
+      },
+      {
+        "at": "0x1ffc25",
+        "op": "call",
+        "target": "0x1d0e50",
+        "name": "sub_0x1d0e50"
+      },
+      {
+        "at": "0x1ffc38",
+        "op": "string",
+        "target": "0x3396b8",
+        "text": "Hooked ReShade render_effects"
+      },
+      {
+        "at": "0x1ffc77",
+        "op": "call",
+        "target": "0x12c170",
+        "name": "sub_0x12c170"
+      },
+      {
+        "at": "0x1ffc8f",
+        "op": "call",
+        "target": "0x172060",
+        "name": "sub_0x172060"
+      },
+      {
+        "at": "0x1ffceb",
+        "op": "call",
+        "target": "0x1664b0",
+        "name": "sub_0x1664b0"
+      },
+      {
+        "at": "0x1ffcf7",
+        "op": "call",
+        "target": "0x1d0e50",
+        "name": "sub_0x1d0e50"
+      },
+      {
+        "at": "0x1ffd0a",
+        "op": "string",
+        "target": "0x3391e8",
+        "text": "Hook ID3D11DeviceContext_OMSetRenderTargets_Real Failed! {}"
+      },
+      {
+        "at": "0x1ffd52",
+        "op": "call",
+        "target": "0x146540",
+        "name": "sub_0x146540"
+      },
+      {
+        "at": "0x1ffd59",
+        "op": "call",
+        "target": "0x166730",
+        "name": "sub_0x166730"
+      },
+      {
+        "at": "0x1ffd62",
+        "op": "call",
+        "target": "0x1d0e50",
+        "name": "sub_0x1d0e50"
+      },
+      {
+        "at": "0x1ffd75",
+        "op": "string",
+        "target": "0x3396d8",
+        "text": "hk_ReShadeCreateEffectRuntime result: {}"
+      },
+      {
+        "at": "0x1ffdb7",
+        "op": "call",
+        "target": "0x15a4d0",
+        "name": "sub_0x15a4d0"
+      }
+    ]
+  }
+]

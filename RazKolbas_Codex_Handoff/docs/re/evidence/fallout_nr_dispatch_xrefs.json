@@ -1,0 +1,1009 @@
+[
+  {
+    "rva": "0x4ff30",
+    "end": "0x50010",
+    "name": "Streamline::PrepareDirectDLSSNR",
+    "references": [
+      {
+        "at": "0x4ff5b",
+        "op": "call",
+        "target": "0x11f70",
+        "name": "DX12SwapChain::GetSingleton"
+      },
+      {
+        "at": "0x4ff87",
+        "op": "string",
+        "target": "0xcfb20",
+        "text": "[DLSS-NR Direct] D3D12 device is not ready; initialization remains deferred until evaluation"
+      },
+      {
+        "at": "0x4ff9c",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x4ffa8",
+        "op": "string",
+        "target": "0xc4060",
+        "text": "void __cdecl logger::info(class std::basic_string_view<char,struct std::char_traits<char> >)"
+      },
+      {
+        "at": "0x4ffb4",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x4ffc4",
+        "op": "string",
+        "target": "0xcfb80",
+        "text": "[DLSS-NR Direct] Streamline DLSS-NR is unavailable; initializing the direct path now"
+      },
+      {
+        "at": "0x4ffd9",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x4ffe5",
+        "op": "string",
+        "target": "0xc4060",
+        "text": "void __cdecl logger::info(class std::basic_string_view<char,struct std::char_traits<char> >)"
+      },
+      {
+        "at": "0x4fff1",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x50000",
+        "op": "call",
+        "target": "0x341d0",
+        "name": "nvngx::dlss_nr::D3D12Backend::Prepare"
+      }
+    ]
+  },
+  {
+    "rva": "0x53340",
+    "end": "0x541e0",
+    "name": "Streamline::UpscaleD3D12",
+    "references": [
+      {
+        "at": "0x5341c",
+        "op": "call",
+        "target": "0x4a520",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_1>::operator()"
+      },
+      {
+        "at": "0x5343c",
+        "op": "call",
+        "target": "0x4a520",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_1>::operator()"
+      },
+      {
+        "at": "0x53751",
+        "op": "jmp",
+        "target": "0x53779",
+        "name": "sub_0x53779"
+      },
+      {
+        "at": "0x5375b",
+        "op": "jmp",
+        "target": "0x53779",
+        "name": "sub_0x53779"
+      },
+      {
+        "at": "0x53765",
+        "op": "jmp",
+        "target": "0x53779",
+        "name": "sub_0x53779"
+      },
+      {
+        "at": "0x5376f",
+        "op": "jmp",
+        "target": "0x53779",
+        "name": "sub_0x53779"
+      },
+      {
+        "at": "0x53a8d",
+        "op": "jmp",
+        "target": "0x53a91",
+        "name": "sub_0x53a91"
+      },
+      {
+        "at": "0x53abd",
+        "op": "call",
+        "target": "0x34e60",
+        "name": "nvngx::dlss_nr::D3D12Backend::RequestReset"
+      },
+      {
+        "at": "0x53ae9",
+        "op": "call",
+        "target": "0x4a5b0",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_3>::operator()"
+      },
+      {
+        "at": "0x53b07",
+        "op": "call",
+        "target": "0x34e60",
+        "name": "nvngx::dlss_nr::D3D12Backend::RequestReset"
+      },
+      {
+        "at": "0x53b0c",
+        "op": "jmp",
+        "target": "0x541a9",
+        "name": "sub_0x541a9"
+      },
+      {
+        "at": "0x53b6e",
+        "op": "call",
+        "target": "0x4af40",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_4>::operator()"
+      },
+      {
+        "at": "0x53b7e",
+        "op": "jmp",
+        "target": "0x53dd7",
+        "name": "sub_0x53dd7"
+      },
+      {
+        "at": "0x53b8c",
+        "op": "string",
+        "target": "0xd0620",
+        "text": "[Streamline] After-SR DLSS-NR failed; preserving SR output"
+      },
+      {
+        "at": "0x53baf",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x53bba",
+        "op": "string",
+        "target": "0xc40c0",
+        "text": "void __cdecl logger::warn(class std::basic_string_view<char,struct std::char_traits<char> >)"
+      },
+      {
+        "at": "0x53bd3",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x53be6",
+        "op": "call",
+        "target": "0x34e60",
+        "name": "nvngx::dlss_nr::D3D12Backend::RequestReset"
+      },
+      {
+        "at": "0x53c38",
+        "op": "call",
+        "target": "0x4b330",
+        "name": "Streamline::ApplyNISSharpenD3D12"
+      },
+      {
+        "at": "0x53c45",
+        "op": "jmp",
+        "target": "0x53dd7",
+        "name": "sub_0x53dd7"
+      },
+      {
+        "at": "0x53c68",
+        "op": "call",
+        "target": "0x4af40",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_4>::operator()"
+      },
+      {
+        "at": "0x53ccf",
+        "op": "jmp",
+        "target": "0x53d44",
+        "name": "sub_0x53d44"
+      },
+      {
+        "at": "0x53cda",
+        "op": "string",
+        "target": "0xd0660",
+        "text": "[Streamline] D3D12 DLSS-NR failed; running DLSS SR from the original color input"
+      },
+      {
+        "at": "0x53cfd",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x53d08",
+        "op": "string",
+        "target": "0xc40c0",
+        "text": "void __cdecl logger::warn(class std::basic_string_view<char,struct std::char_traits<char> >)"
+      },
+      {
+        "at": "0x53d21",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x53d3b",
+        "op": "jmp",
+        "target": "0x53d44",
+        "name": "sub_0x53d44"
+      },
+      {
+        "at": "0x53d77",
+        "op": "call",
+        "target": "0x34e60",
+        "name": "nvngx::dlss_nr::D3D12Backend::RequestReset"
+      },
+      {
+        "at": "0x53d9a",
+        "op": "call",
+        "target": "0x4a5b0",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_3>::operator()"
+      },
+      {
+        "at": "0x53db3",
+        "op": "call",
+        "target": "0x34e60",
+        "name": "nvngx::dlss_nr::D3D12Backend::RequestReset"
+      },
+      {
+        "at": "0x53db8",
+        "op": "jmp",
+        "target": "0x541a9",
+        "name": "sub_0x541a9"
+      },
+      {
+        "at": "0x53de1",
+        "op": "jmp",
+        "target": "0x541ab",
+        "name": "sub_0x541ab"
+      },
+      {
+        "at": "0x53e2b",
+        "op": "call",
+        "target": "0x4b330",
+        "name": "Streamline::ApplyNISSharpenD3D12"
+      },
+      {
+        "at": "0x53e3e",
+        "op": "jmp",
+        "target": "0x541ab",
+        "name": "sub_0x541ab"
+      },
+      {
+        "at": "0x53edf",
+        "op": "string",
+        "target": "0xd05c0",
+        "text": "[Streamline] DLSS resource/extent contract rejected render={}x{} display={}x{} quality={}"
+      },
+      {
+        "at": "0x53f23",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x53f48",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x53f54",
+        "op": "string",
+        "target": "0xd22b0",
+        "text": "void __cdecl logger::warn<float&,float&,float&,float&,unsigned int&>(struct std::basic_format_string<char,float &,float &,float &,float &,unsigned int &>,float &,float &,float &,float &,unsigned int &)"
+      },
+      {
+        "at": "0x53f8f",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x53fe2",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x53fe9",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x53fee",
+        "op": "jmp",
+        "target": "0x53af9",
+        "name": "sub_0x53af9"
+      },
+      {
+        "at": "0x540a0",
+        "op": "string",
+        "target": "0xd0540",
+        "text": "[Streamline] D3D12 upscaling unavailable evaluate={} color={} output={} mvec={} depth={} commandList={} frameToken={}"
+      },
+      {
+        "at": "0x540e2",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x54107",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x54113",
+        "op": "string",
+        "target": "0xd21d0",
+        "text": "void __cdecl logger::warn<bool,void*,void*,void*,void*,void*,void*>(struct std::basic_format_string<char,bool,void *,void *,void *,void *,void *,void *>,bool &&,void *&&,void *&&,void *&&,void *&&,void *&&,void *&&)"
+      },
+      {
+        "at": "0x5414e",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x5419d",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x541a4",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x541b5",
+        "op": "call",
+        "target": "0xb8160",
+        "name": "sub_0xb8160"
+      }
+    ]
+  },
+  {
+    "rva": "0x4a5b0",
+    "end": "0x4af3d",
+    "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_3>::operator()",
+    "references": [
+      {
+        "at": "0x4a601",
+        "op": "string",
+        "target": "0xcfa40",
+        "text": "DLSS-NR"
+      },
+      {
+        "at": "0x4a63f",
+        "op": "jmp",
+        "target": "0x4a649",
+        "name": "sub_0x4a649"
+      },
+      {
+        "at": "0x4a677",
+        "op": "call",
+        "target": "0x4cb40",
+        "name": "Streamline::EnsureD3D12DLSSNROptions"
+      },
+      {
+        "at": "0x4a67c",
+        "op": "jmp",
+        "target": "0x4a69f",
+        "name": "sub_0x4a69f"
+      },
+      {
+        "at": "0x4a69a",
+        "op": "call",
+        "target": "0x4ce50",
+        "name": "Streamline::EnsureD3D12DLSSOptions"
+      },
+      {
+        "at": "0x4a6c3",
+        "op": "call",
+        "target": "0x541e0",
+        "name": "Streamline::ValidateConstantsForFrame"
+      },
+      {
+        "at": "0x4a946",
+        "op": "jmp",
+        "target": "0x4a94d",
+        "name": "sub_0x4a94d"
+      },
+      {
+        "at": "0x4aa30",
+        "op": "jmp",
+        "target": "0x4aa42",
+        "name": "sub_0x4aa42"
+      },
+      {
+        "at": "0x4aa5c",
+        "op": "jmp",
+        "target": "0x4aa6e",
+        "name": "sub_0x4aa6e"
+      },
+      {
+        "at": "0x4aa88",
+        "op": "jmp",
+        "target": "0x4aa9a",
+        "name": "sub_0x4aa9a"
+      },
+      {
+        "at": "0x4aade",
+        "op": "jmp",
+        "target": "0x4aaf0",
+        "name": "sub_0x4aaf0"
+      },
+      {
+        "at": "0x4ac7b",
+        "op": "string",
+        "target": "0xd0420",
+        "text": "[Streamline] D3D12 {} evaluate failed: {} token={} input={}x{} output={}x{} color={} outputResource={} mvec={} depth={} transparency={} formats color={} mvec={} depth={}"
+      },
+      {
+        "at": "0x4acbf",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x4ace2",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x4acee",
+        "op": "string",
+        "target": "0xd2480",
+        "text": "void __cdecl logger::warn<const char*const &,class std::basic_string_view<char,struct std::char_traits<char> >,unsigned int,const unsigned int&,const unsigned int&,const unsigned int&,const unsigned int&,void*,void*,void*,void*,void*,class std::basic_string_view<char,struct std::char_traits<char> >,class std::basic_string_view<char,struct std::char_traits<char> >,class std::basic_string_view<char,struct std::char_traits<char> >>(struct std::basic_format_string<char,char const * const &,class std::basic_string_view<char,struct std::char_traits<char> >,unsigned int,unsigned int const &,unsigned int const &,unsigned int const &,unsigned int const &,void *,void *,void *,void *,void *,class std::basic_string_view<char,struct std::char_traits<char> >,class std::basic_string_view<char,struct std::char_traits<char> >,class std::basic_string_view<char,struct std::char_traits<char> > >,const char *const &,class std::basic_string_view<char,struct std::char_traits<char> > &&,unsigned int &&,const unsigned int &,const unsigned int &,const unsigned int &,const unsigned int &,void *&&,void *&&,void *&&,void *&&,void *&&,class std::basic_string_view<char,struct std::char_traits<char> > &&,class std::basic_string_view<char,struct std::char_traits<char> > &&,class std::basic_string_view<char,struct std::char_traits<char> > &&)"
+      },
+      {
+        "at": "0x4ad2e",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x4ad81",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x4ad8a",
+        "op": "jmp",
+        "target": "0x4af01",
+        "name": "sub_0x4af01"
+      },
+      {
+        "at": "0x4adf9",
+        "op": "string",
+        "target": "0xd03d0",
+        "text": "[Streamline] D3D12 {} unavailable feature={} setOptions={} color={} output={}"
+      },
+      {
+        "at": "0x4ae3b",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x4ae5e",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x4ae6a",
+        "op": "string",
+        "target": "0xd2380",
+        "text": "void __cdecl logger::warn<const char*const &,const bool&,const bool&,void*,void*>(struct std::basic_format_string<char,char const * const &,bool const &,bool const &,void *,void *>,const char *const &,const bool &,const bool &,void *&&,void *&&)"
+      },
+      {
+        "at": "0x4aeaa",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x4aef3",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x4aefa",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x4af0b",
+        "op": "call",
+        "target": "0xb8160",
+        "name": "sub_0xb8160"
+      }
+    ]
+  },
+  {
+    "rva": "0x4af40",
+    "end": "0x4b327",
+    "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_4>::operator()",
+    "references": [
+      {
+        "at": "0x4af9d",
+        "op": "string",
+        "target": "0xd04d0",
+        "text": "[Streamline] DLSS-NR multipass is only available on the direct-NGX path; using one Streamline NR pass"
+      },
+      {
+        "at": "0x4afb4",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x4afca",
+        "op": "string",
+        "target": "0xc4060",
+        "text": "void __cdecl logger::info(class std::basic_string_view<char,struct std::char_traits<char> >)"
+      },
+      {
+        "at": "0x4afe1",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x4aff1",
+        "op": "jmp",
+        "target": "0x4affa",
+        "name": "sub_0x4affa"
+      },
+      {
+        "at": "0x4b01c",
+        "op": "call",
+        "target": "0x4a5b0",
+        "name": "`Streamline::UpscaleD3D12'::`2'::<lambda_3>::operator()"
+      },
+      {
+        "at": "0x4b021",
+        "op": "jmp",
+        "target": "0x4b30a",
+        "name": "sub_0x4b30a"
+      },
+      {
+        "at": "0x4b197",
+        "op": "jmp",
+        "target": "0x4b19d",
+        "name": "sub_0x4b19d"
+      },
+      {
+        "at": "0x4b1ae",
+        "op": "jmp",
+        "target": "0x4b1b4",
+        "name": "sub_0x4b1b4"
+      },
+      {
+        "at": "0x4b1d1",
+        "op": "jmp",
+        "target": "0x4b1d7",
+        "name": "sub_0x4b1d7"
+      },
+      {
+        "at": "0x4b267",
+        "op": "call",
+        "target": "0x541e0",
+        "name": "Streamline::ValidateConstantsForFrame"
+      },
+      {
+        "at": "0x4b2e6",
+        "op": "call",
+        "target": "0x32320",
+        "name": "nvngx::dlss_nr::D3D12Backend::Evaluate"
+      },
+      {
+        "at": "0x4b2eb",
+        "op": "jmp",
+        "target": "0x4b2ef",
+        "name": "sub_0x4b2ef"
+      },
+      {
+        "at": "0x4b311",
+        "op": "call",
+        "target": "0xb8160",
+        "name": "sub_0xb8160"
+      }
+    ]
+  },
+  {
+    "rva": "0x32320",
+    "end": "0x32c6c",
+    "name": "nvngx::dlss_nr::D3D12Backend::Evaluate",
+    "references": [
+      {
+        "at": "0x32509",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x3253e",
+        "op": "string",
+        "target": "0xcb8c0",
+        "text": "[DLSS-NR Direct] Requested {} passes but only {} prepared; using the available independent histories"
+      },
+      {
+        "at": "0x3257c",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x325a4",
+        "op": "string",
+        "target": "0xcc2e0",
+        "text": "void __cdecl logger::warn<const unsigned int&,unsigned int&>(struct std::basic_format_string<char,unsigned int const &,unsigned int &>,const unsigned int &,unsigned int &)"
+      },
+      {
+        "at": "0x325e2",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x32629",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x32630",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x3263b",
+        "op": "jmp",
+        "target": "0x32644",
+        "name": "sub_0x32644"
+      },
+      {
+        "at": "0x326a3",
+        "op": "jmp",
+        "target": "0x326b5",
+        "name": "sub_0x326b5"
+      },
+      {
+        "at": "0x326c8",
+        "op": "jmp",
+        "target": "0x326cd",
+        "name": "sub_0x326cd"
+      },
+      {
+        "at": "0x32712",
+        "op": "call",
+        "target": "0x351a0",
+        "name": "nvngx::dlss_nr::D3D12Backend::SetEvaluationParameters"
+      },
+      {
+        "at": "0x3291b",
+        "op": "jmp",
+        "target": "0x32c39",
+        "name": "sub_0x32c39"
+      },
+      {
+        "at": "0x32ad6",
+        "op": "string",
+        "target": "0xcb930",
+        "text": "[DLSS-NR Direct] EvaluateFeature failed pass={} result=0x{:08X} color={}x{} guides={}x{} output={}x{} colorResource={}x{} outputResource={}x{} performanceMode={} reset={}; using original color for SR"
+      },
+      {
+        "at": "0x32b15",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x32b38",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x32b44",
+        "op": "string",
+        "target": "0xcc390",
+        "text": "void __cdecl logger::warn<unsigned int,unsigned int,unsigned int&,unsigned int&,unsigned int&,unsigned int&,unsigned int&,unsigned int&,unsigned int,const unsigned int&,unsigned int,const unsigned int&,unsigned int&,const bool&>(struct std::basic_format_string<char,unsigned int,unsigned int,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int,unsigned int const &,unsigned int,unsigned int const &,unsigned int &,bool const &>,unsigned int &&,unsigned int &&,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int &,unsigned int &&,const unsigned int &,unsigned int &&,const unsigned int &,unsigned int &,const bool &)"
+      },
+      {
+        "at": "0x32b82",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x32bcb",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x32bd2",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x32c43",
+        "op": "call",
+        "target": "0xb8160",
+        "name": "sub_0xb8160"
+      }
+    ]
+  },
+  {
+    "rva": "0x1d0f0",
+    "end": "0x1d11f",
+    "name": "DXGISwapChainProxy::ResizeBuffers1",
+    "references": [
+      {
+        "at": "0x1d100",
+        "op": "call",
+        "target": "0x11f70",
+        "name": "DX12SwapChain::GetSingleton"
+      },
+      {
+        "at": "0x1d11a",
+        "op": "jmp",
+        "target": "0x1d170",
+        "name": "DX12SwapChain::ResizeBuffersInternal"
+      }
+    ]
+  },
+  {
+    "rva": "0x1d120",
+    "end": "0x1d169",
+    "name": "DXGISwapChainProxy::ResizeBuffers",
+    "references": [
+      {
+        "at": "0x1d130",
+        "op": "call",
+        "target": "0x11f70",
+        "name": "DX12SwapChain::GetSingleton"
+      },
+      {
+        "at": "0x1d159",
+        "op": "call",
+        "target": "0x1d170",
+        "name": "DX12SwapChain::ResizeBuffersInternal"
+      }
+    ]
+  },
+  {
+    "rva": "0x1d170",
+    "end": "0x1d699",
+    "name": "DX12SwapChain::ResizeBuffersInternal",
+    "references": [
+      {
+        "at": "0x1d1ab",
+        "op": "call",
+        "target": "0x3d410",
+        "name": "PresentPacing::Reset"
+      },
+      {
+        "at": "0x1d1d3",
+        "op": "jmp",
+        "target": "0x1d679",
+        "name": "sub_0x1d679"
+      },
+      {
+        "at": "0x1d202",
+        "op": "call",
+        "target": "0x209c0",
+        "name": "ENBRenderDomain::SetQuality"
+      },
+      {
+        "at": "0x1d210",
+        "op": "jmp",
+        "target": "0x1d679",
+        "name": "sub_0x1d679"
+      },
+      {
+        "at": "0x1d215",
+        "op": "string",
+        "target": "0xc5c90",
+        "text": "ResizeBuffers1"
+      },
+      {
+        "at": "0x1d21c",
+        "op": "string",
+        "target": "0xc5ca0",
+        "text": "ResizeBuffers"
+      },
+      {
+        "at": "0x1d248",
+        "op": "call",
+        "target": "0x1f2a0",
+        "name": "DX12SwapChain::SuspendTemporalFeatures"
+      },
+      {
+        "at": "0x1d25d",
+        "op": "call",
+        "target": "0x1fef0",
+        "name": "DX12SwapChain::WaitForInteropIdle"
+      },
+      {
+        "at": "0x1d26a",
+        "op": "call",
+        "target": "0x11ff0",
+        "name": "Streamline::GetSingleton"
+      },
+      {
+        "at": "0x1d274",
+        "op": "call",
+        "target": "0x4c590",
+        "name": "Streamline::DestroyDLSSResources"
+      },
+      {
+        "at": "0x1d27c",
+        "op": "call",
+        "target": "0x1cbf0",
+        "name": "DX12SwapChain::ReleaseResizeDependentResources"
+      },
+      {
+        "at": "0x1d2b4",
+        "op": "import",
+        "name": "USER32.dll!GetClientRect"
+      },
+      {
+        "at": "0x1d2dd",
+        "op": "jmp",
+        "target": "0x1d2e6",
+        "name": "sub_0x1d2e6"
+      },
+      {
+        "at": "0x1d3a0",
+        "op": "string",
+        "target": "0xc5cb0",
+        "text": "[DX12SwapChain] {} failed result=0x{:08X} width={} height={} format={} flags=0x{:X}"
+      },
+      {
+        "at": "0x1d3e1",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x1d404",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x1d410",
+        "op": "string",
+        "target": "0xc6ef0",
+        "text": "void __cdecl logger::error<const char*const &,unsigned int,unsigned int&,unsigned int&,unsigned int,unsigned int&>(struct std::basic_format_string<char,char const * const &,unsigned int,unsigned int &,unsigned int &,unsigned int,unsigned int &>,const char *const &,unsigned int &&,unsigned int &,unsigned int &,unsigned int &&,unsigned int &)"
+      },
+      {
+        "at": "0x1d44f",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x1d49a",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x1d4a1",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x1d4ac",
+        "op": "call",
+        "target": "0x1ee70",
+        "name": "DX12SwapChain::RestoreResizeDependentResources"
+      },
+      {
+        "at": "0x1d4b5",
+        "op": "jmp",
+        "target": "0x1d679",
+        "name": "sub_0x1d679"
+      },
+      {
+        "at": "0x1d4bd",
+        "op": "call",
+        "target": "0x16a10",
+        "name": "DX12SwapChain::ConfigureFrameLatency"
+      },
+      {
+        "at": "0x1d4c8",
+        "op": "call",
+        "target": "0x1ee70",
+        "name": "DX12SwapChain::RestoreResizeDependentResources"
+      },
+      {
+        "at": "0x1d4ea",
+        "op": "jmp",
+        "target": "0x1d679",
+        "name": "sub_0x1d679"
+      },
+      {
+        "at": "0x1d4ef",
+        "op": "call",
+        "target": "0x11ff0",
+        "name": "Streamline::GetSingleton"
+      },
+      {
+        "at": "0x1d4f7",
+        "op": "call",
+        "target": "0x503e0",
+        "name": "Streamline::RequestTemporalReset"
+      },
+      {
+        "at": "0x1d566",
+        "op": "string",
+        "target": "0xc5d08",
+        "text": "[DX12SwapChain] {} completed {}x{} format={} buffers={}"
+      },
+      {
+        "at": "0x1d5a7",
+        "op": "call",
+        "target": "0xbff0",
+        "name": "sub_0xbff0"
+      },
+      {
+        "at": "0x1d5ca",
+        "op": "string",
+        "target": "0xc2bf0",
+        "text": "PCH.h"
+      },
+      {
+        "at": "0x1d5d6",
+        "op": "string",
+        "target": "0xc7050",
+        "text": "void __cdecl logger::info<const char*const &,unsigned int&,unsigned int&,unsigned int,unsigned int&>(struct std::basic_format_string<char,char const * const &,unsigned int &,unsigned int &,unsigned int,unsigned int &>,const char *const &,unsigned int &,unsigned int &,unsigned int &&,unsigned int &)"
+      },
+      {
+        "at": "0x1d615",
+        "op": "call",
+        "target": "0x93480",
+        "name": "REX::Impl::Log"
+      },
+      {
+        "at": "0x1d664",
+        "op": "import",
+        "name": "api-ms-win-crt-runtime-l1-1-0.dll!_invoke_watson"
+      },
+      {
+        "at": "0x1d66b",
+        "op": "call",
+        "target": "0xb8048",
+        "name": "operator delete"
+      },
+      {
+        "at": "0x1d672",
+        "op": "jmp",
+        "target": "0x1d679",
+        "name": "sub_0x1d679"
+      },
+      {
+        "at": "0x1d680",
+        "op": "call",
+        "target": "0xb8160",
+        "name": "sub_0xb8160"
+      }
+    ]
+  }
+]

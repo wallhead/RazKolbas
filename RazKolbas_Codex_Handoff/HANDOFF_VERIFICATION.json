@@ -1,0 +1,31 @@
+{
+  "kind": "planning-document-and-package-validation",
+  "date": "2026-09-19",
+  "product": "RazKolbas",
+  "checks": {
+    "plan_tasks_exactly_T01_T24": true,
+    "explicit_re_and_patch_permission": true,
+    "old_blanket_restrictions_absent": true,
+    "all_requirements_mapped": true,
+    "unknown_abi_not_fabricated": true,
+    "old_generic_prompt_excluded": true,
+    "all_markdown_fences_balanced": true,
+    "all_active_docs_no_unresolved_TODO_tokens": true,
+    "runtime_claims_not_run": true,
+    "json_files_parse": true,
+    "inherited_python_syntax_parses": true,
+    "reference_archive_hashes_match": true,
+    "no_runtime_binaries_or_archives": true
+  },
+  "not_performed": [
+    "Product implementation",
+    "C++/SKSE build",
+    "New DLL disassembly or decompilation",
+    "GPU/provider tests",
+    "Skyrim/ENB/ReShade tests",
+    "GitHub write/push"
+  ],
+  "inherited_evidence_scope": "Prior static research copied with file identity; original archive hashes rechecked during this handoff.",
+  "task_count": 24,
+  "plan_word_count": 9381
+}
