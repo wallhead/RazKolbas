@@ -60,6 +60,9 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     ComPtr<ID3D11DeviceContext> context;device->GetImmediateContext(&context);
     std::array<std::uint8_t,renderer1170Size> snapshot{};
     if(!read(base+renderer1170Rva,snapshot.data(),snapshot.size()))return;
+    const auto number=[&](std::size_t offset){std::uintptr_t v{};std::memcpy(&v,snapshot.data()+offset,sizeof(v));return v;};
+    if(attempts==1)spdlog::info("Candidate pointer provenance: renderer device=0x{:x} context=0x{:x} swap=0x{:x}; COM device=0x{:x} context=0x{:x} swap=0x{:x}",
+        number(0x48),number(0x50),number(0x70),reinterpret_cast<std::uintptr_t>(device.Get()),reinterpret_cast<std::uintptr_t>(context.Get()),reinterpret_cast<std::uintptr_t>(swap));
     const auto candidates=rendererCandidatePointers(snapshot,GetCurrentThreadId(),reinterpret_cast<std::uintptr_t>(device.Get()),
         reinterpret_cast<std::uintptr_t>(context.Get()),reinterpret_cast<std::uintptr_t>(swap));
     if(const auto error=std::get_if<Error>(&candidates)) {
