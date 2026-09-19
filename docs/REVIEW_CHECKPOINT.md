@@ -9,6 +9,15 @@ Important findings addressed with failing regressions followed by passing tests:
 3. NR retirement: a failed shutdown or pointer restoration cannot unload the runtime or produce successful process exit. A non-vendor callback-boundary test verifies this ordering. The native probe uses controlled process termination if retirement cannot be established.
 4. Independently found during review: reject a matching byte pattern embedded inside a different instruction. The regression uses a valid movabs with the pattern inside its immediate bytes; the planner now validates the boundary from a declared known instruction start.
 
+## Follow-up: community NR creation probe
+
+The same reviewer checked the new direct feature-creation experiment, recovered callback contracts and isolated Python parameter probe. Two important cleanup findings were addressed:
+
+- Exceptions after successful NR initialization now terminate the child at the feature-call boundary before main device/shim ownership unwinds. An inner guard also covers command-list/GPU ownership. The `throw_after_init` runtime regression returned 10 with the injected exception marker and no retirement PASS or shim restoration.
+- Successful ReleaseFeature alone no longer proves retirement: callback allocation/release counts must balance. The `omit_one_release` regression deliberately retained one of four resources and returned 10 with `RESOURCE_CALLBACK_RETIREMENT_UNBALANCED`; it did not report PASS. The subsequent fault-free run returned 0 with four releases, parameter destruction, shutdown and shim restoration.
+
+All four local GPU regression cases passed, and all 10 CTest groups passed in both Debug and Release. The runtime cases are separate from CTest and require the exact local NR/core DLLs and NVIDIA adapter. Counting callbacks is sufficient for this fixed creation experiment's negative check; future concurrent renderer ownership still requires identity-based resource tracking. Evaluation/output and Skyrim integration remain unverified.
+
 ## Rulings retained for the next session
 
 - Work at the repository root and preserve the original handoff directory. Cost if that mapping is unwanted: relocating the original implementation paths; no source handoff was overwritten.

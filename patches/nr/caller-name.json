@@ -1,8 +1,18 @@
 {
   "id": "nr.caller-name.experiment",
   "purpose": "Reproduce the observed caller-module name compatibility condition during native NR initialization",
-  "status": "EXPERIMENTAL_BOOTSTRAP_ONLY",
+  "status": "EXPERIMENTAL_FEATURE_CREATE_ONLY",
   "shipping_enabled": false,
+  "provenance": {
+    "kind": "user-supplied community-patched NR runtime",
+    "local_reference": "SkyrimUpscalerAIOBuild16-Hotfix1/UpscalerBasePlugin/nvngx_dlssnr.dll",
+    "authenticode_status": "HashMismatch",
+    "embedded_signer": "NVIDIA Corporation; signature does not validate the current bytes",
+    "user_reported_hardware": ["RTX 20", "RTX 30", "RTX 40"],
+    "runtime_verified_hardware": "RTX 4080 SUPER: initialization, feature creation and retirement; evaluation NOT RUN",
+    "acceptance_basis": "Exact SHA-256 match to supplied community build; never publisher-name-only trust",
+    "redistribution": "Not established; runtime remains local and excluded from shipping"
+  },
   "target": {
     "module": "nvngx_dlssnr.dll",
     "sha256": "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206",
@@ -20,5 +30,5 @@
   "activation": "Standalone probe only, after exact-hash runtime load and before Init_Ext; proxy state is immutable and code stays alive until process exit",
   "rollback": "Compare-and-exchange only while slot still equals our proxy; restore before FreeLibrary; on ownership conflict do not unload runtime or override new owner",
   "evidence": ["docs/re/NR_BOOTSTRAP.md", "Fallout 1.65 InstallModuleNameHook 0x32c70", "caller proxy 0x33e10", "Prepare 0x341d0", "RestoreModuleNameHook 0x34e80"],
-  "observed": {"without_patch_init": "0xbad00002", "with_patch_init": "0x00000001", "with_patch_shutdown": "0x00000001", "feature_create": "NOT RUN", "evaluate": "NOT RUN", "gpu_output": "NOT RUN"}
+  "observed": {"without_patch_init": "0xbad00002", "with_patch_init": "0x00000001", "with_patch_shutdown": "0x00000001", "feature_create": "0x00000001; nonnull handle; 640x360; feature 0x12", "feature_release": "0x00000001; 4 allocation/release callbacks balanced", "evaluate": "NOT RUN", "gpu_output": "NOT RUN"}
 }

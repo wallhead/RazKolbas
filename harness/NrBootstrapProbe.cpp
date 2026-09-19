@@ -1,6 +1,7 @@
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include "rk/ProbeRetirement.hpp"
+#include "NrFeatureExperiment.hpp"
 #include <Windows.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -13,7 +14,8 @@
 using Microsoft::WRL::ComPtr;
 
 // Experimental exact-runtime calling convention observed at Fallout RVA
-// 0x3424e..0x34278. This is not a public NVIDIA ABI or a shipping backend.
+// 0x3424e..0x34278; subsequently corroborated by the public NGX_SNIPPET_BUILD
+// declaration at NVIDIA/DLSS commit 37495948. This is not a shipping backend.
 using InitExt = std::uint32_t(__cdecl*)(std::uint64_t, const wchar_t*, ID3D12Device*, std::uint32_t, const void*);
 using Shutdown = std::uint32_t(__cdecl*)(ID3D12Device*);
 
@@ -55,13 +57,17 @@ void** findModuleNameImport(HMODULE module) {
 
 int wmain(int argc, wchar_t** argv) {
     try {
-        if (argc < 2 || argc > 3 || (argc == 3 && std::wstring_view(argv[2]) != L"--caller-shim")) { std::cerr << "Usage: RazKolbasNrBootstrapProbe <exact nvngx_dlssnr.dll> [--caller-shim]\n"; return 2; }
-        const bool useShim = argc == 3;
+        const bool featureProbe = argc == 5 && std::wstring_view(argv[2]) == L"--caller-shim" && std::wstring_view(argv[3]) == L"--feature-core";
+        if (!featureProbe && (argc < 2 || argc > 3 || (argc == 3 && std::wstring_view(argv[2]) != L"--caller-shim"))) { std::cerr << "Usage: RazKolbasNrBootstrapProbe <exact nvngx_dlssnr.dll> [--caller-shim [--feature-core <exact _nvngx.dll>]]\n"; return 2; }
+        const bool useShim = argc >= 3;
         const auto path = std::filesystem::absolute(argv[1]);
         std::ifstream stream(path, std::ios::binary);
         if (!stream) { std::cerr << "MISSING_RUNTIME\n"; return 2; }
         const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(stream)), {});
         const auto hash = rk::sha256(bytes);
+        // User-supplied community-patched build: its retained NVIDIA signature
+        // has HashMismatch. Acceptance here is the exact reviewed file identity,
+        // not a claim of NVIDIA signing or an OS-wide signature-policy override.
         if (hash != "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206") {
             std::cerr << "HASH_MISMATCH " << hash << '\n'; return 2;
         }
@@ -105,6 +111,19 @@ int wmain(int argc, wchar_t** argv) {
         const auto result = init(0x0876232cULL, directory.c_str(), device.Get(), 0x15, nullptr);
         std::cout << "RAW_INIT_RESULT=0x" << std::hex << std::setw(8) << std::setfill('0') << result << std::endl;
         const bool referenceFailure = (result & 0xfff00000U) == 0xbad00000U;
+        if (featureProbe && result == 1) {
+            try {
+                wchar_t fault[32]{};
+                GetEnvironmentVariableW(L"RAZKOLBAS_NR_PROBE_FAULT", fault, 32);
+                if (std::wstring_view(fault) == L"throw_after_init")
+                    throw std::runtime_error("INJECTED_AFTER_INIT");
+                runNrFeatureExperiment(module, device.Get(), argv[4]);
+            }
+            catch (const std::exception& error) {
+                std::cerr << "FEATURE_EXPERIMENT_EXCEPTION=" << error.what() << std::endl;
+                ExitProcess(10); // Do not unwind device/module ownership after uncertain GPU work.
+            }
+        }
         const auto restore = [&]() -> rk::Result<bool> {
             if (!useShim) return true;
             const auto restored = shim.restore();
@@ -129,7 +148,7 @@ int wmain(int argc, wchar_t** argv) {
             }
             FreeLibrary(module);
         }
-        std::cout << "FEATURE_CREATE=NOT_RUN; EVALUATE=NOT_RUN; GPU_OUTPUT=NOT_RUN\n";
+        if (!featureProbe || result != 1) std::cout << "FEATURE_CREATE=NOT_RUN; EVALUATE=NOT_RUN; GPU_OUTPUT=NOT_RUN\n";
         return referenceFailure ? 5 : 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 9; }
 }

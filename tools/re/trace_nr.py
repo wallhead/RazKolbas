@@ -45,13 +45,13 @@ def main():
     selected = {}
     for symbol in symbols:
         name = symbol['name']
-        if name.startswith('nvngx::dlss_nr::') or name in ('Streamline::PrepareDirectDLSSNR', 'Streamline::GetD3D12DLSSNRPreparation') or 'NVSDK_NGX_GetModuleFileNameW_Proxy' in name or name.endswith('::WritePointer'):
+        if name.startswith('nvngx::dlss_nr::') or name in ('Streamline::PrepareDirectDLSSNR', 'Streamline::GetD3D12DLSSNRPreparation') or 'NVSDK_NGX_GetModuleFileNameW_Proxy' in name or name.endswith(('::WritePointer', '::AllocateNRResource', '::ReleaseNRResource', '::NVSDK_NGX_DLSSNR_ComputeScalingRatio')):
             start = int(symbol['rva'], 16)
-            if start in functions:
+            if start in functions or symbol.get('size', 0) > 0:
                 selected[start] = name
                 # .pdata can split one C++ function into chained unwind regions.
                 # The matched PDB PROC record is the complete function extent.
-                functions[start] = max(functions[start], start + symbol.get('size', 0))
+                functions[start] = max(functions.get(start, start), start + symbol.get('size', 0))
     args.output.mkdir(parents=True, exist_ok=True)
     index = []
     for start, name in sorted(selected.items()):
