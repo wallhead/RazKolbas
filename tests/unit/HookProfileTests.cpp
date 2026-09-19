@@ -134,13 +134,13 @@ TEST_CASE("Local Skyrim executable reproduces the compiled import profile withou
     REQUIRE(std::holds_alternative<std::uint32_t>(result));
     REQUIRE(std::get<std::uint32_t>(result)==0x17502a0);
 }
-TEST_CASE("Local ReShade reproduces the swap-chain profile without executing vendor code", "[.local_swap_profile]") {
+TEST_CASE("Local ENB or ReShade reproduces the swap-chain profile without executing vendor code", "[.local_swap_profile]") {
     wchar_t path[32768]{};
-    const auto count=GetEnvironmentVariableW(L"RAZKOLBAS_RESHADE_TEST_FILE",path,32768);
-    if(!count||count>=32768)SKIP("Set RAZKOLBAS_RESHADE_TEST_FILE for the opt-in local audit");
+    const auto count=GetEnvironmentVariableW(L"RAZKOLBAS_SWAP_OWNER_TEST_FILE",path,32768);
+    if(!count||count>=32768)SKIP("Set RAZKOLBAS_SWAP_OWNER_TEST_FILE for the opt-in local audit");
     std::ifstream stream(std::filesystem::path(path),std::ios::binary);REQUIRE(stream.good());
     std::vector<std::uint8_t> file((std::istreambuf_iterator<char>(stream)),{});
-    const auto& expected=rk::reshade673SwapProfile();
+    const auto& expected=rk::sha256(file)==rk::enbSwapProfile().hash?rk::enbSwapProfile():rk::reshade673SwapProfile();
     REQUIRE(file.size()==expected.fileSize);REQUIRE(rk::sha256(file)==expected.hash);
     IMAGE_DOS_HEADER dos{};std::memcpy(&dos,file.data(),sizeof(dos));
     IMAGE_NT_HEADERS64 nt{};std::memcpy(&nt,file.data()+dos.e_lfanew,sizeof(nt));

@@ -19,7 +19,7 @@ struct ObserverLease {
     RendererObserved notification{};
     std::atomic<unsigned> observations{0};
     std::atomic<bool> armed{false};
-    bool allowSwap{};
+    std::string disabledPatchIds;
 };
 // Process-lifetime lease: both callback DLL and prior owner's DLL are pinned.
 // SKSE can FreeLibrary during shutdown; reachable callback code must remain valid.
@@ -68,7 +68,7 @@ void swapObserved(const SwapEvent& event) {
     if(!state)return;
     if(event.call==SwapCall::Release) {
         if(!event.before&&!event.references)
-            spdlog::info("Swap object released: object=0x{:x}; process call totals: presents={}; tests={}; occluded={}; failed={}; resizes={}; no retained COM/backbuffer resources",
+            spdlog::info("Swap Release returned zero: object=0x{:x}; process call totals: presents={}; tests={}; occluded={}; failed={}; resizes={}; no retained COM/backbuffer resources",
                 event.object,state->presents.load(),state->tests.load(),state->occluded.load(),state->failed.load(),state->resizes.load());
         return;
     }
@@ -128,7 +128,7 @@ void logSwapTableOwners(void** table,HMODULE tableOwner,const FileIdentity& tabl
             slot,identity.hash,identity.size,reinterpret_cast<std::uintptr_t>(method)-reinterpret_cast<std::uintptr_t>(owner));
     }
 }
-Result<bool> installSwapObserver(IDXGISwapChain* swap) {
+Result<bool> installSwapObserver(IDXGISwapChain* swap,std::string_view disabledPatchIds) {
     std::scoped_lock lock(swapInstallMutex);
     if(swapLease.load())return false; // A process-lifetime installation is attempted only once after preparation.
     auto** table=*reinterpret_cast<void***>(swap);
@@ -138,23 +138,25 @@ Result<bool> installSwapObserver(IDXGISwapChain* swap) {
     struct Reference { HMODULE value;~Reference(){FreeLibrary(value);} } reference{owner};
     const auto identity=identify(owner);
     logSwapTableOwners(table,owner,identity);
-    const auto& profile=reshade673SwapProfile();
     const auto base=reinterpret_cast<std::uintptr_t>(owner),address=reinterpret_cast<std::uintptr_t>(table);
-    if(identity.hash!=profile.hash||identity.size!=profile.fileSize||address<base||address-base!=profile.tableRva)
+    const auto* selected=address>=base?findSwapProfile(identity.hash,address-base):nullptr;
+    if(!selected||identity.size!=selected->fileSize)
         return Error{ErrorCode::Unsupported,"Unknown swap table identity/location; Present and resize unchanged"};
+    const auto& profile=*selected;
+    if(patchDisabled(disabledPatchIds,profile.id)) { spdlog::info("Swap observation disabled by ID: {}",profile.id);return false; }
     const auto mapped=snapshotModule(owner,profile.imageSize);
     const auto checked=validateSwapTable(mapped,base,identity.hash,identity.size,static_cast<std::uint32_t>(address-base),profile);
     if(const auto error=std::get_if<Error>(&checked))return *error;
     const std::array<void*,5> replacements{reinterpret_cast<void*>(&swapRelease),reinterpret_cast<void*>(&swapPresent),
         reinterpret_cast<void*>(&swapResize),reinterpret_cast<void*>(&swapPresent1),reinterpret_cast<void*>(&swapResize1)};
     auto pending=std::make_unique<SwapLease>();
-    for(std::size_t i=0;i<profile.methods.size();++i)pending->originals[i]=reinterpret_cast<void*>(base+profile.methods[i].rva);
+    for(std::size_t i=0;i<profile.methodCount;++i)pending->originals[i]=reinterpret_cast<void*>(base+profile.methods[i].rva);
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(&swapPresent),&pinnedSelf)||
        !GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))return Error{ErrorCode::Unavailable,"Cannot pin swap observer lifetimes"};
     auto* published=pending.release();swapLease.store(published,std::memory_order_release);
-    for(std::size_t i=0;i<profile.methods.size();++i) {
+    for(std::size_t i=0;i<profile.methodCount;++i) {
         const auto result=published->patches[i].apply(table+profile.methods[i].slot,published->originals[i],replacements[i]);
         if(const auto error=std::get_if<Error>(&result)) {
             // All callbacks independently forward; atomic restoration is safe for
@@ -166,7 +168,7 @@ Result<bool> installSwapObserver(IDXGISwapChain* swap) {
             return *error;
         }
     }
-    spdlog::info("Installed reshade673.swapchain-observe-v1: vtable RVA=0x{:x}; Present/Present1/ResizeBuffers/ResizeBuffers1/Release; process-lifetime pass-through; no retained resources",profile.tableRva);
+    spdlog::info("Installed {}: vtable RVA=0x{:x}; methods={}; process-lifetime pass-through; no retained resources",profile.id,profile.tableRva,profile.methodCount);
     return true;
 }
 void observed(const DeviceCreationArgs& args,HRESULT result) {
@@ -186,10 +188,10 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
     spdlog::info("Actual swap chain: {}x{}; format={}; buffers={}; samples={}; swapEffect={}; windowed={}; deviceFlags=0x{:x}",
         snapshot.width,snapshot.height,static_cast<unsigned>(snapshot.format),snapshot.bufferCount,snapshot.sampleCount,
         static_cast<unsigned>(snapshot.swapEffect),snapshot.windowed,snapshot.deviceFlags);
-    if(state->allowSwap) {
-        const auto hooked=installSwapObserver(*args.swapChain);
+    {
+        const auto hooked=installSwapObserver(*args.swapChain,state->disabledPatchIds);
         if(const auto error=std::get_if<Error>(&hooked))spdlog::warn("Swap observation not installed: {}",error->message);
-    } else spdlog::info("Swap observation disabled by patch ID");
+    }
     if (state->notification) state->notification(snapshot);
 }
 HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMODULE software,UINT flags,
@@ -242,7 +244,7 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
             return Error{ErrorCode::Conflict,"D3D11 export prologue changed; chain not verified"};
         auto pending=std::make_unique<ObserverLease>();
         pending->original=reinterpret_cast<CreateD3D11>(original); pending->notification=notification;
-        pending->allowSwap=!patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,swapObserverPatchId);
+        pending->disabledPatchIds=settings.get<Text>("Patching.DisabledPatchIds").value;
         HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
         constexpr DWORD pinFlags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
         if (!GetModuleHandleExW(pinFlags,reinterpret_cast<LPCWSTR>(&createProxy),&pinnedSelf) ||

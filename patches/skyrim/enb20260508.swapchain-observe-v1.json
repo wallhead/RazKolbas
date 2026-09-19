@@ -1,0 +1,21 @@
+{
+  "id": "enb20260508.swapchain-observe-v1",
+  "status": "EXPERIMENTAL_OBSERVATION_ONLY",
+  "shipping_enabled": false,
+  "purpose": "Observe the actual outer swap-chain interface returned to Skyrim by this ENB build",
+  "target": {"module": "d3d11.dll (ENB)", "version": "0.5.0.4", "architecture": "x64", "sha256": "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58", "file_size": 4664320, "image_size": "0xaae000"},
+  "location": {"kind": "shared base IDXGISwapChain vtable in non-executable readable section", "rva": "0x1a4848"},
+  "methods": [
+    {"name": "Release", "slot": 2, "rva": "0x6d2b0", "prologue": "40534883ec20488bd9f0834120ff488b"},
+    {"name": "Present", "slot": 8, "rva": "0x6c3e0", "prologue": "48895c24084889742410574883ec2041"},
+    {"name": "ResizeBuffers", "slot": 13, "rva": "0x6c4a0", "prologue": "48895c240848896c2410488974241857"}
+  ],
+  "original": "Each aligned vtable pointer must equal exact loaded-owner base plus method RVA; hash, file/image sizes, table RVA, PE section bounds and live prologues match before any write",
+  "replacement": "swapRelease/swapPresent/swapResize via aligned pointer CAS; no code modification or instruction relocation",
+  "abi": "Windows x64 COM base-interface signatures; all args, HRESULT/refcount and last error preserved; calls ENB once, retaining its underlying chain",
+  "activation": "After successful verified device creation, outside own DllMain; requires experimental opt-in and selected ID not disabled; depends on enabled creation observer",
+  "lifetime": "Shared table applies to ENB instances; no COM/backbuffer references retained; callback and owner modules plus original forwarding state pinned to process exit; no extended-interface slots inspected or replaced",
+  "recovery": "Reverse atomic owner-aware restoration of acquired slots after partial failure; forwarding state/code remain pinned. Normal disable takes effect on restart via patch ID, experimental flag or SafeMode",
+  "evidence": ["docs/re/SWAPCHAIN_TRACE.md", "0.1.3 actual game provenance at 2026-09-19 22:19:30", "tests/unit/SwapObserverTests.cpp", "tests/unit/HookProfileTests.cpp [.local_swap_profile]"],
+  "game_runtime": "Owner/table/3 method addresses verified by 0.1.3; 0.1.4 callback execution NOT RUN"
+}

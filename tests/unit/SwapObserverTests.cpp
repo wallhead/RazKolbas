@@ -58,6 +58,16 @@ TEST_CASE("Both observer IDs support selective disable lists", "[swap_observer]"
     REQUIRE_FALSE(rk::validDisabledPatchIds("unknown"));REQUIRE_FALSE(rk::validDisabledPatchIds(ids+","));
     REQUIRE_FALSE(rk::validDisabledPatchIds(std::string(rk::swapObserverPatchId)+","+std::string(rk::swapObserverPatchId)));
 }
+TEST_CASE("Swap profile selection includes only the observed exact ENB outer table", "[swap_observer]") {
+    const auto* enb=rk::findSwapProfile("47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",0x1a4848);
+    REQUIRE(enb!=nullptr);REQUIRE(enb->id==rk::enbSwapObserverPatchId);REQUIRE(enb->methodCount==3);
+    REQUIRE(enb->methods[0].slot==2);REQUIRE(enb->methods[1].slot==8);REQUIRE(enb->methods[2].slot==13);
+    REQUIRE(rk::findSwapProfile(enb->hash,0x1a4850)==nullptr);REQUIRE(rk::findSwapProfile("unknown",0x1a4848)==nullptr);
+    const auto& reshade=rk::reshade673SwapProfile();REQUIRE(rk::findSwapProfile(reshade.hash,reshade.tableRva)==&reshade);
+    const auto parsed=rk::parseIni("[Patching]\nDisabledPatchIds=enb20260508.swapchain-observe-v1, reshade673.swapchain-observe-v1\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    REQUIRE_FALSE(rk::patchDisabled(rk::swapObserverPatchId,rk::enbSwapObserverPatchId));
+}
 TEST_CASE("Swap table validation rejects unknown shifted or modified owners before writes", "[swap_observer]") {
     constexpr std::uintptr_t base=0x180000000;
     std::vector<std::uint8_t> image(0x4000);
@@ -73,6 +83,10 @@ TEST_CASE("Swap table validation rejects unknown shifted or modified owners befo
     for(auto& method:profile.methods) { method.slot=i;method.rva=0x1100+32*i++;method.prologue.fill(0x90);put(method.rva,method.prologue);const auto ptr=base+method.rva;put(profile.tableRva+method.slot*8,ptr); }
     const auto valid=image;
     REQUIRE(std::get<bool>(rk::validateSwapTable(image,base,"fixture",123,0x2100,profile)));
+    auto baseOnly=profile;baseOnly.methodCount=3;baseOnly.methods[3].rva=0xffffffff;
+    REQUIRE(std::get<bool>(rk::validateSwapTable(image,base,"fixture",123,0x2100,baseOnly)));
+    baseOnly.methodCount=0;REQUIRE(std::holds_alternative<rk::Error>(rk::validateSwapTable(image,base,"fixture",123,0x2100,baseOnly)));
+    baseOnly.methodCount=6;REQUIRE(std::holds_alternative<rk::Error>(rk::validateSwapTable(image,base,"fixture",123,0x2100,baseOnly)));
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateSwapTable(image,base,"wrong",123,0x2100,profile)));
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateSwapTable(image,base,"fixture",124,0x2100,profile)));
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateSwapTable(image,base,"fixture",123,0x2108,profile)));

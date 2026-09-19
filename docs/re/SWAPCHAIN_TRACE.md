@@ -25,3 +25,11 @@ Game Present/resize/Release callback execution for 0.1.2: **NOT RUN**. The prece
 ## First game result: mismatch, preserved fallback
 
 0.1.2 at22:09:33: actual returned table did not match the expected ReShade identity/location, so no presentation/resize slots were changed. The original log omitted actual ownership details; 0.1.3 adds those read-only details before validation. Do not add a new patch profile until the returned owner's identity and methods are known. The static ReShade profile remains verified only offline.
+
+## Actual outer owner recovered — 0.1.4 profile
+
+The 0.1.3 trace at22:19:30 resolves the rejection: the table returned to Skyrim belongs to ENB, not ReShade. Exact ENB hash47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58, tableRVA1a4848, Release6d2b0, Present6c3e0 and ResizeBuffers6c4a0. These live locations match pristine-file table pointers and disassembly. ENB's file version is0.5.0.4; the profile ID additionally identifies the supplied build date and exact hash.
+
+The new ENB profile touches only base-interface slots2/8/13. No assumption is made that this table exposes Present1 or ResizeBuffers1. ENB Present handles test calls separately and forwards to an underlying interface; ResizeBuffers similarly calls the underlying slot. RazKolbas forwards to ENB once and preserves its existing behavior. ENB Release returns an underlying reference count, so the observer reports only 'Release returned zero', not proof of wrapper destruction.
+
+Profiles are selected by exact owner hash and table location, with per-profile disable IDs. The disabled ReShade ID does not suppress the distinct ENB profile. Lifecycle and atomic rollback remain as previously tested. The user explicitly authorized automated game launch/close; use the selected MO2 SKSE entry, because direct loader execution would omit the managed mod's virtual filesystem. The supplied typed loader path was absent; verified loader is D:/TESV_EX/skse64_loader.exe.

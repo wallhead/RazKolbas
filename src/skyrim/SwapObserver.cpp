@@ -41,7 +41,7 @@ bool validDisabledPatchIds(std::string_view ids) {
     unsigned seen=0;
     while(true) {
         const auto comma=ids.find(',');const auto id=trimId(ids.substr(0,comma));
-        const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:0U;
+        const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:id==enbSwapObserverPatchId?4U:0U;
         if(!bit||(seen&bit))return false;
         seen|=bit;
         if(comma==ids.npos)return true;
@@ -78,10 +78,25 @@ const SwapTableProfile& reshade673SwapProfile() {
         {39,0x13c060,{0x44,0x89,0x4c,0x24,0x20,0x44,0x89,0x44,0x24,0x18,0x55,0x53,0x56,0x57,0x41,0x54}}
     }}};return profile;
 }
+const SwapTableProfile& enbSwapProfile() {
+    static constexpr SwapTableProfile profile{
+        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",4664320,0xaae000,0x1a4848,{{
+        {2,0x6d2b0,{0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x8b,0xd9,0xf0,0x83,0x41,0x20,0xff,0x48,0x8b}},
+        {8,0x6c3e0,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57,0x48,0x83,0xec,0x20,0x41}},
+        {13,0x6c4a0,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x6c,0x24,0x10,0x48,0x89,0x74,0x24,0x18,0x57}},
+        {},{}
+    }},3,enbSwapObserverPatchId};return profile;
+}
+const SwapTableProfile* findSwapProfile(std::string_view hash,std::uintptr_t tableRva) {
+    for(const auto* profile:{&enbSwapProfile(),&reshade673SwapProfile()})
+        if(profile->hash==hash&&profile->tableRva==tableRva)return profile;
+    return nullptr;
+}
 Result<bool> validateSwapTable(std::span<const std::uint8_t> image,std::uintptr_t base,
     std::string_view hash,std::size_t fileSize,std::uint32_t tableRva,const SwapTableProfile& profile) {
     const auto reject=[](const char* message)->Result<bool>{return Error{ErrorCode::Unsupported,message};};
     if(hash!=profile.hash||fileSize!=profile.fileSize)return reject("Unknown swap-chain owner identity");
+    if(!profile.methodCount||profile.methodCount>profile.methods.size())return reject("Invalid swap method count");
     if(image.size()!=profile.imageSize||tableRva!=profile.tableRva||tableRva%8||base>std::numeric_limits<std::uintptr_t>::max()-image.size())return reject("Invalid swap-chain image/table extent");
     const auto dos=read<IMAGE_DOS_HEADER>(image,0);
     if(!dos||dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<0)return reject("Invalid swap owner DOS header");
@@ -102,7 +117,7 @@ Result<bool> validateSwapTable(std::span<const std::uint8_t> image,std::uintptr_
         }
         return matches==1;
     };
-    for(const auto& method:profile.methods) {
+    for(const auto& method:std::span(profile.methods).first(profile.methodCount)) {
         const auto slot=static_cast<std::size_t>(tableRva)+static_cast<std::size_t>(method.slot)*8;
         if(!inSection(slot,8,false)||!inSection(method.rva,method.prologue.size(),true))return reject("Swap method/slot outside expected section");
         const auto pointer=read<std::uintptr_t>(image,slot);
