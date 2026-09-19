@@ -1,8 +1,17 @@
-# Existing DLSS runtime reuse — September 20, 2026
+# Direct NVIDIA NGX reuse — September 20, 2026
 
 The supplied NVIDIA SR runtime has executed a captured Skyrim frame through
 RazKolbas-owned D3D11 code. This is offline reset-only DLAA, not live Skyrim,
 reduced-resolution SR, or a temporal-quality test.
+
+`PDPerfPlugin.dll` and `SkyrimUpscaler.dll` are reverse-engineering references
+only. The production RazKolbas plugin must not load, link, copy, or require
+either DLL. Its owned SR backend will prepare the game resources and call the
+NVIDIA NGX interface directly, following the contract verified in the
+standalone replay. The installed MO2 package contains `RazKolbas.dll`, its
+INI, and a manifest; the plugin import table has no PDPerf or reference-host
+dependency. The signed NVIDIA SR runtime is distinct from the community-
+patched unsigned NR runtime and its compatibility workaround.
 
 ## Recovered interface
 
