@@ -47,6 +47,7 @@ Result<PatchPlan> preparePatch(std::span<const std::uint8_t> image, const PatchD
         if (std::equal(descriptor.expected.begin(), descriptor.expected.end(), section.begin()+at)) { ++count; offset = descriptor.sectionOffset+at; }
     }
     if (count != 1) return rejected("Expected bytes must have exactly one section-bounded match");
+    if (!wholeInstructions(section.first(offset-descriptor.sectionOffset))) return rejected("Match begins inside an instruction");
     return PatchPlan{descriptor, offset};
 }
 OwnedCode::OwnedCode(std::span<const std::uint8_t> bytes) : size_(bytes.size()), original_(bytes.begin(), bytes.end()) {

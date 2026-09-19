@@ -48,6 +48,10 @@ TEST_CASE("Hash, ambiguous signature and truncated instruction reject before wri
     desc.sectionOffset = 100;
     REQUIRE(std::holds_alternative<rk::Error>(rk::preparePatch(one, desc)));
 }
+TEST_CASE("Byte pattern inside another instruction is not a patch boundary", "[patch]") {
+    const std::vector<std::uint8_t> embedded{0x48,0xb8,0xb8,1,0,0,0,0xc3,0,0,0xc3};
+    REQUIRE(std::holds_alternative<rk::Error>(rk::preparePatch(embedded, descriptor(embedded))));
+}
 TEST_CASE("Executable fixture patches one to two and restores one", "[patch][patch_execution]") {
     const auto result = rk::preparePatch(one, descriptor());
     REQUIRE(std::holds_alternative<rk::PatchPlan>(result));

@@ -13,6 +13,8 @@ struct PatchDescriptor {
     std::string id;
     std::string purpose;
     std::string imageHash;
+    // Start must be a verified instruction boundary (owned function in this
+    // milestone), not an arbitrary byte offset within a mixed code/data section.
     std::size_t sectionOffset{}, sectionSize{};
     std::vector<std::uint8_t> expected, replacement;
 };
