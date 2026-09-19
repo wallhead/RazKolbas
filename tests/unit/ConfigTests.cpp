@@ -66,3 +66,25 @@ TEST_CASE("Locked destination leaves last-good INI bytes intact", "[config]") {
     REQUIRE(std::get<bool>(rk::saveIni(path, rk::defaultSettings())));
     std::filesystem::remove_all(directory);
 }
+TEST_CASE("Partially failed replacement recovers original INI from a durable backup", "[config]") {
+    const auto directory = std::filesystem::temp_directory_path() / ("rk-partial-save-" + std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directories(directory);
+    for (const auto code : {1176U,1177U}) {
+        const auto path = directory / (std::to_string(code)+".ini");
+        { std::ofstream out(path); out << "last-good-original"; }
+        bool invoked = false;
+        const auto result = rk::saveIni(path, rk::defaultSettings(), [&](const auto& destination, const auto&) {
+            invoked = true;
+            // Model the documented partial replacement transition: the original
+            // destination name no longer exists, and the new temp still does.
+            std::filesystem::rename(destination, directory/(std::to_string(code)+".displaced"));
+            return code;
+        });
+        REQUIRE(invoked);
+        REQUIRE(std::holds_alternative<rk::Error>(result));
+        std::ifstream input(path);
+        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+        REQUIRE(bytes == "last-good-original");
+    }
+    std::filesystem::remove_all(directory);
+}

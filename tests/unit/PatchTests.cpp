@@ -26,6 +26,25 @@ TEST_CASE("Pointer patch requires matching original and restores exact owner", "
     REQUIRE(std::get<bool>(patch.restore()));
     REQUIRE(slot == &original);
 }
+TEST_CASE("Failed pointer restore retains its lease for a later successful retry", "[patch]") {
+    int original{}, replacement{};
+    auto slot = static_cast<void**>(VirtualAlloc(nullptr, 4096, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE));
+    REQUIRE(slot != nullptr);
+    *slot = &original;
+    rk::PointerPatch patch;
+    REQUIRE(std::get<bool>(patch.apply(slot, &original, &replacement)));
+    DWORD prior;
+    REQUIRE(VirtualProtect(slot,4096,PAGE_NOACCESS,&prior));
+    const auto failed = patch.restore();
+    DWORD ignored;
+    REQUIRE(VirtualProtect(slot,4096,prior,&ignored));
+    REQUIRE(std::holds_alternative<rk::Error>(failed));
+    const auto retry = patch.restore();
+    const auto restoredValue = *slot;
+    VirtualFree(slot,0,MEM_RELEASE);
+    REQUIRE(std::get<bool>(retry));
+    REQUIRE(restoredValue == &original);
+}
 
 namespace {
 const std::vector<std::uint8_t> one{0xb8,1,0,0,0,0xc3};

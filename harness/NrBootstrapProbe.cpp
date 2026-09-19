@@ -1,5 +1,6 @@
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
+#include "rk/ProbeRetirement.hpp"
 #include <Windows.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -104,16 +105,30 @@ int wmain(int argc, wchar_t** argv) {
         const auto result = init(0x0876232cULL, directory.c_str(), device.Get(), 0x15, nullptr);
         std::cout << "RAW_INIT_RESULT=0x" << std::hex << std::setw(8) << std::setfill('0') << result << std::endl;
         const bool referenceFailure = (result & 0xfff00000U) == 0xbad00000U;
-        if (!referenceFailure) {
-            const auto released = shutdown(device.Get());
-            std::cout << "RAW_SHUTDOWN_RESULT=0x" << std::hex << released << std::endl;
-        }
-        if (useShim) {
+        const auto restore = [&]() -> rk::Result<bool> {
+            if (!useShim) return true;
             const auto restored = shim.restore();
-            if (const auto error = std::get_if<rk::Error>(&restored)) { std::cerr << "SHIM_RESTORE_FAILED: " << error->message << '\n'; return 7; }
-            std::cout << "PATCH_RESTORED=nr.caller-name.experiment\n";
+            if (std::holds_alternative<bool>(restored)) std::cout << "PATCH_RESTORED=nr.caller-name.experiment\n";
+            return restored;
+        };
+        if (!referenceFailure) {
+            const auto retired = rk::retireProbeRuntime([&] {
+                const auto released = shutdown(device.Get());
+                std::cout << "RAW_SHUTDOWN_RESULT=0x" << std::hex << released << std::endl;
+                return released;
+            }, restore, [&] { FreeLibrary(module); });
+            if (const auto error = std::get_if<rk::Error>(&retired)) {
+                std::cerr << "RETIREMENT_FAILED: " << error->message << std::endl;
+                ExitProcess(8); // No destructors release a device/module still retained by the runtime.
+            }
+        } else {
+            const auto restored = restore();
+            if (std::holds_alternative<rk::Error>(restored)) {
+                std::cerr << "SHIM_RESTORE_FAILED; controlled process termination\n" << std::flush;
+                ExitProcess(7);
+            }
+            FreeLibrary(module);
         }
-        FreeLibrary(module);
         std::cout << "FEATURE_CREATE=NOT_RUN; EVALUATE=NOT_RUN; GPU_OUTPUT=NOT_RUN\n";
         return referenceFailure ? 5 : 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 9; }

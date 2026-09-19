@@ -122,7 +122,7 @@ Result<std::string> serializeIni(const Settings& settings) {
     }
     return out.str();
 }
-Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings) {
+Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings, const FileReplace& replace) {
     auto serialized = serializeIni(settings);
     if (const auto error = std::get_if<Error>(&serialized)) return *error;
     const auto& bytes = std::get<std::string>(serialized);
@@ -134,14 +134,46 @@ Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings
     const bool writtenOk = file != INVALID_HANDLE_VALUE && bytes.size() <= MAXDWORD && WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) && written == bytes.size() && FlushFileBuffers(file);
     auto error = GetLastError();
     if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+    if (!writtenOk) { DeleteFileW(temporary); return Error{ErrorCode::Io,"Temporary INI write failed: " + std::to_string(error)}; }
+    const auto backup = std::filesystem::path(std::wstring(temporary)+L".previous");
+    const bool existed = GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES;
+    if (existed) {
+        // Keep a separate, flushed last-good copy before asking ReplaceFileW to
+        // rename anything. Errors 1176/1177 may leave the destination absent.
+        if (!CopyFileW(full.c_str(), backup.c_str(), TRUE)) {
+            error = GetLastError(); DeleteFileW(temporary);
+            return Error{ErrorCode::Io,"Cannot preserve last-good INI: " + std::to_string(error)};
+        }
+        const auto previous = CreateFileW(backup.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        const bool durable = previous != INVALID_HANDLE_VALUE && FlushFileBuffers(previous);
+        error = GetLastError();
+        if (previous != INVALID_HANDLE_VALUE) CloseHandle(previous);
+        if (!durable) {
+            DeleteFileW(temporary);
+            return Error{ErrorCode::Io,"Cannot flush INI backup: " + std::to_string(error) + "; backup " + backup.string()};
+        }
+    }
     bool replaced = false;
-    if (writtenOk) {
-        if (GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES)
+    if (existed) {
+        if (replace) { error = replace(full, temporary); replaced = error == 0; }
+        else {
             replaced = ReplaceFileW(full.c_str(), temporary, nullptr, 0, nullptr, nullptr) != FALSE;
-        else replaced = MoveFileExW(temporary, full.c_str(), MOVEFILE_WRITE_THROUGH) != FALSE;
+            error = GetLastError();
+        }
+    } else {
+        replaced = MoveFileExW(temporary, full.c_str(), MOVEFILE_WRITE_THROUGH) != FALSE;
         error = GetLastError();
     }
-    if (!replaced) { DeleteFileW(temporary); return Error{ErrorCode::Io, "INI replacement failed: " + std::to_string(error)}; }
+    if (!replaced) {
+        bool recovered = false;
+        if (existed && GetFileAttributesW(full.c_str()) == INVALID_FILE_ATTRIBUTES)
+            recovered = MoveFileExW(backup.c_str(), full.c_str(), MOVEFILE_WRITE_THROUGH) != FALSE;
+        // Never discard either version on a partially failed replacement.
+        return Error{ErrorCode::Io,"INI replacement failed: " + std::to_string(error) +
+            (recovered ? "; original restored" : "; backup retained at " + backup.string()) +
+            "; replacement retained at " + std::filesystem::path(temporary).string()};
+    }
+    if (existed) DeleteFileW(backup.c_str());
     return true;
 }
 }

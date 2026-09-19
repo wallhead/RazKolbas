@@ -29,7 +29,10 @@ struct Settings {
 Settings defaultSettings();
 Result<Settings> parseIni(std::string_view text);
 Result<std::string> serializeIni(const Settings& settings);
-Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings);
+// OS replacement boundary: return 0 on success, otherwise the native error.
+// An implementation may fail after renaming either file; recovery must handle it.
+using FileReplace = std::function<std::uint32_t(const std::filesystem::path&, const std::filesystem::path&)>;
+Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings, const FileReplace& replace = {});
 Result<bool> validateSettings(const Settings& settings);
 enum class ChangeCategory { Live, Recreate, RestartRequired };
 ChangeCategory classifyChange(const Settings& before, const Settings& after);

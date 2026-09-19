@@ -11,3 +11,5 @@ T04 is partially implemented and tested:
 Not implemented: arbitrary Skyrim thread quiescence, engine detour/trampoline relocation and chaining, production patch registry/menu, full manifest schema enforcement, in-place deployment/rollback journal recovery. `OwnedCode` only proves quiescence for its own callers; its mutex must never be presented as stopping game threads. The current host installs no game rendering patches.
 
 `patches/nr/caller-name.json` is one explicit standalone experimental IAT contract. It is enabled only by the probe's `--caller-shim` argument; the game plugin never reads or activates it.
+
+To reproduce the disk fixture: run `pwsh -File tools/Generate-PatchFixture.ps1`, then the plan's `tools/Patch-Binary.ps1` commands. The generated six-byte binary is ignored; its manifest is committed. The PowerShell `-Input` interface uses an alias internally to avoid the automatic `$input` variable; a subprocess regression covers the wrapper itself.

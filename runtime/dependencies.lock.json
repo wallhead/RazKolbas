@@ -5,7 +5,7 @@
     "commonlib": {"repository": "https://github.com/CharmedBaryon/CommonLibSSE-NG.git", "commit": "d51fa0938bf53f829ff83a144079136f0d4a2f18", "version": "3.6.0", "use": "SKSE headers; no engine relocation use in native host"},
     "fmt": {"repository": "https://github.com/fmtlib/fmt.git", "commit": "e69e5f977d458f2650bb346dadf2ad30c5320281", "version": "10.2.1"},
     "spdlog": {"repository": "https://github.com/gabime/spdlog.git", "commit": "27cb4c76708608465c413f6d0e6b8d99a4d84302", "version": "1.14.1"},
-    "catch2": {"repository": "https://github.com/catchorg/Catch2.git", "commit": "56809e5282f104c5c8b570e7c2996cdc352d94f1", "version": "3.8.1"},
+    "catch2": {"repository": "https://github.com/catchorg/Catch2.git", "commit": "2b60af89e23d28eefc081bc930831ee9d45ea58b", "version": "3.8.1"},
     "imgui": {"repository": "https://github.com/ocornut/imgui.git", "commit": "f5befd2d29e66809cd1110a152e375a7f1981f06", "version": "1.91.9b", "use": "reserved for T10"},
     "zydis": {"repository": "https://github.com/zyantific/zydis.git", "commit": "a2278f1d254e492f6a6b39f6cb5d1f5d515659dc", "version": "4.1.1", "use": "instruction decoder for T04"},
     "detours": {"repository": "https://github.com/microsoft/Detours.git", "commit": "e4bfd6b03e50de46b47abfbd1e46b384f0c5f833", "version": "4.0.1", "use": "reserved for verified engine detours"}

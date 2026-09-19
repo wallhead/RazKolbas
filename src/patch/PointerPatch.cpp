@@ -20,7 +20,11 @@ Result<bool> exchange(void** slot, void* expected, void* replacement) {
     return true;
 }
 }
-PointerPatch::~PointerPatch() { if (slot_) (void)restore(); }
+PointerPatch::~PointerPatch() {
+    if (!slot_) return;
+    const auto result = restore();
+    if (const auto error = std::get_if<Error>(&result); error && error->code != ErrorCode::Conflict) std::terminate();
+}
 Result<bool> PointerPatch::apply(void** slot, void* expected, void* replacement) {
     if (slot_) return Error{ErrorCode::Conflict,"Patch lease already owns a slot"};
     if (!expected || !replacement) return Error{ErrorCode::InvalidInput,"Null pointer target"};
@@ -33,7 +37,7 @@ Result<bool> PointerPatch::restore() {
     const auto result = exchange(slot_, replacement_, original_);
     // Retain no memory/code ownership: those lifetimes belong to the caller.
     // A later owner's pointer is deliberately left untouched.
-    slot_ = nullptr;
+    if (std::holds_alternative<bool>(result) || std::get<Error>(result).code == ErrorCode::Conflict) slot_ = nullptr;
     return result;
 }
 }
