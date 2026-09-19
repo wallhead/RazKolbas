@@ -87,7 +87,7 @@ owners unwind. SDK binaries, reference DLLs and captures stay out of git/MO2.
 
 Next: use this NGX call path in the owned backend after recovering pre-SR
 resource preparation and jitter/hook timing. No repeated stationary/pan test is
-needed for that step. Installed 0.1.7 remains diagnostic; live DLSS is inactive.
+needed for that step. Installed 0.1.8 remains diagnostic; live DLSS is inactive.
 
 ## Reference hook map, next investigation
 
@@ -107,3 +107,38 @@ RazKolbas 0.1.8 adds one read-only live-byte log for each mapped site after
 its exact game profile check. It writes no instructions there. This checks
 whether the running modlist has already changed those sites before a new
 hook descriptor is considered.
+
+The MO2 run on September 20 loaded 0.1.8 with ENB and ReShade and logged
+`e8d1f7e9ff` at game RVA `0xfa507a`. Its signed rel32 resolves to game RVA
+`0xe44850`, exactly Address Library AE ID 77247. The two renderer Begin
+reference sites logged `0100488b0d32414402488b01ff907003` at `0xe44675` and
+`488b01448d42f5ff90800000004b8d04` at `0xe446c3`. This proves the live
+CALL has an in-game target in this modlist at startup; it does not yet prove
+exclusive ownership or safe patching. Skyrim's on-disk `.text` bytes differ
+from these decoded live instructions, so an on-disk byte comparison is not a
+valid hook signature.
+
+Continuing through the reference DLL's chained `.pdata` regions clarified the
+stage: the callback at `0x156830` forwards the original world-draw CALL at
+`0x156922`, resolves HDR/UI resources via `ResolveCSHDRTextures` at `0x156942`
+(`0x1f6700`), and, on its normal upscaling branch, invokes `0x1f4ca0` at
+`0x156dab`. That routine calls `PDPerfPlugin!EvaluateUpscaler` at `0x1f5022`.
+Thus this reference hook is an SR evaluation path after the original engine
+call, not just a Present observer. The exact game resource identities,
+guide conventions, branch conditions, and coexistence contract for our own
+replacement still need verification before altering this call site.
+Inside `0x1f4ca0`, three interface calls at `0x1f4d16`, `0x1f4d34` and
+`0x1f4d52` copy prepared resources before the NGX payload is built. A fourth
+call at `0x1f5092` copies a resource after evaluation. This brackets the
+vendor call with explicit resource transfer; merely invoking NGX at Present
+would omit part of the reference's image path. These interface methods and
+resource roles are still under investigation.
+
+The first MO2 run logged a `BSWin32KeyboardDevice::Process` access violation at
+00:45:23. The crash log has the same faulting instruction, call stack and
+invalid-pointer pattern as the September 19 18:55:50 crash, which preceded
+the 0.1.8 site logger. No RazKolbas frame appears in the faulting stack.
+The user launched a second run at 00:47:26; its three site bytes were identical
+and it continued past 9,000 observed presentations without a RazKolbas error.
+Cause of the first-run crash is unresolved; the read-only site log and crash
+are separate evidence.

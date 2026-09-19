@@ -13,6 +13,7 @@ import struct
 EXPECTED = 'c4093c569a3c83b26587f4b9ea4c55de9ae6e73b84a2af9fb3fbd30e2fe0d452'
 TARGETS = {
     77245: {'reference': 'BSGraphics_Renderer_Begin_UpdateJitter reference hook sites', 'addends': [0xe5, 0x133]},
+    77247: {'reference': 'Live world-draw CALL target observed on 2026-09-20; engine routine semantics still unverified', 'addends': []},
     77518: {'reference': 'updateJitterHook relocation operand; patched site requires further tracing', 'addends': []},
     77520: {'reference': 'buildCameraStateDataHook relocation operand; patched site requires further tracing', 'addends': []},
     82084: {'reference': 'Main_DrawWorld_MainDraw call-site hook; pre-UI semantics unverified', 'addends': [0x17a]},
