@@ -4,14 +4,14 @@ Installed 2026-09-19 at the user's request, into `D:/TESV_EX`. The originally ty
 
 MO2 is `D:/TESV_EX/MO2/ModOrganizer.exe`, selected profile `TRUE AE V5.32 EXTENDED + OSTIM`. Its existing executable **Skyrim TrueAE V5.3 EXTENDED** points to this installation's `skse64_loader.exe`.
 
-Installed from source commit `4376113`, Release:
+Installed from source commit `4376113`, Release. Current MO2 package is `D:/TESV_EX/MO2/downloads/RazKolbas-0.1.0-native-host-4376113.zip`, SHA-256 `4d81bd42d4be81f3c2e45c5c3d4eb32cf6271fa4d2f622432ad5f2803e1a26df`. Its archive root is `SKSE/Plugins`, suitable for MO2 installation. The user completed installation after desktop automation was stopped; the mod's files and enabled profile entry were subsequently verified.
 
 | File | SHA-256 |
 |---|---|
-| `D:/TESV_EX/Data/SKSE/Plugins/RazKolbas.dll` | `e2b4e2184f7119133adfbd106f4ffcc476fcb75025a1afff060b05b6ae870d2c` |
-| `D:/TESV_EX/Data/SKSE/Plugins/RazKolbas.ini` | `692eaa6b8fbbd62cc3ed2595fb5e02d0cf1060425d3e7ff0c40086b2418337fc` |
+| `D:/TESV_EX/MO2/mods/RazKolbas/SKSE/Plugins/RazKolbas.dll` | `e2b4e2184f7119133adfbd106f4ffcc476fcb75025a1afff060b05b6ae870d2c` |
+| `D:/TESV_EX/MO2/mods/RazKolbas/SKSE/Plugins/RazKolbas.ini` | `692eaa6b8fbbd62cc3ed2595fb5e02d0cf1060425d3e7ff0c40086b2418337fc` |
 
-These are loose game Data files, visible to every MO2 profile using this game root. No existing files were overwritten; no MO2 profile or other mod was changed. No existing RazKolbas override was found in game Data, MO2 mods/overwrite, or the installation's Mods folder. Both copied hashes match their source files. All 10 Release CTest groups passed immediately before installation. The local machine-readable record is `artifacts/local/skyrim-install.json`.
+These files are controlled by MO2's enabled `+RazKolbas` entry. The original loose installation was migrated after verifying both loose-file hashes against the original deployment record; backups are in `artifacts/local/skyrim-smoke-2026-09-19-211554/previous-loose-files/`. No unrelated mod was changed. Both managed-file hashes match their build/configuration sources. All 10 Release CTest groups passed immediately before initial installation. The current record is `artifacts/local/skyrim-mo2-install.json`; the historical loose installation record remains `artifacts/local/skyrim-install.json`.
 
 ## User test
 
@@ -21,10 +21,10 @@ These are loose game Data files, visible to every MO2 profile using this game ro
 
 Expected RazKolbas log messages include `RazKolbas native host bootstrap ready` and `Native mode: no verified rendering hook profile attached; SR/FG/NR inactive`. This test establishes plugin loading/configuration/lifecycle coexistence only. No in-game upscaling, frame generation, NR image effect or ImGui menu is implemented yet. The standalone NR feature-creation probe is separate and was not installed into Skyrim.
 
-Game launch/load results: **NOT RUN by the agent**; the user will test. Current settings retain Auto/Quality with FG and NR disabled.
+Game launch/load results: **native-host load PASS**. The user reports completing the menu/exit test. Fresh `skse64.log` reports `RazKolbas.dll ... loaded correctly (handle 195)`; `RazKolbas.log` records bootstrap ready at `2026-09-19 21:15:54` and the expected inactive-renderer message at `21:15:57`. No Skyrim process remained when checked. Logs are saved in `artifacts/local/skyrim-smoke-2026-09-19-211554/`. This verifies loading and message registration, not rendering, complete shutdown-resource behavior or a save-load test. Identical loose and managed copies existed during this launch; afterward the verified loose copies were moved to backup so only the MO2 mod supplies the plugin. Current settings retain Auto/Quality with FG and NR disabled.
 
 The shared Documents log already existed before this installation: its last write was 18:55:50 on 2026-09-19, and it identifies a different build dated September 13. Those old FG/NR messages are not evidence for this build. A copy is preserved at `artifacts/local/RazKolbas-before-install.log`. This logger appends, so inspect only fresh entries after installation at 21:07 on September 19 and look for the native-host messages above.
 
 ## Remove this test build
 
-Remove only the two installed files above. Preserve the INI first if it has been edited. Leave the surrounding Data/SKSE directories and other mods intact.
+Disable `RazKolbas` in MO2 for the current profile, or remove that mod through MO2. Preserve its INI first if it has been edited. No loose RazKolbas DLL/INI remains in game Data.
