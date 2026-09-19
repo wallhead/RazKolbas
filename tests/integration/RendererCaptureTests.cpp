@@ -108,4 +108,11 @@ TEST_CASE("Real D3D11 capture identifies the returned adapter and preserves back
     REQUIRE(std::holds_alternative<rk::RendererSnapshot>(rk::captureRendererSnapshot(args,status)));
     REQUIRE(pixels()==before);
     REQUIRE(before[0]==64);REQUIRE(before[1]==128);REQUIRE(before[2]==191);REQUIRE(before[3]==255);
+    ComPtr<ID3D11Device> foreignDevice;ComPtr<ID3D11DeviceContext> foreignContext;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&foreignDevice,nullptr,&foreignContext)));
+    const auto originalContext=args.context;
+    args.context=foreignContext.GetAddressOf();
+    REQUIRE(std::holds_alternative<rk::Error>(rk::captureRendererSnapshot(args,S_OK)));
+    args.context=originalContext;args.device=foreignDevice.GetAddressOf();
+    REQUIRE(std::holds_alternative<rk::Error>(rk::captureRendererSnapshot(args,S_OK)));
 }

@@ -1,4 +1,4 @@
-# Candidate frame-resource probe (0.1.5)
+# Candidate frame-resource probe (0.1.5–0.1.6)
 
 This is a bounded diagnostic milestone for T05/T06. It does not establish pre-UI colour, world rendering, motion conventions, depth linearization, source-frame identity or usable SR guides. SR/FG/NR evaluation remains inactive.
 
@@ -34,7 +34,7 @@ Read-only live inspection with `tools/re/inspect_live_renderer.py` correlated th
 
 Existing exact-game creation validation and exact ENB swap-table profile remain mandatory, with experimental settings enabled. Only the base ENB Present before-callback is eligible; ReShade Present and Present1 are excluded. At least 90 seconds after the first eligible call, at most32 ownership checks spaced5 seconds apart seek one capture. This delay is diagnostic, not a claim that a world frame is loaded.
 
-GetDevice/GetImmediateContext use the live COM swap. Raw renderer memory is copied through bounded ReadProcessMemory. No candidate pointer is dereferenced unless the current thread already owns the verified renderer critical section (positive recursion and matching owner ID) and renderer device/context/swap values exactly match the live COM objects. The callback does not acquire an engine lock. Borrowed textures remain within that same owned-lock call.
+0.1.6 records numeric anchors from the first verified creation outputs after canonical device/context/swap identity validation. It holds no COM references across callbacks. Raw renderer memory is copied through bounded ReadProcessMemory. No recorded engine pointer is dereferenced unless the current thread already owns the verified renderer critical section (positive recursion and matching owner ID), all three current renderer fields exactly match those creation anchors, and the incoming swap matches the recorded swap. Canonical COM identity is then revalidated using the borrowed creation device/context and current swap, before any texture access. The callback does not acquire an engine lock. Borrowed textures remain within that same owned-lock call; later renderer replacements are rejected rather than rebound automatically.
 
 All descriptors and the total64MiB CPU budget are validated before GPU copies. Single-sample, one-mip, one-array textures in the supported raw formats are copied to local staging resources, mapped synchronously, packed row-by-row and unmapped. Map completion precedes local staging retirement. No GPU resources or engine pointers survive the callback; output files contain CPU bytes only. One successful ownership check consumes the GPU attempt even if capture/write fails. A diagnostic frame stall is expected; this is not a performance measurement or production capture pipeline.
 
@@ -45,3 +45,13 @@ Files are under Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures
 Core pointer-contract/readback tests were observed RED then GREEN. WARP verifies odd-width row packing, source-pixel and bound-RTV preservation, foreign-device/null/budget rejection and raw motion/typeless-depth formats. ENB-only boundary regression was observed RED before its profile/method gate. Runtime capture is pending at this source checkpoint; test results and deployed evidence follow below.
 
 Next: inspect actual bytes/descriptors, then recover world/pre-UI boundary and camera/depth/motion semantics using a loaded save. A main-menu capture cannot establish those contracts.
+
+## First runtime result
+
+0.1.5 `b7f6765` loaded through MO2 at23:13:29 on September19. Live signatures matched; ENB Present remained successful. At23:15:21, 23:15:26 and23:15:31 the owned-lock check passed but exact renderer/accessor pointers differed, so candidate dereference and GPU capture were skipped. The game reached its menu and was closed with Alt+F4. Logs: ignored `artifacts/local/frame-probe-015-rejected/`.
+
+Diagnostic follow-up `ea03ee7` logs creation-time and Present-time renderer/accessor pointer values without relaxing any check. COM object identity is determined via [QueryInterface(IID_IUnknown)](https://learn.microsoft.com/en-us/windows/win32/com/rules-for-implementing-queryinterface), rather than assuming every interface pointer is identical; actual differences still need correlation with the verified creation outputs.
+
+The follow-up established that correlation: at23:18:07 creation returned device `0x2b1d0747750`, context `0x2b1d078f370`, swap `0x2b1c54ffed0`; at23:19:42 renderer fields remained exactly those values, whereas accessor device/context were `0x2b184502580` / `0x2b182e9f590`. Swap remained identical. The earlier successful creation observer already checked canonical device identity across those interfaces. The raw-pointer equality to accessor results was therefore the wrong gate for this wrapper chain. Logs: ignored `artifacts/local/frame-provenance-015/`; read-only memory correlation: `artifacts/local/frame-re/provenance-live/`.
+
+0.1.6 instead applies the creation-anchor and canonical revalidation contract above. This is a runtime-RED correction to an observed ABI mismatch, not an unverified offset change. Debug/Release14 groups PASS, including new foreign-context/foreign-device revalidation cases. Follow-up reviewer found no actionable safety defects. Game capture remains pending at this source checkpoint.

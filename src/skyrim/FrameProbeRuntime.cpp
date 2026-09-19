@@ -5,6 +5,7 @@
 #include <wrl/client.h>
 #include <spdlog/spdlog.h>
 #include <atomic>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -16,6 +17,7 @@ std::mutex probeMutex;
 bool done=false;
 unsigned attempts=0;
 ULONGLONG start=0,previous=0;
+std::uintptr_t createdDevice=0,createdContext=0,createdSwap=0;
 bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied=0;
     return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),destination,size,&copied)&&copied==size;
@@ -44,27 +46,31 @@ void armFrameProbe(HMODULE verifiedGame) {
     gameBase.store(base,std::memory_order_release);
     spdlog::info("Candidate probe armed: one CPU readback bundle after 90s; requires current renderer lock ownership; 64MiB limit; no SR guide validation");
 }
+void bindFrameProbe(const DeviceCreationArgs& args) {
+    std::scoped_lock guard(probeMutex);
+    if(createdSwap)return; // First verified renderer only; no stale rebinding.
+    if(!args.device||!*args.device||!args.context||!*args.context||!args.swapChain||!*args.swapChain)return;
+    createdDevice=reinterpret_cast<std::uintptr_t>(*args.device);
+    createdContext=reinterpret_cast<std::uintptr_t>(*args.context);
+    createdSwap=reinterpret_cast<std::uintptr_t>(*args.swapChain);
+}
 void probePresentCandidates(IDXGISwapChain* swap) {
-    using Microsoft::WRL::ComPtr;
     const auto base=gameBase.load(std::memory_order_acquire);
     if(!base||!swap)return;
     std::unique_lock guard(probeMutex,std::try_to_lock);
     if(!guard||done)return;
+    if(!createdDevice||!createdContext||createdSwap!=reinterpret_cast<std::uintptr_t>(swap))return;
     const auto now=GetTickCount64();
     if(!start)start=now;
     if(now-start<90000||now-previous<5000)return;
     previous=now;
     if(++attempts>=32)done=true;
-    ComPtr<ID3D11Device> device;
-    if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device))))return;
-    ComPtr<ID3D11DeviceContext> context;device->GetImmediateContext(&context);
     std::array<std::uint8_t,renderer1170Size> snapshot{};
     if(!read(base+renderer1170Rva,snapshot.data(),snapshot.size()))return;
     const auto number=[&](std::size_t offset){std::uintptr_t v{};std::memcpy(&v,snapshot.data()+offset,sizeof(v));return v;};
-    if(attempts==1)spdlog::info("Candidate pointer provenance: renderer device=0x{:x} context=0x{:x} swap=0x{:x}; COM device=0x{:x} context=0x{:x} swap=0x{:x}",
-        number(0x48),number(0x50),number(0x70),reinterpret_cast<std::uintptr_t>(device.Get()),reinterpret_cast<std::uintptr_t>(context.Get()),reinterpret_cast<std::uintptr_t>(swap));
-    const auto candidates=rendererCandidatePointers(snapshot,GetCurrentThreadId(),reinterpret_cast<std::uintptr_t>(device.Get()),
-        reinterpret_cast<std::uintptr_t>(context.Get()),reinterpret_cast<std::uintptr_t>(swap));
+    if(attempts==1)spdlog::info("Candidate pointer provenance: renderer device=0x{:x} context=0x{:x} swap=0x{:x}; verified creation device=0x{:x} context=0x{:x} swap=0x{:x}",
+        number(0x48),number(0x50),number(0x70),createdDevice,createdContext,createdSwap);
+    const auto candidates=rendererCandidatePointers(snapshot,GetCurrentThreadId(),createdDevice,createdContext,createdSwap);
     if(const auto error=std::get_if<Error>(&candidates)) {
         if(attempts<=3||done)spdlog::info("Candidate probe skipped ({}/32): {}",attempts,error->message);
         return;
@@ -72,6 +78,13 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     // Current thread already owns the engine critical section. No lock is
     // acquired here; borrowed resource references never survive this callback.
     done=true; // A failed GPU/file operation is not retried every frame.
+    auto* device=reinterpret_cast<ID3D11Device*>(createdDevice);
+    auto* context=reinterpret_cast<ID3D11DeviceContext*>(createdContext);
+    DeviceCreationArgs current{};current.device=&device;current.context=&context;current.swapChain=&swap;
+    const auto revalidated=captureRendererSnapshot(current,S_OK);
+    if(const auto error=std::get_if<Error>(&revalidated)) {
+        spdlog::warn("Candidate probe device revalidation failed: {}",error->message);return;
+    }
     const auto& pointers=std::get<std::array<std::uintptr_t,3>>(candidates);
     std::array<ID3D11Texture2D*,3> textures{};
     constexpr std::array labels{"main-colour-candidate","motion-candidate","depth-candidate"};
@@ -81,11 +94,11 @@ void probePresentCandidates(IDXGISwapChain* swap) {
         spdlog::info("Candidate {}: {}x{} format={} mips={} array={} samples={} bind=0x{:x}",labels[i],d.Width,d.Height,
             static_cast<unsigned>(d.Format),d.MipLevels,d.ArraySize,d.SampleDesc.Count,d.BindFlags);
     }
-    const auto result=readbackCandidates(context.Get(),textures);
+    const auto result=readbackCandidates(context,textures);
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.5 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.6 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);
     for(std::size_t i=0;i<images.size();++i) {

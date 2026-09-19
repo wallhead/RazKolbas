@@ -192,6 +192,7 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
         spdlog::warn("Renderer observation unavailable: {}",error->message); return;
     }
     const auto& snapshot=std::get<RendererSnapshot>(captured);
+    bindFrameProbe(args);
     spdlog::info("Creation pointer provenance: device=0x{:x}; context=0x{:x}; swap=0x{:x}",
         reinterpret_cast<std::uintptr_t>(*args.device),args.context?reinterpret_cast<std::uintptr_t>(*args.context):0,
         reinterpret_cast<std::uintptr_t>(*args.swapChain));
