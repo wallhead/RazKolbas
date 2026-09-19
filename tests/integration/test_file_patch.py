@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
+import json
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,5 +56,13 @@ class FilePatchTests(unittest.TestCase):
         self.output.write_bytes(b'update')
         with self.assertRaises(ValueError): self.patch.patch_file(self.manifest,self.output,self.root/'restore.bin',restore=True)
         self.assertFalse((self.root/'restore.bin').exists())
+
+    def test_powershell_input_argument_reaches_the_real_file(self):
+        manifest = self.root / 'manifest.json'
+        manifest.write_text(json.dumps(self.manifest))
+        result = subprocess.run(['pwsh','-File',str(ROOT/'tools/Patch-Binary.ps1'),'-Manifest',str(manifest),'-Input',str(self.input),'-Output',str(self.output),'-WhatIf'],capture_output=True,text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['status'], 'DRY_RUN')
+        self.assertFalse(self.output.exists())
 
 if __name__ == '__main__': unittest.main()
