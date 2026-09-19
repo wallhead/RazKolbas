@@ -1,4 +1,5 @@
 #include "rk/Settings.hpp"
+#include "rk/RendererHook.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -47,8 +48,8 @@ Result<bool> validateSettings(const Settings& settings) {
                     double numeric{};
                     return number(item.value, numeric) && std::isfinite(numeric) && numeric >= 0 && numeric <= 2;
                 }
-                // No patch IDs are registered in this milestone.
-                if (field.key == "Patching.DisabledPatchIds" && !item.value.empty()) return false;
+                // One engine patch is registered; reject misspelled IDs.
+                if (field.key == "Patching.DisabledPatchIds" && !item.value.empty() && item.value != rendererObserverPatchId) return false;
                 return true;
             } else { const auto numeric = static_cast<double>(item); return std::isfinite(numeric) && numeric >= field.minimum && numeric <= field.maximum; }
         }, found->second);

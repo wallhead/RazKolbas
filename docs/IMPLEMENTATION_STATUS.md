@@ -4,7 +4,7 @@
 
 The complete T01–T24 plan in `../RazKolbas_Codex_Handoff/docs/plans/2026-09-19-razkolbas-implementation.md` remains the target. This checkpoint is not a product completion claim.
 
-Current local validation: all 10 CTest groups pass in Debug and Release. Counts below for earlier stages describe their original milestone runs. The user selected `D:/TESV_EX` for testing (their typed `D:/TESV/_EX` did not exist). Release DLL/INI are installed in MO2 mod `RazKolbas`, enabled in `TRUE AE V5.32 EXTENDED + OSTIM`; prior loose copies were backed up and removed from game Data. The user's menu/exit test confirmed native-host loading at 21:15 on September 19. Rendering validation remains NOT RUN. See `SKYRIM_SMOKE_TEST.md`.
+Current local validation: all 12 CTest groups pass in Debug and Release. Counts below for earlier stages describe their original milestone runs. The user selected `D:/TESV_EX` for testing (their typed `D:/TESV/_EX` did not exist). Release DLL/INI are installed in MO2 mod `RazKolbas`, enabled in `TRUE AE V5.32 EXTENDED + OSTIM`; prior loose copies were backed up and removed from game Data. The user's menu/exit test confirmed native-host loading at 21:15 on September 19. Rendering validation remains NOT RUN. See `SKYRIM_SMOKE_TEST.md`.
 
 | Task | Implementation | Build/test | Game/GPU |
 |---|---|---|---|
@@ -13,7 +13,8 @@ Current local validation: all 10 CTest groups pass in Debug and Release. Counts 
 | T03 | Shared variant-typed INI schema, requested SR policy, transactions and temporal invariants implemented; full FG pairing/resource contracts remain open | 7 Debug CTest groups PASS; invalid numbers/enums, locked file, failed replacement, reset epoch and generated frames covered | NOT RUN |
 | T04 | Partial: exact-hash planner, owned executable patch/restore, atomic pointer leases and reversible working-copy file tooling | 10 Debug CTest groups PASS, including executable/concurrent fixtures and disk regressions | Game patches NOT RUN |
 | T08 | Static RE, exact-hash community NR loader, caller-name shim, verified driver parameter factory and direct feature-creation probe | Debug/Release probe built; parameter ABI round trips verified | RTX 4080 SUPER: original init 0xBAD00002; patched-route init/create/release/shutdown 0x1; GPU fence completed, 4 callback allocations/releases balanced; evaluate/output NOT RUN |
-| T05–T07, T09–T24 | Not implemented | NOT RUN | NOT RUN |
+| T05 | Partial: experimental exact-hash D3D11 creation IAT observer; actual device identity and swap-chain capture | 12 Debug/Release groups PASS; real WARP identity and unchanged pixels; offline exact-game profile 43 assertions PASS | Observer game interception NOT RUN |
+| T06–T07, T09–T24 | Not implemented | NOT RUN | NOT RUN |
 
 ## Commands run
 
@@ -36,3 +37,5 @@ Current local validation: all 10 CTest groups pass in Debug and Release. Counts 
 ## Next action
 
 T04: finish production patch descriptors and engine detour/quiescence integration. T05 now has the selected Skyrim 1.6.1170 installation, recorded executable hash and successful native-host load logs; next recover/verify rendering integration for that executable. Independent T08 next probe: recover evaluation/resource/temporal contracts and evaluate a known image with fenced GPU readback. Parameter factory and feature 0x12 creation now execute successfully. See `re/NR_BOOTSTRAP.md`, including the community runtime's invalid embedded signature and the measured direct-loading compatibility route. T07 same-adapter interop remains an independent open task. No SR, FG, ENB, ReShade, ImGui or NR image output is implemented or advertised.
+
+T05 observer checkpoint: see re/SKYRIM_HOOK_MAP.md. The next controlled game run must establish that the installed observer intercepts actual device creation. Normal configuration defaults remain opt-out. No frame processing or vendor runtimes were added.

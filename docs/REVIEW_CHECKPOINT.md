@@ -31,3 +31,7 @@ All four local GPU regression cases passed, and all 10 CTest groups passed in bo
 - Final build and reference preservation results are recorded separately by the implementer; the reviewer did not execute vendor/game code.
 
 No merge or push was requested. Preserve this local checkpoint branch and continue the dependency graph; the full implementation remains unfinished.
+
+## T05 renderer observer review
+
+The same reviewer found that DisabledPatchIds rejected every ID and was absent from installation gates. A failing configuration regression reproduced the issue; the real observer ID is now accepted and suppresses installation through the shared tested gate. Both Debug and Release pass all 12 groups. Actual Skyrim/ENB interception remains NOT RUN. Earlier native-host and NR creation test results remain distinct from this observer milestone.

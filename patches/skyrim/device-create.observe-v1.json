@@ -1,0 +1,24 @@
+{
+  "id": "skyrim1170.device-create.observe-v1",
+  "status": "EXPERIMENTAL_OBSERVATION_ONLY",
+  "shipping_enabled": false,
+  "purpose": "Capture actual device/adapter/swap-chain identity while preserving the original D3D11 creation call",
+  "target": {
+    "module": "SkyrimSE.exe", "architecture": "x64", "version": "1.6.1170.0",
+    "sha256": "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+    "file_size": 37157144, "image_size": "0x3870000"
+  },
+  "location": {"kind": "unique named IAT import in readable non-executable .rdata", "dll": "d3d11.dll", "symbol": "D3D11CreateDeviceAndSwapChain", "iat_rva": "0x17502a0"},
+  "accepted_original_owners": [
+    {"name": "local ENB d3d11.dll", "sha256": "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58", "file_size": 4664320, "image_size": "0xaae000", "export_rva": "0x5e410", "prologue": "488bc45741544155415641574881ec40"},
+    {"name": "local Windows d3d11.dll", "sha256": "722871e4ac32972617483197709fe0d924ced5ed894b18fd13e0813d0b25950f", "file_size": 2476632, "image_size": "0x257000", "export_rva": "0x429f0", "prologue": "488bc448895808488970104889781855"}
+  ],
+  "original": "IAT value must equal the exact verified owner's export address, with matching live prologue",
+  "replacement": "RazKolbas createProxy; all 12 arguments, output pointers, HRESULT and last error preserved",
+  "abi": "HRESULT WINAPI D3D11CreateDeviceAndSwapChain; aligned 8-byte atomic compare/exchange; no code relocation",
+  "activation": "SKSEPlugin_Load outside own DllMain; requires Enabled, versioned patches, ExperimentalPatches, SafeMode=false and ID not disabled",
+  "lifetime": "Immutable forwarding state published before pointer write; callback and original-owner modules pinned to process exit",
+  "rollback": "Production hook stays until process exit. Disable by patch ID, SafeMode or ExperimentalPatches=false then restart. Atomic lease restoration tested in isolated fixtures; never unload reachable callback code or overwrite another owner",
+  "evidence": ["docs/re/SKYRIM_HOOK_MAP.md", "tests/unit/HookProfileTests.cpp", "tests/integration/RendererCaptureTests.cpp"],
+  "game_runtime": "NOT RUN; actual creation interception must be confirmed from fresh Skyrim logs"
+}

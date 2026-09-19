@@ -4,6 +4,7 @@
 #include "rk/Bootstrap.hpp"
 #include "rk/Logging.hpp"
 #include "rk/Settings.hpp"
+#include "rk/RendererBootstrap.hpp"
 #include <fstream>
 #include <mutex>
 
@@ -21,7 +22,11 @@ void onMessage(SKSE::MessagingInterface::Message* message) {
     if (!message) return;
     // T05 must prove an early renderer boundary. PostLoad is not that proof.
     if (message->type == SKSE::MessagingInterface::kPostLoad)
-        spdlog::info("Native mode: no verified rendering hook profile attached; SR/FG/NR inactive");
+        spdlog::info("SKSE PostLoad: renderer observation {}; SR/FG/NR inactive",rk::rendererObserverArmed() ? "armed" : "disabled");
+}
+void rendererObserved(const rk::RendererSnapshot&) {
+    std::scoped_lock lock(hostMutex);
+    if (host.attachRenderer(true)) spdlog::info("RendererAttached: device identity captured; observation only, no frame processing");
 }
 rk::Settings loadSettings() {
     HMODULE self = nullptr;
@@ -43,7 +48,7 @@ rk::Settings loadSettings() {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 0, 0});
+    metadata.PluginVersion({0, 1, 1, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -76,7 +81,12 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
             return messaging->RegisterListener(skse->GetPluginHandle(), "SKSE", reinterpret_cast<void*>(&onMessage));
         });
         if (started) requestedSettings = std::make_unique<rk::Settings>(std::move(settings));
-        spdlog::info("RazKolbas native host bootstrap {}; no rendering profile or vendor provider initialized", started ? "ready" : "failed");
+        spdlog::info("RazKolbas 0.1.1 native host bootstrap {}; vendor providers inactive", started ? "ready" : "failed");
+        if (started) {
+            const auto observer=rk::installRendererObserver(*requestedSettings,&rendererObserved);
+            if (const auto error=std::get_if<rk::Error>(&observer))
+                spdlog::warn("Renderer observation not installed: {}",error->message);
+        }
         return started;
     } catch (const std::exception& error) {
         OutputDebugStringA(error.what());

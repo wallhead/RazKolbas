@@ -1,8 +1,21 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/Settings.hpp"
+#include "rk/RendererHook.hpp"
 #include <limits>
 #include <fstream>
 #include <Windows.h>
+
+TEST_CASE("Renderer observer patch can be selectively disabled", "[config]") {
+    const auto parsed = rk::parseIni("[Patching]\nExperimentalPatches=true\nDisabledPatchIds=skyrim1170.device-create.observe-v1\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    auto settings = std::get<rk::Settings>(parsed);
+    REQUIRE_FALSE(rk::rendererObserverRequested(settings));
+    settings.values["Patching.DisabledPatchIds"] = rk::Text{};
+    REQUIRE(rk::rendererObserverRequested(settings));
+    settings.values["General.SafeMode"] = true;
+    REQUIRE_FALSE(rk::rendererObserverRequested(settings));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni("[Patching]\nDisabledPatchIds=unknown.patch\n")));
+}
 
 TEST_CASE("Supplied INI parses through the same schema as defaults", "[config]") {
     std::ifstream input(RK_SOURCE_DIR "/config/RazKolbas.ini.example");
