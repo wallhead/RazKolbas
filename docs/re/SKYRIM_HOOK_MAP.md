@@ -19,3 +19,7 @@ The exact executable and owner identities, IAT RVA, ABI, activation gates and re
 The normal sample INI keeps `ExperimentalPatches=false`. The installed controlled test opts in. Launch the selected SKSE executable through MO2, reach the menu, then exit. Inspect only fresh timestamped entries in `Documents/My Games/Skyrim Special Edition/SKSE/RazKolbas.log` for installation followed by `Renderer observation`, `Actual render adapter` and `Actual swap chain`. Reaching the menu without those entries does not prove capture. Any rejection should preserve native fallback and provide its reason.
 
 The callback and original owner are pinned for process lifetime; live removal is deliberately not exposed. To suppress installation on the next launch, set `DisabledPatchIds=skyrim1170.device-create.observe-v1`, set `ExperimentalPatches=false`, or use SafeMode. No Present, resize, depth, motion-vector, frame-resource or temporal integration exists yet.
+
+## Runtime evidence update
+
+September 19 at 21:45:21 installation preceded actual creation at21:45:38, original HRESULT0. Device/swap-chain identity captured successfully with the verified ENB owner and ReShade6.7.3 active. See ../SKYRIM_SMOKE_TEST.md for exact captured values and saved logs. This establishes the creation boundary for this run, not provider initialization or per-frame integration.

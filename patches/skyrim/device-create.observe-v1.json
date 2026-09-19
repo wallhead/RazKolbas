@@ -20,5 +20,5 @@
   "lifetime": "Immutable forwarding state published before pointer write; callback and original-owner modules pinned to process exit",
   "rollback": "Production hook stays until process exit. Disable by patch ID, SafeMode or ExperimentalPatches=false then restart. Atomic lease restoration tested in isolated fixtures; never unload reachable callback code or overwrite another owner",
   "evidence": ["docs/re/SKYRIM_HOOK_MAP.md", "tests/unit/HookProfileTests.cpp", "tests/integration/RendererCaptureTests.cpp"],
-  "game_runtime": "NOT RUN; actual creation interception must be confirmed from fresh Skyrim logs"
+  "game_runtime": "PASS: 2026-09-19 21:45:38; HRESULT 0; RTX 4080 SUPER, 2560x1440; verified ENB and ReShade 6.7.3 active; frame processing NOT IMPLEMENTED"
 }

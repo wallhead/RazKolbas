@@ -11,7 +11,7 @@ On September 19 at 21:44, source commit `81fabde` Release replaced the managed M
 - Complete deployment record: `artifacts/local/renderer-observer-install.json`.
 - Debug and Release: all 12 CTest groups PASS; exact-game offline profile: 43 assertions PASS; reviewer follow-up: no actionable findings.
 
-**Game observation NOT RUN.** Next launch through MO2, reach the main menu and exit. Fresh log entries must show observer installation, a successful original creation result, actual render adapter and actual swap-chain details. A rejection message is evidence to diagnose, not a capture success. SR/FG/NR remain inactive. See `re/SKYRIM_HOOK_MAP.md` for scope and next-launch disable controls.
+**Game observation PASS.** The user completed the requested run. Fresh log entries at 21:45:21 show the observer installed through the verified ENB wrapper; at 21:45:38 the original creation returned HRESULT 0, followed by actual device and swap-chain capture. Skyrim was no longer running when checked after the user finished. SR/FG/NR remain inactive. See `re/SKYRIM_HOOK_MAP.md` for scope and next-launch disable controls.
 
 The sections below retain the initial 0.1.0 bootstrap test as historical evidence.
 
@@ -44,3 +44,11 @@ The shared Documents log already existed before this installation: its last writ
 ## Remove this test build
 
 Disable `RazKolbas` in MO2 for the current profile, or remove that mod through MO2. Preserve its INI first if it has been edited. No loose RazKolbas DLL/INI remains in game Data.
+
+## 0.1.1 observed game result
+
+Captured RTX 4080 SUPER (vendor 0x10de, device 0x2702), adapter LUID 00000000:000101a9, feature level 0xb000. Swap chain: 2560×1440, format 28, three buffers, one sample, swap effect 4, windowed, device flags 0x20. SKSE reports the plugin loaded correctly, handle 195. Installed DLL hash still matches the deployed artifact.
+
+ReShade 6.7.3 (dxgi.dll SHA-256 059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc) was active and independently logged the same adapter and swap-chain dimensions. Its log records unsupported ImGui version 18600 errors while registering Rumble and Sky Reflection Fix for Skyrim; these are separate add-on compatibility observations, not failures of RazKolbas device capture. No attribution to RazKolbas or proof that they predate this run is made. User settings were left unchanged.
+
+Full logs preserved in artifacts/local/skyrim-observer-smoke-2026-09-19-214521/. This proves the creation boundary and identity capture in this exact ENB/ReShade setup. It does not establish frame processing, resize handling, resource retirement, image quality, performance, or general compatibility with other versions. Next T05 work: verified frame and resize boundaries and resource lifecycle before provider integration.
