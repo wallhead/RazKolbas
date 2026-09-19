@@ -1,4 +1,5 @@
 #include "rk/RendererHook.hpp"
+#include "rk/SwapObserver.hpp"
 #include <algorithm>
 #include <cstring>
 #include <optional>
@@ -6,7 +7,7 @@ namespace rk {
 bool rendererObserverRequested(const Settings& settings) {
     return settings.get<bool>("General.Enabled") && !settings.get<bool>("General.SafeMode") &&
         settings.get<bool>("Patching.EnableVersionedPatches") && settings.get<bool>("Patching.ExperimentalPatches") &&
-        settings.get<Text>("Patching.DisabledPatchIds").value != rendererObserverPatchId;
+        !patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,rendererObserverPatchId);
 }
 const CreationImportProfile& skyrim1170CreationProfile() {
     static constexpr CreationImportProfile profile{

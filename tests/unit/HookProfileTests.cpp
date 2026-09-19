@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/RendererHook.hpp"
+#include "rk/SwapObserver.hpp"
 #include "rk/PointerPatch.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include <cstring>
@@ -132,4 +133,25 @@ TEST_CASE("Local Skyrim executable reproduces the compiled import profile withou
     const auto result=rk::validateCreationImport(mapped,expected.gameSha256,file.size(),expected);
     REQUIRE(std::holds_alternative<std::uint32_t>(result));
     REQUIRE(std::get<std::uint32_t>(result)==0x17502a0);
+}
+TEST_CASE("Local ReShade reproduces the swap-chain profile without executing vendor code", "[.local_swap_profile]") {
+    wchar_t path[32768]{};
+    const auto count=GetEnvironmentVariableW(L"RAZKOLBAS_RESHADE_TEST_FILE",path,32768);
+    if(!count||count>=32768)SKIP("Set RAZKOLBAS_RESHADE_TEST_FILE for the opt-in local audit");
+    std::ifstream stream(std::filesystem::path(path),std::ios::binary);REQUIRE(stream.good());
+    std::vector<std::uint8_t> file((std::istreambuf_iterator<char>(stream)),{});
+    const auto& expected=rk::reshade673SwapProfile();
+    REQUIRE(file.size()==expected.fileSize);REQUIRE(rk::sha256(file)==expected.hash);
+    IMAGE_DOS_HEADER dos{};std::memcpy(&dos,file.data(),sizeof(dos));
+    IMAGE_NT_HEADERS64 nt{};std::memcpy(&nt,file.data()+dos.e_lfanew,sizeof(nt));
+    std::vector<std::uint8_t> mapped(expected.imageSize);
+    REQUIRE(nt.OptionalHeader.SizeOfHeaders<=file.size());REQUIRE(nt.OptionalHeader.SizeOfHeaders<=mapped.size());
+    std::memcpy(mapped.data(),file.data(),nt.OptionalHeader.SizeOfHeaders);
+    for(std::size_t i=0;i<nt.FileHeader.NumberOfSections;++i) {
+        IMAGE_SECTION_HEADER s{};std::memcpy(&s,file.data()+dos.e_lfanew+sizeof(nt)+i*sizeof(s),sizeof(s));
+        REQUIRE(s.PointerToRawData<=file.size());REQUIRE(s.SizeOfRawData<=file.size()-s.PointerToRawData);
+        REQUIRE(s.VirtualAddress<=mapped.size());REQUIRE(s.SizeOfRawData<=mapped.size()-s.VirtualAddress);
+        std::memcpy(mapped.data()+s.VirtualAddress,file.data()+s.PointerToRawData,s.SizeOfRawData);
+    }
+    REQUIRE(std::get<bool>(rk::validateSwapTable(mapped,nt.OptionalHeader.ImageBase,expected.hash,file.size(),expected.tableRva,expected)));
 }

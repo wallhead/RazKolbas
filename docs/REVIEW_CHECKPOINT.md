@@ -35,3 +35,7 @@ No merge or push was requested. Preserve this local checkpoint branch and contin
 ## T05 renderer observer review
 
 The same reviewer found that DisabledPatchIds rejected every ID and was absent from installation gates. A failing configuration regression reproduced the issue; the real observer ID is now accepted and suppresses installation through the shared tested gate. Both Debug and Release pass all 12 groups. Actual Skyrim/ENB interception remains NOT RUN. Earlier native-host and NR creation test results remain distinct from this observer milestone.
+
+## T05 presentation observer review
+
+The checkpoint reviewer inspected the new forwarding, exact-profile validation, shared-vtable activation, partial rollback and callback lifetime paths against fa255e9. No actionable correctness defects found. Actual game behavior remains NOT RUN; independent Debug/Release13-group runs and the exact-file offline ReShade38-assertion audit passed.

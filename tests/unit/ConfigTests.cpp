@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/Settings.hpp"
 #include "rk/RendererHook.hpp"
+#include "rk/SwapObserver.hpp"
 #include <limits>
 #include <fstream>
 #include <Windows.h>
@@ -15,6 +16,9 @@ TEST_CASE("Renderer observer patch can be selectively disabled", "[config]") {
     settings.values["General.SafeMode"] = true;
     REQUIRE_FALSE(rk::rendererObserverRequested(settings));
     REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni("[Patching]\nDisabledPatchIds=unknown.patch\n")));
+    const auto both=rk::parseIni("[Patching]\nExperimentalPatches=true\nDisabledPatchIds=reshade673.swapchain-observe-v1, skyrim1170.device-create.observe-v1\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(both));
+    REQUIRE_FALSE(rk::rendererObserverRequested(std::get<rk::Settings>(both)));
 }
 
 TEST_CASE("Supplied INI parses through the same schema as defaults", "[config]") {

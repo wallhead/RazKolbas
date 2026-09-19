@@ -1,6 +1,7 @@
 #include "rk/RendererBootstrap.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
+#include "rk/SwapObserver.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 
 namespace rk {
 namespace {
@@ -17,6 +19,7 @@ struct ObserverLease {
     RendererObserved notification{};
     std::atomic<unsigned> observations{0};
     std::atomic<bool> armed{false};
+    bool allowSwap{};
 };
 // Process-lifetime lease: both callback DLL and prior owner's DLL are pinned.
 // SKSE can FreeLibrary during shutdown; reachable callback code must remain valid.
@@ -53,6 +56,100 @@ std::vector<std::uint8_t> snapshotModule(HMODULE module,std::size_t size) {
     }
     return result;
 }
+struct SwapLease {
+    std::array<PointerPatch,5> patches;
+    std::array<void*,5> originals{};
+    std::atomic<std::uint64_t> presents{0}, tests{0}, occluded{0}, failed{0}, resizes{0};
+};
+std::atomic<SwapLease*> swapLease{nullptr};
+std::mutex swapInstallMutex;
+void swapObserved(const SwapEvent& event) {
+    auto* state=swapLease.load(std::memory_order_acquire);
+    if(!state)return;
+    if(event.call==SwapCall::Release) {
+        if(!event.before&&!event.references)
+            spdlog::info("Swap object released: object=0x{:x}; process call totals: presents={}; tests={}; occluded={}; failed={}; resizes={}; no retained COM/backbuffer resources",
+                event.object,state->presents.load(),state->tests.load(),state->occluded.load(),state->failed.load(),state->resizes.load());
+        return;
+    }
+    if(event.call==SwapCall::Resize||event.call==SwapCall::Resize1) {
+        if(event.before)state->resizes.fetch_add(1);
+        spdlog::info("Swap {} {}: object=0x{:x}; requested={}x{}; buffers={}; format={}; flags=0x{:x}; HRESULT=0x{:08x}; thread={}",
+            event.call==SwapCall::Resize?"ResizeBuffers":"ResizeBuffers1",event.before?"begin":"end",
+            event.object,event.width,event.height,event.buffers,static_cast<unsigned>(event.format),event.flags,
+            static_cast<std::uint32_t>(event.result),GetCurrentThreadId());
+        return;
+    }
+    if(event.before)return;
+    const auto count=state->presents.fetch_add(1)+1;
+    if(event.flags&DXGI_PRESENT_TEST)state->tests.fetch_add(1);
+    if(event.result==DXGI_STATUS_OCCLUDED)state->occluded.fetch_add(1);
+    if(FAILED(event.result))state->failed.fetch_add(1);
+    if(count<=3||count%600==0)
+        spdlog::info("Swap {} observation #{}: object=0x{:x}; interval={}; flags=0x{:x}; HRESULT=0x{:08x}; testCalls={}; occluded={}; failed={}; thread={}; observation only",
+            event.call==SwapCall::Present?"Present":"Present1",count,event.object,event.interval,event.flags,
+            static_cast<std::uint32_t>(event.result),state->tests.load(),state->occluded.load(),state->failed.load(),GetCurrentThreadId());
+}
+ULONG WINAPI swapRelease(IUnknown* s) noexcept {
+    const auto* state=swapLease.load(std::memory_order_acquire);
+    return observeRelease(reinterpret_cast<ReleaseFn>(state->originals[0]),s,&swapObserved);
+}
+HRESULT WINAPI swapPresent(IDXGISwapChain* s,UINT interval,UINT flags) noexcept {
+    const auto* state=swapLease.load(std::memory_order_acquire);
+    return observePresent(reinterpret_cast<PresentFn>(state->originals[1]),s,interval,flags,&swapObserved);
+}
+HRESULT WINAPI swapResize(IDXGISwapChain* s,UINT count,UINT width,UINT height,DXGI_FORMAT format,UINT flags) noexcept {
+    const auto* state=swapLease.load(std::memory_order_acquire);
+    return observeResize(reinterpret_cast<ResizeFn>(state->originals[2]),s,count,width,height,format,flags,&swapObserved);
+}
+HRESULT WINAPI swapPresent1(IDXGISwapChain1* s,UINT interval,UINT flags,const DXGI_PRESENT_PARAMETERS* params) noexcept {
+    const auto* state=swapLease.load(std::memory_order_acquire);
+    return observePresent1(reinterpret_cast<Present1Fn>(state->originals[3]),s,interval,flags,params,&swapObserved);
+}
+HRESULT WINAPI swapResize1(IDXGISwapChain3* s,UINT count,UINT width,UINT height,DXGI_FORMAT format,UINT flags,const UINT* nodes,IUnknown* const* queues) noexcept {
+    const auto* state=swapLease.load(std::memory_order_acquire);
+    return observeResize1(reinterpret_cast<Resize1Fn>(state->originals[4]),s,count,width,height,format,flags,nodes,queues,&swapObserved);
+}
+Result<bool> installSwapObserver(IDXGISwapChain* swap) {
+    std::scoped_lock lock(swapInstallMutex);
+    if(swapLease.load())return false; // A process-lifetime installation is attempted only once after preparation.
+    auto** table=*reinterpret_cast<void***>(swap);
+    HMODULE owner=nullptr;
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,reinterpret_cast<LPCWSTR>(table),&owner))
+        return Error{ErrorCode::Unsupported,"Swap table is not owned by a loaded module"};
+    struct Reference { HMODULE value;~Reference(){FreeLibrary(value);} } reference{owner};
+    const auto identity=identify(owner);
+    const auto& profile=reshade673SwapProfile();
+    const auto base=reinterpret_cast<std::uintptr_t>(owner),address=reinterpret_cast<std::uintptr_t>(table);
+    if(identity.hash!=profile.hash||identity.size!=profile.fileSize||address<base||address-base!=profile.tableRva)
+        return Error{ErrorCode::Unsupported,"Unknown swap table identity/location; Present and resize unchanged"};
+    const auto mapped=snapshotModule(owner,profile.imageSize);
+    const auto checked=validateSwapTable(mapped,base,identity.hash,identity.size,static_cast<std::uint32_t>(address-base),profile);
+    if(const auto error=std::get_if<Error>(&checked))return *error;
+    const std::array<void*,5> replacements{reinterpret_cast<void*>(&swapRelease),reinterpret_cast<void*>(&swapPresent),
+        reinterpret_cast<void*>(&swapResize),reinterpret_cast<void*>(&swapPresent1),reinterpret_cast<void*>(&swapResize1)};
+    auto pending=std::make_unique<SwapLease>();
+    for(std::size_t i=0;i<profile.methods.size();++i)pending->originals[i]=reinterpret_cast<void*>(base+profile.methods[i].rva);
+    HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
+    constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    if(!GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(&swapPresent),&pinnedSelf)||
+       !GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))return Error{ErrorCode::Unavailable,"Cannot pin swap observer lifetimes"};
+    auto* published=pending.release();swapLease.store(published,std::memory_order_release);
+    for(std::size_t i=0;i<profile.methods.size();++i) {
+        const auto result=published->patches[i].apply(table+profile.methods[i].slot,published->originals[i],replacements[i]);
+        if(const auto error=std::get_if<Error>(&result)) {
+            // All callbacks independently forward; atomic restoration is safe for
+            // in-flight calls because state and both modules remain pinned.
+            for(std::size_t j=i;j>0;--j) {
+                const auto restored=published->patches[j-1].restore();
+                if(const auto problem=std::get_if<Error>(&restored);problem&&problem->code!=ErrorCode::Conflict)std::terminate();
+            }
+            return *error;
+        }
+    }
+    spdlog::info("Installed reshade673.swapchain-observe-v1: vtable RVA=0x{:x}; Present/Present1/ResizeBuffers/ResizeBuffers1/Release; process-lifetime pass-through; no retained resources",profile.tableRva);
+    return true;
+}
 void observed(const DeviceCreationArgs& args,HRESULT result) {
     auto* state=lease.load(std::memory_order_acquire);
     if (!state) return;
@@ -70,6 +167,10 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
     spdlog::info("Actual swap chain: {}x{}; format={}; buffers={}; samples={}; swapEffect={}; windowed={}; deviceFlags=0x{:x}",
         snapshot.width,snapshot.height,static_cast<unsigned>(snapshot.format),snapshot.bufferCount,snapshot.sampleCount,
         static_cast<unsigned>(snapshot.swapEffect),snapshot.windowed,snapshot.deviceFlags);
+    if(state->allowSwap) {
+        const auto hooked=installSwapObserver(*args.swapChain);
+        if(const auto error=std::get_if<Error>(&hooked))spdlog::warn("Swap observation not installed: {}",error->message);
+    } else spdlog::info("Swap observation disabled by patch ID");
     if (state->notification) state->notification(snapshot);
 }
 HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMODULE software,UINT flags,
@@ -122,6 +223,7 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
             return Error{ErrorCode::Conflict,"D3D11 export prologue changed; chain not verified"};
         auto pending=std::make_unique<ObserverLease>();
         pending->original=reinterpret_cast<CreateD3D11>(original); pending->notification=notification;
+        pending->allowSwap=!patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,swapObserverPatchId);
         HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
         constexpr DWORD pinFlags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
         if (!GetModuleHandleExW(pinFlags,reinterpret_cast<LPCWSTR>(&createProxy),&pinnedSelf) ||

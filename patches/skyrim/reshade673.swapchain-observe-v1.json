@@ -1,0 +1,23 @@
+{
+  "id": "reshade673.swapchain-observe-v1",
+  "status": "EXPERIMENTAL_OBSERVATION_ONLY",
+  "shipping_enabled": false,
+  "purpose": "Trace actual presentation, resize and object release without replacing rendering or retaining COM resources",
+  "target": {"module": "dxgi.dll (ReShade)", "version": "6.7.3.2150", "architecture": "x64", "sha256": "059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc", "file_size": 5157144, "image_size": "0x51c000"},
+  "location": {"kind": "shared DXGISwapChain vtable in non-executable readable section", "rva": "0x3d7f90"},
+  "methods": [
+    {"name": "Release", "slot": 2, "rva": "0x13b230", "prologue": "48895c24104889742418574883ec3048"},
+    {"name": "Present", "slot": 8, "rva": "0x13b360", "prologue": "48895c241048896c2418488974242057"},
+    {"name": "ResizeBuffers", "slot": 13, "rva": "0x13b7a0", "prologue": "48895c241048896c2418488974242057"},
+    {"name": "Present1", "slot": 22, "rva": "0x13bcc0", "prologue": "48895c241048896c2418565741544156"},
+    {"name": "ResizeBuffers1", "slot": 39, "rva": "0x13c060", "prologue": "44894c24204489442418555356574154"}
+  ],
+  "original": "Each aligned vtable pointer must equal loaded owner base plus the exact method RVA; live method prologue must match; all sites validated before any write",
+  "replacement": "Named swapRelease/swapPresent/swapResize/swapPresent1/swapResize1 callbacks; pointer CAS only; no code-byte replacement",
+  "abi": "Unmodified Windows x64 COM method ABI including this, Present1 parameters, ResizeBuffers1 node/queue arrays, original return and GetLastError; no instruction relocation",
+  "activation": "After successful exact-profile D3D11 creation and device identity checks; inherits experimental/SafeMode gates; suppressed by DisabledPatchIds; no loader-lock GPU work",
+  "lifetime": "Shared vtable applies to all objects of this exact wrapper class; modules and immutable forwarding state remain pinned for process lifetime; no saved COM object pointers or references",
+  "recovery": "On partial install failure restore acquired slots by owner-aware CAS in reverse order, retain state/modules for in-flight callbacks and later chains; fatal if non-conflict restoration fails. Normal removal uses process exit and next-launch patch disable",
+  "evidence": ["docs/re/SWAPCHAIN_TRACE.md", "tests/unit/SwapObserverTests.cpp", "tests/integration/RendererCaptureTests.cpp", "tests/unit/HookProfileTests.cpp [.local_swap_profile]"],
+  "game_runtime": "NOT RUN; exact shared table and callback invocation must be confirmed in the next Skyrim test"
+}

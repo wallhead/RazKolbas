@@ -1,0 +1,23 @@
+# Presentation and resize observer — T05 continuation
+
+0.1.2 adds pass-through Present, Present1, ResizeBuffers, ResizeBuffers1 and Release observation for the exact local ReShade 6.7.3 wrapper. It remains optional: an absent, updated or differently hooked wrapper is rejected while the earlier device observer and native rendering remain available. This profile does not make ReShade a required dependency for future SR/FG/NR.
+
+## Recovered locations
+
+The pristine local `D:/TESV_EX/dxgi.dll` has SHA-256 `059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc`. It was inspected without loading it into a probe. RIP-relative references to its own ResizeBuffers and ResizeBuffers1 diagnostic strings (RVAs `0x3d7cd0` and `0x3d7e40`) occur at `0x13b7de` and `0x13c0ba`. PE exception-function records contain them in functions starting at `0x13b7a0` and `0x13c060`. Searching initialized data for both function addresses independently identifies the same table `0x3d7f90`, at documented COM slots 13 and 39. The other methods follow the IDXGISwapChain interface layout. Exact addresses, entry bytes and sizes are in the patch descriptor.
+
+ReShade's corresponding source corroborates the wrapper's ownership and method semantics: [DXGISwapChain source, v6.7.3](https://github.com/crosire/reshade/blob/v6.7.3/source/dxgi/dxgi_swapchain.cpp). Present invokes effect processing before forwarding to the underlying swap chain. These observers wrap that entire method; their location is **not** evidence of a Skyrim world/pre-UI/SR boundary. No effects are invoked manually or duplicated by RazKolbas.
+
+## Lifetime and forwarding
+
+Every original is called once with unchanged arguments. Observer exceptions cannot change arguments, last error, return status or output pointers. Present test/occlusion/failure counts are separate; call totals are not source-frame IDs. Resize begins and ends are logged with the real result, including errors and zero dimensions; no fake success or automatic resource recreation is introduced. Release's returned count is logged only when zero, using an opaque integer captured before the call; no object is dereferenced after destruction.
+
+All five sites are prepared and checked before mutation. Each atomic slot patch is independently valid during activation and reverse rollback; immutable original pointers are published first. Code, table owner and forwarding state remain resident even after a failed attempt. No COM object, backbuffer, render target or device context is retained. This milestone therefore does not establish the resource-generation/retirement contract needed for actual processing.
+
+The shared table affects every wrapper instance in this exact module, and logs include object addresses only as opaque correlation tokens. It is never replaced by a shortened shadow table. Future resource ownership must distinguish recreated instances rather than interpreting an address as persistent identity.
+
+## Validation
+
+Unit regressions were observed failing before forwarding/profile/disable-list implementation. They cover ABI arguments and pointer arrays, original failure/status/last error, observer exceptions, unknown hash, wrong extent/table, changed pointer/prologue, executable table section, malformed header and no writes on rejection. Real D3D11 WARP tests exercise live vtable replacement/restoration, unchanged COM identity, failed resize with an externally retained backbuffer, eight successful resizes after release, and a real zero-count Release. The opt-in `.local_swap_profile` test checks the exact local file hash and validates an owned mapped byte copy without executing ReShade.
+
+Game Present/resize/Release callback execution for 0.1.2: **NOT RUN**. The preceding 0.1.1 game run proved only creation capture with ENB and ReShade. Next launch through the same MO2 profile, reach the menu and load a save, play briefly, then exit normally. Resize is separately NOT RUN unless an actual resize callback appears; do not change the modlist or video configuration merely to force it.
