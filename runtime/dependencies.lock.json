@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "sources": {
+    "commonlib": {"repository": "https://github.com/CharmedBaryon/CommonLibSSE-NG.git", "commit": "d51fa0938bf53f829ff83a144079136f0d4a2f18", "version": "3.6.0", "use": "SKSE headers; no engine relocation use in native host"},
+    "fmt": {"repository": "https://github.com/fmtlib/fmt.git", "commit": "e69e5f977d458f2650bb346dadf2ad30c5320281", "version": "10.2.1"},
+    "spdlog": {"repository": "https://github.com/gabime/spdlog.git", "commit": "27cb4c76708608465c413f6d0e6b8d99a4d84302", "version": "1.14.1"},
+    "catch2": {"repository": "https://github.com/catchorg/Catch2.git", "commit": "56809e5282f104c5c8b570e7c2996cdc352d94f1", "version": "3.8.1"},
+    "imgui": {"repository": "https://github.com/ocornut/imgui.git", "commit": "f5befd2d29e66809cd1110a152e375a7f1981f06", "version": "1.91.9b", "use": "reserved for T10"},
+    "zydis": {"repository": "https://github.com/zyantific/zydis.git", "commit": "a2278f1d254e492f6a6b39f6cb5d1f5d515659dc", "version": "4.1.1", "use": "instruction decoder for T04"},
+    "detours": {"repository": "https://github.com/microsoft/Detours.git", "commit": "e4bfd6b03e50de46b47abfbd1e46b384f0c5f833", "version": "4.0.1", "use": "reserved for verified engine detours"}
+  },
+  "ini": "RazKolbas-owned schema and parser, versioned in this repository",
+  "reference_source": {"repository": "https://github.com/jarari/fo4test.git", "commit": "0347ce28a17a580ff3ffcd1865aacb86ecc8b072"},
+  "compiler_observed": {"msvc_toolset": "14.44.35207", "visual_studio": "17.14.37216.2", "cmake": "3.31.6-msvc6", "windows_sdk": "10.0.26100.0"},
+  "vendor_production_sdks": {"status": "NOT_SELECTED", "reason": "Reference identities verified separately; headers/runtime contracts require T08/T11/T13/T14 investigation. No production ABI is inferred from a filename."}
+}
