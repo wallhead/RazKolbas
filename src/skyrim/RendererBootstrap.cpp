@@ -2,6 +2,8 @@
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include "rk/SwapObserver.hpp"
+#include "rk/FrameProbeRuntime.hpp"
+#include "rk/FrameProbe.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -57,6 +59,7 @@ std::vector<std::uint8_t> snapshotModule(HMODULE module,std::size_t size) {
     return result;
 }
 struct SwapLease {
+    std::string_view profileId;
     std::array<PointerPatch,5> patches;
     std::array<void*,5> originals{};
     std::atomic<std::uint64_t> presents{0}, tests{0}, occluded{0}, failed{0}, resizes{0};
@@ -80,7 +83,13 @@ void swapObserved(const SwapEvent& event) {
             static_cast<std::uint32_t>(event.result),GetCurrentThreadId());
         return;
     }
-    if(event.before)return;
+    if(event.before) {
+        if(!(event.flags&DXGI_PRESENT_TEST)&&frameProbeBoundary(state->profileId,event.call)) {
+            try { probePresentCandidates(reinterpret_cast<IDXGISwapChain*>(event.object)); }
+            catch(const std::exception& error) { spdlog::warn("Candidate probe aborted: {}",error.what()); }
+        }
+        return;
+    }
     const auto count=state->presents.fetch_add(1)+1;
     if(event.flags&DXGI_PRESENT_TEST)state->tests.fetch_add(1);
     if(event.result==DXGI_STATUS_OCCLUDED)state->occluded.fetch_add(1);
@@ -150,6 +159,7 @@ Result<bool> installSwapObserver(IDXGISwapChain* swap,std::string_view disabledP
     const std::array<void*,5> replacements{reinterpret_cast<void*>(&swapRelease),reinterpret_cast<void*>(&swapPresent),
         reinterpret_cast<void*>(&swapResize),reinterpret_cast<void*>(&swapPresent1),reinterpret_cast<void*>(&swapResize1)};
     auto pending=std::make_unique<SwapLease>();
+    pending->profileId=profile.id;
     for(std::size_t i=0;i<profile.methodCount;++i)pending->originals[i]=reinterpret_cast<void*>(base+profile.methods[i].rva);
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
@@ -222,6 +232,7 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto mapped=snapshotModule(game,profile.imageSize);
         const auto checked=validateCreationImport(mapped,identity.hash,identity.size,profile);
         if (const auto error=std::get_if<Error>(&checked)) return *error;
+        armFrameProbe(game);
         auto** slot=reinterpret_cast<void**>(reinterpret_cast<std::uint8_t*>(game)+std::get<std::uint32_t>(checked));
         // Read without writing the IAT page. CAS in PointerPatch revalidates the
         // prior owner atomically after all identity/ABI checks are complete.
