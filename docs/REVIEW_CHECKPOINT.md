@@ -39,3 +39,5 @@ The same reviewer found that DisabledPatchIds rejected every ID and was absent f
 ## T05 presentation observer review
 
 The checkpoint reviewer inspected the new forwarding, exact-profile validation, shared-vtable activation, partial rollback and callback lifetime paths against fa255e9. No actionable correctness defects found. Actual game behavior remains NOT RUN; independent Debug/Release13-group runs and the exact-file offline ReShade38-assertion audit passed.
+
+0.1.4 ENB outer-owner profile review: no actionable findings. Verified selected-profile disable checks and exactly3ENB methods vs5ReShade methods. Debug/Release13groups, offlineENB30/ReShade38 assertions passed. Game behavior tested separately by parent.

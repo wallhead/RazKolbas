@@ -33,3 +33,7 @@ The 0.1.3 trace at22:19:30 resolves the rejection: the table returned to Skyrim 
 The new ENB profile touches only base-interface slots2/8/13. No assumption is made that this table exposes Present1 or ResizeBuffers1. ENB Present handles test calls separately and forwards to an underlying interface; ResizeBuffers similarly calls the underlying slot. RazKolbas forwards to ENB once and preserves its existing behavior. ENB Release returns an underlying reference count, so the observer reports only 'Release returned zero', not proof of wrapper destruction.
 
 Profiles are selected by exact owner hash and table location, with per-profile disable IDs. The disabled ReShade ID does not suppress the distinct ENB profile. Lifecycle and atomic rollback remain as previously tested. The user explicitly authorized automated game launch/close; use the selected MO2 SKSE entry, because direct loader execution would omit the managed mod's virtual filesystem. The supplied typed loader path was absent; verified loader is D:/TESV_EX/skse64_loader.exe.
+
+## 0.1.4 runtime result
+
+ENB profile installed22:28:03; at least15000 Present calls completed with failed0 by22:30:31. Menu verified, game closed via targeted Alt+F4 and process absence confirmed. Both ENB/ReShade active. No resize or Release-zero logged: NOT OBSERVED. See ../SKYRIM_SMOKE_TEST.md. All13Debug/Release groups and both offline file audits passed.

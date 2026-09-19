@@ -1,6 +1,13 @@
 # Skyrim native-host test installation
 
-## Current installed test: 0.1.3 swap-table provenance
+## Current installed test: 0.1.4 ENB outer swap-chain observer
+
+Installed at22:27 from0cc7e75, enabled MO2 mod, preserved INI. DLL SHA25624580a3b91cc4d860a6f89bc87ff70bd8aa085857fe0d8f454fc39c97ce8e070. Package D:/TESV_EX/MO2/downloads/RazKolbas-0.1.4-enb-swap-observer-0cc7e75.zip, SHA2561dbd9cd418e0e0e8847e8f24263236a6fe3091a8a294a54ae99fb931dc13b458. Prior DLL/INI/meta backed up in artifacts/local/enb-swap-observer-install-2026-09-19-222713/. Record artifacts/local/enb-swap-observer-install.json.
+
+All13 CTest groups pass in Debug and Release; exact-file offline ENB audit30 assertions and ReShade audit38 assertions pass. Reviewer reports no actionable issues. Runtime Present observation PASS: automatically launched through the existing MO2 SKSE entry under the user's explicit launch/close authorization. No save loading or changes to game settings are needed for this presentation check.
+
+
+## Previous test: 0.1.3 swap-table provenance
 
 Installed at22:15 from source defa3a2. All13 Debug/Release CTest groups PASS. This is a read-only diagnostic addition to explain the 0.1.2 mismatch, not a fix or relaxed profile. Next user test: main menu and exit only, keeping ENB/ReShade enabled. Probe result NOT RUN.
 
@@ -81,3 +88,11 @@ Full logs preserved in artifacts/local/skyrim-observer-smoke-2026-09-19-214521/.
 The requested user test completed; Skyrim was absent afterward. Fresh SKSE logs show 0.1.2 loaded correctly. At 22:09:33 the device observer captured the RTX4080 SUPER and 2560×1440 swap chain, then rejected its table with `Unknown swap table identity/location`. ReShade remained active. This is a fallback result, not presentation-hook success. Logs are preserved under `artifacts/local/skyrim-swap-smoke-2026-09-19-220916/`.
 
 The rejection message did not report which owner or table was actually returned. 0.1.3 adds read-only provenance logging: table owner's exact hash/size/RVA and the module hash/size/RVA for base-interface Release, Present and ResizeBuffers slots. It does not relax matching, guess extended-interface slots or patch a new owner. One short menu/exit run is sufficient to collect this missing evidence; loading a save is unnecessary for this probe.
+
+## 0.1.4 automated game result
+
+MO2 launch started at22:27; SKSE loaded0.1.4 and installed the exact ENB outer-table profile at22:28:03. Present observations began22:28:08. The final periodic record at22:30:31 counts15000 completed Present calls, with testCalls0, occluded0, failed0 and original HRESULT0. Observation occurred on the initial renderer thread26968 and later thread26024; counters are atomic and do not imply a fixed render-thread identity or simulation-frame count.
+
+The game reached its main menu, verified through computer-use screenshots; ENB and ReShade remained enabled. Menu click/keyboard navigation did not reliably select Quit, so the game was closed through the targeted window's Alt+F4 action. The window disappeared and a separate process query confirmed zero SkyrimSE processes. No forced process termination or save loading occurred. No ResizeBuffers or zero-count Release event was logged; those game paths remain NOT OBSERVED, and resource retirement is not claimed.
+
+Logs preserved in artifacts/local/skyrim-enb-swap-smoke-2026-09-19-222746/. Installed DLL hash still matches the0.1.4 build. ReShade's existing Rumble/Sky Reflection Fix ImGui18600 mismatch messages remain separate observations. The test establishes the correct outer presentation boundary for this exact ENB/ReShade setup, not pre-UI/world capture, pixel-equivalent screenshots, resize compatibility or working SR/FG/NR.
