@@ -1,6 +1,13 @@
 # Skyrim native-host test installation
 
-## Current installed test: 0.1.2 presentation/resize observer
+## Current installed test: 0.1.3 swap-table provenance
+
+Installed at22:15 from source defa3a2. All13 Debug/Release CTest groups PASS. This is a read-only diagnostic addition to explain the 0.1.2 mismatch, not a fix or relaxed profile. Next user test: main menu and exit only, keeping ENB/ReShade enabled. Probe result NOT RUN.
+
+Package: D:/TESV_EX/MO2/downloads/RazKolbas-0.1.3-swap-provenance-defa3a2.zip. DLL SHA256 c09516bfe89c20aa61b6db78fa084bf50b99de5941eaaf1a1c4693439477e67d; ZIP SHA256 b6259ee12c5e795895c4b4ccbd3dd661f6828eb36b2851cc1977169b496410be. INI unchanged. Previous DLL/INI/meta backup: artifacts/local/swap-provenance-install-2026-09-19-221546/. Complete record: artifacts/local/swap-provenance-install.json. Installed files, archive layout, enabled mod and absence of loose plugin verified.
+
+
+## Previous test: 0.1.2 presentation/resize observer
 
 Installed September 19 at 22:07 from source `691b0eb`, after confirming Skyrim was stopped. The enabled MO2 mod was updated; its existing INI was preserved byte for byte, with experimental observation already enabled. ENB/ReShade files and settings were not changed. Archive layout and installed hashes were verified, with no loose game Data plugin.
 
