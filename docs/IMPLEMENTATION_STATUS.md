@@ -4,7 +4,7 @@
 
 The complete T01–T24 plan in `../RazKolbas_Codex_Handoff/docs/plans/2026-09-19-razkolbas-implementation.md` remains the target. This checkpoint is not a product completion claim.
 
-Current local validation: all 10 CTest groups pass in Debug and Release. Counts below for earlier stages describe their original milestone runs. No Skyrim installation or MO2 test profile has been selected, so game validation remains NOT RUN.
+Current local validation: all 10 CTest groups pass in Debug and Release. Counts below for earlier stages describe their original milestone runs. The user selected `D:/TESV_EX` for testing (their typed `D:/TESV/_EX` did not exist). Release DLL/INI are installed as loose Data files; current MO2 profile is `TRUE AE V5.32 EXTENDED + OSTIM`. Game validation remains NOT RUN pending the user's launch. See `SKYRIM_SMOKE_TEST.md`.
 
 | Task | Implementation | Build/test | Game/GPU |
 |---|---|---|---|
@@ -35,4 +35,4 @@ Current local validation: all 10 CTest groups pass in Debug and Release. Counts 
 
 ## Next action
 
-T04: finish production patch descriptors and engine detour/quiescence integration; T05 needs the user-selected Skyrim test installation and exact executable hash. Independent T08 next probe: recover evaluation/resource/temporal contracts and evaluate a known image with fenced GPU readback. Parameter factory and feature 0x12 creation now execute successfully. See `re/NR_BOOTSTRAP.md`, including the community runtime's invalid embedded signature and the measured direct-loading compatibility route. T07 same-adapter interop remains an independent open task. No SR, FG, ENB, ReShade, ImGui or NR image output is implemented or advertised.
+T04: finish production patch descriptors and engine detour/quiescence integration. T05 now has the selected Skyrim 1.6.1170 installation and recorded executable hash; collect the user's native-host smoke-test logs, then recover/verify rendering integration for that executable. Independent T08 next probe: recover evaluation/resource/temporal contracts and evaluate a known image with fenced GPU readback. Parameter factory and feature 0x12 creation now execute successfully. See `re/NR_BOOTSTRAP.md`, including the community runtime's invalid embedded signature and the measured direct-loading compatibility route. T07 same-adapter interop remains an independent open task. No SR, FG, ENB, ReShade, ImGui or NR image output is implemented or advertised.
