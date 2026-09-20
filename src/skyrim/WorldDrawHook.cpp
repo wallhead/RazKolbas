@@ -13,6 +13,9 @@
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
 #include "rk/RenderSizePolicy.hpp"
+#include "rk/RendererBootstrap.hpp"
+#include "rk/NativeFlipTarget.hpp"
+#include "rk/NativeUiRedirector.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/SdrDlssPresenter.hpp"
@@ -74,6 +77,7 @@ struct WorldState {
     SdrDlssPresenter sdrPresenter;
     SdrDlssPresenter srPresenter;
     std::array<std::optional<SdrSrFrameResult>,3> srFallbacks;
+    std::vector<SdrSrFrameResult> ownedFallbacks;
     bool srRequested{};
     bool srDisabled{};
     bool nativePresenterStoppedForSr{};
@@ -356,6 +360,115 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
 void afterOriginal(void*,std::uint32_t) noexcept {
     active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
 }
+#ifdef RK_WITH_NGX
+bool processOwnedWorldFrame(WorldState* state,void* world,
+    std::uint64_t sequence) noexcept {
+    auto* domain=activeOwnedSceneDomain();
+    if(!domain)return ownedScenePreviouslyActive();
+    if(domain->phase()==ScenePhase::Suspended)return true;
+    try {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(!numbers.valid||numbers.lockOwner!=GetCurrentThreadId()||
+           numbers.lockRecursion<=0||
+           numbers.device!=state->createdDevice.load(std::memory_order_acquire)||
+           numbers.context!=state->createdContext.load(std::memory_order_acquire)||
+           numbers.swap!=state->createdSwap.load(std::memory_order_acquire)||
+           !numbers.motion||!numbers.depth||
+           domain->phase()!=ScenePhase::World||domain->frame()!=sequence)
+            throw std::runtime_error("Owned world frame, renderer lock or guide chain differs");
+        auto* device=reinterpret_cast<ID3D11Device*>(numbers.device);
+        auto* context=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
+        auto* swap=reinterpret_cast<IDXGISwapChain*>(numbers.swap);
+        auto* ui=ownedUiRedirector();
+        if(!ui||ui->compatibilityFault())
+            throw std::runtime_error("Owned UI context layout changed");
+        for(auto it=state->ownedFallbacks.begin();it!=state->ownedFallbacks.end();) {
+            const auto completed=it->complete(context);
+            if(const auto error=std::get_if<Error>(&completed))
+                throw std::runtime_error(error->message);
+            if(std::get<bool>(completed))it=state->ownedFallbacks.erase(it);
+            else ++it;
+        }
+        if(!domain->startProcessing(sequence,domain->plan().generation))
+            throw std::runtime_error("Owned world phase did not enter processing");
+        auto native=acquireNativeFlipTarget(swap,device,domain->plan().display);
+        if(const auto error=std::get_if<Error>(&native))
+            throw std::runtime_error(error->message);
+        auto* scene=activeOwnedSceneTexture();
+        if(!ui||!scene||FAILED(ui->replaceNativeTarget(
+            std::get<NativeFlipTarget>(native).view.Get())))
+            throw std::runtime_error("Owned native UI target is unavailable");
+        if(FAILED(ui->bindNativeForProcessing(sequence)))
+            throw std::runtime_error("Owned native output could not be bound for processing");
+        auto* display=std::get<NativeFlipTarget>(native).texture.Get();
+        const auto presented=presentSdrSrFrame(context,scene,display,
+            [&]()->Result<bool> {
+                const std::array<ID3D11Texture2D*,3> sources{
+                    scene,reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                    reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
+                auto prepared=prepareSdrSrInputsFromOwnedScene(context,sources,
+                    domain->plan().display.width,domain->plan().display.height);
+                if(const auto error=std::get_if<Error>(&prepared))
+                    return Error{ErrorCode::Unavailable,error->message};
+                state->srSourceVerified.store(true,std::memory_order_release);
+                const auto displayJitter=readNgxJitter(state->jitterCamera,
+                    domain->plan().display.width,domain->plan().display.height);
+                if(const auto error=std::get_if<Error>(&displayJitter))
+                    return Error{ErrorCode::Unavailable,error->message};
+                const auto jitter=std::get<NgxJitter>(displayJitter);
+                const NgxJitter renderJitter{
+                    jitter.x*domain->plan().render.width/domain->plan().display.width,
+                    jitter.y*domain->plan().render.height/domain->plan().display.height};
+                auto evaluated=state->srPresenter.evaluatePrepared(device,context,
+                    std::move(std::get<PreparedSrInputs>(prepared)),
+                    SrFrameMetadata{sequence,domain->plan().generation,false},renderJitter);
+                if(const auto error=std::get_if<Error>(&evaluated)) {
+                    if(error->code==ErrorCode::DeviceRemoved)return *error;
+                    return Error{ErrorCode::Unavailable,error->message};
+                }
+                const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
+                if(!token)return false;
+                return state->srPresenter.publishEvaluated(context,*token,display);
+            });
+        if(const auto error=std::get_if<Error>(&presented))
+            throw std::runtime_error(error->message);
+        auto outcome=std::move(std::get<SdrSrFrameResult>(presented));
+        if(outcome.mode()==SdrSrFrameMode::Provider) {
+            state->displayedMode.store(DisplayMode::DlssSr,std::memory_order_release);
+            state->statusDlssFrames.store(state->srPresenter.submittedFrames(),
+                std::memory_order_relaxed);
+        } else {
+            state->displayedMode.store(DisplayMode::SpatialFallback,std::memory_order_release);
+            state->ownedFallbacks.emplace_back(std::move(outcome));
+            ++state->srSkipped;
+        }
+        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
+            throw std::runtime_error("Owned native UI publication or context compatibility failed");
+        state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
+        state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
+        state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
+        if(sequence<=3||sequence%600==0)
+            spdlog::info("Owned world frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; UI native",
+                sequence,domain->plan().render.width,domain->plan().render.height,
+                domain->plan().display.width,domain->plan().display.height,
+                std::get<NativeFlipTarget>(native).index,
+                static_cast<unsigned>(state->displayedMode.load(std::memory_order_relaxed)),
+                state->srPresenter.submittedFrames(),state->ownedFallbacks.size());
+    } catch(const std::exception& error) {
+        state->srDisabled=true;
+        state->statusDlssDisabled.store(true,std::memory_order_release);
+        domain->suspend();
+        try {spdlog::warn("Owned world SR suspended after frame {}: {}",sequence,error.what());}
+        catch(...) {}
+    } catch(...) {
+        state->srDisabled=true;
+        state->statusDlssDisabled.store(true,std::memory_order_release);
+        domain->suspend();
+        try {spdlog::warn("Owned world SR suspended after frame {}",sequence);}catch(...) {}
+    }
+    return true;
+}
+#endif
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     const auto sequence=state->forwarded.load(std::memory_order_relaxed)+1;
@@ -363,6 +476,9 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
     state->forwarder.dispatch(world,flags);
     state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
+#ifdef RK_WITH_NGX
+    if(processOwnedWorldFrame(state,world,sequence))return;
+#endif
     std::array<float,4> drsRatios{};
     const bool drsRead=state->jitterCamera&&
         read(state->jitterCamera+0x104,drsRatios.data(),sizeof(drsRatios));
@@ -884,6 +1000,12 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
     snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);
     snapshot.dlssDisabled=state->statusDlssDisabled.load(std::memory_order_relaxed);
+    if(auto* domain=activeOwnedSceneDomain()) {
+        snapshot.ownedSceneActive=true;
+        snapshot.renderWidth=domain->plan().render.width;
+        snapshot.renderHeight=domain->plan().render.height;
+        snapshot.engineDrsKnown=true;
+    }
     return snapshot;
 }
 void probePresentationTargets(IDXGISwapChain* swap) noexcept {
@@ -951,6 +1073,34 @@ void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
     state->createdContext.store(reinterpret_cast<std::uintptr_t>(context),std::memory_order_relaxed);
     state->createdSwap.store(reinterpret_cast<std::uintptr_t>(swap),std::memory_order_relaxed);
     state->createdDevice.store(reinterpret_cast<std::uintptr_t>(device),std::memory_order_release);
+}
+Result<Extent> prepareWorldOwnedSrPlan(ID3D11Device* device,
+    ID3D11DeviceContext* context,Extent display) {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!state->srRequested||!device||!context||!display.valid()||
+       state->createdDevice.load(std::memory_order_acquire)!=
+           reinterpret_cast<std::uintptr_t>(device)||
+       state->createdContext.load(std::memory_order_acquire)!=
+           reinterpret_cast<std::uintptr_t>(context))
+        return Error{ErrorCode::Unsupported,"Owned world SR is not requested on this renderer"};
+    return state->srPresenter.prepareReducedPlan(device,context,display);
+#else
+    (void)device;(void)context;(void)display;
+    return Error{ErrorCode::Unsupported,"NVIDIA SDR SR runtime is not built"};
+#endif
+}
+Result<bool> abandonWorldOwnedSrPlan(ID3D11DeviceContext* context) {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!context||state->createdContext.load(std::memory_order_acquire)!=
+        reinterpret_cast<std::uintptr_t>(context))
+        return Error{ErrorCode::InvalidInput,"Owned world SR context differs"};
+    return state->srPresenter.stop(context);
+#else
+    (void)context;
+    return false;
+#endif
 }
 Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedGameHash,
     const Settings& settings) {

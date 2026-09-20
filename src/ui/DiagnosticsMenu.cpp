@@ -51,7 +51,8 @@ void updateMouse(HWND window,ImGuiIO& io) {
 void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
     const char* hotkeyName) {
     const char* mode=status.mode==DisplayMode::Dlaa?"DLAA":
-        status.mode==DisplayMode::DlssSr?"DLSS Super Resolution":"Native";
+        status.mode==DisplayMode::DlssSr?"DLSS Super Resolution":
+        status.mode==DisplayMode::SpatialFallback?"Spatial upscaling":"Native";
     ImGui::SetNextWindowPos(ImVec2(32,32),ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(370,0),ImGuiCond_FirstUseEver);
     if(ImGui::Begin("RazKolbas  |  Diagnostics",nullptr,
@@ -64,12 +65,15 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
         ImGui::Text("DLSS Super Resolution: %s",
             status.mode==DisplayMode::DlssSr?"On":"Off");
         ImGui::Text("Reduced scene source: %s",status.srSourceReady?
-            "verified for this ratio":status.srRequested?"awaiting same-frame proof":"not requested");
+            "ready":status.ownedSceneActive?"active; guides pending":
+            status.srRequested?"awaiting same-frame proof":"not requested");
         ImGui::Text("Native display: %u x %u",width,height);
         if(status.engineDrsKnown) {
-            ImGui::Text("Skyrim DRS target: %u x %u",
+            ImGui::Text("%s: %u x %u",status.ownedSceneActive?
+                "Owned render target":"Skyrim DRS target",
                 status.renderWidth,status.renderHeight);
-            ImGui::Text("Skyrim scale: %.1f%% x %.1f%%",
+            ImGui::Text("%s: %.1f%% x %.1f%%",status.ownedSceneActive?
+                "Owned scale":"Skyrim scale",
                 width?100.0f*static_cast<float>(status.renderWidth)/width:0.0f,
                 height?100.0f*static_cast<float>(status.renderHeight)/height:0.0f);
         } else ImGui::TextDisabled("Skyrim DRS target: unavailable");
@@ -81,7 +85,7 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
             static_cast<unsigned long long>(status.worldFrames));
         ImGui::Text("DLSS submissions: %llu",
             static_cast<unsigned long long>(status.dlssFrames));
-        ImGui::Text("Native fallback frames: %llu",
+        ImGui::Text("SR fallback frames: %llu",
             static_cast<unsigned long long>(status.skippedFrames));
         if(status.dlssDisabled)ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
             "DLSS disabled for this session");

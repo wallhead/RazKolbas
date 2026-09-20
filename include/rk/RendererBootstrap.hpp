@@ -13,6 +13,9 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
     OwnedSceneDomain& domain,ID3D11Texture2D* reducedScene,
     ID3D11RenderTargetView* nativeTarget,std::string_view disabledPatchIds);
 NativeUiRedirector* ownedUiRedirector() noexcept;
+OwnedSceneDomain* activeOwnedSceneDomain() noexcept;
+ID3D11Texture2D* activeOwnedSceneTexture() noexcept;
+bool ownedScenePreviouslyActive() noexcept;
 // The verified Renderer::Begin CALL is installed pass-through at startup.
 // Logical reduction is enabled only after the complete owned scene route is
 // prepared at the device-creation boundary.

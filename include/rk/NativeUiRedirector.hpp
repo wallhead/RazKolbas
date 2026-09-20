@@ -23,6 +23,9 @@ public:
         ID3D11RenderTargetView* nativeRtv) noexcept;
     // Select the native flip buffer for this frame before UI publication.
     HRESULT replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept;
+    // Move output binding to the current native target before DLSS publication
+    // or spatial fallback, while retaining the Processing phase.
+    HRESULT bindNativeForProcessing(std::uint64_t frame) noexcept;
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
@@ -31,10 +34,11 @@ public:
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
         const D3D11_VIEWPORT* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
-    void releaseAfterRetirement() noexcept;
+    void releaseAfterRetirement(bool unbindNative=false) noexcept;
 private:
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
+    void bindNativeTarget() noexcept;
     OwnedSceneDomain& route_;
     UiContextNext next_{};
     DWORD thread_{};

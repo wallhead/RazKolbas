@@ -546,3 +546,22 @@ nearby read-only callback cell at the SKSE startup boundary. The callback
 continues to return the native rectangle until the complete owned route is
 activated. Its patch contract and the ENB UI slot contract are recorded in
 `patches/skyrim/`. The Release DLL builds; neither hook has run in Skyrim.
+
+0.1.36 source candidate: the device-creation callback now stages the owned
+route before Skyrim's verified view-cache `GetBuffer` return. It requires a
+current native flip target, a reduced plan from the same NGX presenter that
+will evaluate, an owned reduced SDR texture, the exact ENB UI context hooks
+and the exact renderer rectangle hook before atomically arming the selected
+ReShade buffer alias. Only the one verified Skyrim caller receives that
+alias; ENB and RazKolbas requests remain native. At the post-world callback,
+the candidate copies reduced colour and coherent guides, binds the current
+native RTV for DLSS evaluation or same-frame spatial fallback, and moves
+cached UI bindings to native resolution only after a display image is queued.
+Before a same-thread ResizeBuffers call it retires its native RTV and reverts
+to pass-through until restart. A combined WARP fixture caught an invalid
+output-binding order and now passes reduced input, spatial publication,
+native UI remapping and GPU retirement. The Release build and 35 CTest groups
+pass. **No 0.1.36 Skyrim run has occurred; actual alias acceptance, reduced
+scene pixels, NGX submissions, ENB/ReShade placement, UI behavior and resize
+remain NOT RUN.** The installed MO2 build remains 0.1.35 until package
+deployment below.

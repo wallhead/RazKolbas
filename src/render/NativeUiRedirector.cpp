@@ -68,10 +68,7 @@ HRESULT NativeUiRedirector::replaceNativeTarget(ID3D11RenderTargetView* nativeRt
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     return S_OK;
 }
-HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
-    const auto owner=route_.renderThread()?route_.renderThread():thread_;
-    if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
-       !route_.enterUi(frame,generation_,true))return E_UNEXPECTED;
+void NativeUiRedirector::bindNativeTarget() noexcept {
     auto* view=nativeRtv_.Get();next_.om(context_.Get(),1,&view,nullptr);
     const auto display=route_.plan().display;
     const D3D11_VIEWPORT viewport{0,0,static_cast<float>(display.width),
@@ -80,6 +77,20 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const D3D11_RECT scissor{0,0,static_cast<LONG>(display.width),
         static_cast<LONG>(display.height)};
     context_->RSSetScissorRects(1,&scissor);
+}
+HRESULT NativeUiRedirector::bindNativeForProcessing(std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||!nativeRtv_||generation_!=route_.plan().generation||
+       route_.phase()!=ScenePhase::Processing||route_.frame()!=frame||
+       GetCurrentThreadId()!=owner)return E_UNEXPECTED;
+    bindNativeTarget();
+    return S_OK;
+}
+HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
+       !route_.enterUi(frame,generation_,true))return E_UNEXPECTED;
+    bindNativeTarget();
     return S_OK;
 }
 bool NativeUiRedirector::eligible(ID3D11DeviceContext* context) const noexcept {
@@ -123,7 +134,9 @@ void NativeUiRedirector::onRSSetViewports(ID3D11DeviceContext* context,
     }
     next_.viewport(context,count,views);
 }
-void NativeUiRedirector::releaseAfterRetirement() noexcept {
+void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
+    if(unbindNative&&context_&&nativeRtv_&&next_.om&&nativeBound())
+        next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;
 }

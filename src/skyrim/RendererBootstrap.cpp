@@ -11,6 +11,7 @@
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/OwnedSwapBufferRoute.hpp"
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/NativeFlipTarget.hpp"
 #include "rk/RendererLogicalSize.hpp"
 #include "rk/RipCall6.hpp"
 #include <spdlog/spdlog.h>
@@ -49,10 +50,19 @@ std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
 struct BufferTraceLease {
     PointerPatch patch;
     SwapGetBufferFn next{};
+    IDXGISwapChain* selectedSwap{}; // retained by the route before activation
+    IDXGISwapChain* outerSwap{}; // identity only; renderer owns the swap
+    std::unique_ptr<OwnedSwapBufferRoute> route;
+    std::uintptr_t gameBase{};
+    std::string gameHash;
+    std::atomic<bool> ownedArmed{false};
     std::atomic<unsigned> calls{0};
 };
 std::atomic<BufferTraceLease*> bufferTrace{nullptr};
 std::atomic_flag bufferTraceAttempted=ATOMIC_FLAG_INIT;
+OwnedSceneDomain ownedDomain;
+std::atomic<bool> ownedEverActive{false};
+std::atomic<DWORD> ownedFrameThread{0};
 struct UiHookLease {
     explicit UiHookLease(OwnedSceneDomain& domain) noexcept:redirect(domain) {}
     PointerPatch omPatch,viewportPatch;
@@ -62,6 +72,7 @@ struct UiHookLease {
 };
 std::atomic<UiHookLease*> uiHook{nullptr};
 std::mutex uiInstallMutex;
+std::mutex uiDispatchMutex;
 struct RectHookLease {
     RendererLogicalSize::Prior prior{};
     std::unique_ptr<NearRipCall6Cell> cell;
@@ -79,12 +90,14 @@ BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
     const auto phase=domain.phase();
     if(phase==ScenePhase::Dormant||phase==ScenePhase::NativeUi) {
         const auto frame=worldDrawForwardedCalls()+1;
-        domain.begin(frame,domain.plan().generation,GetCurrentThreadId());
+        if(domain.begin(frame,domain.plan().generation,GetCurrentThreadId()))
+            ownedFrameThread.store(GetCurrentThreadId(),std::memory_order_release);
     }
     return logical->query(window,rect);
 }
 void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
+    std::scoped_lock lock(uiDispatchMutex);
     auto* state=uiHook.load(std::memory_order_acquire);
     if(!state)return;
     if(state->armed.load(std::memory_order_acquire))
@@ -93,11 +106,19 @@ void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
 }
 void STDMETHODCALLTYPE uiViewportProxy(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) noexcept {
+    std::scoped_lock lock(uiDispatchMutex);
     auto* state=uiHook.load(std::memory_order_acquire);
     if(!state)return;
     if(state->armed.load(std::memory_order_acquire))
         state->redirect.onRSSetViewports(context,count,views);
     else state->next.viewport(context,count,views);
+}
+void releasePreparedUiHook(bool unbindNative=false) noexcept {
+    std::scoped_lock lock(uiDispatchMutex);
+    if(auto* state=uiHook.load(std::memory_order_acquire)) {
+        state->armed.store(false,std::memory_order_release);
+        state->redirect.releaseAfterRetirement(unbindNative);
+    }
 }
 struct FileIdentity { std::string hash; std::size_t size; };
 FileIdentity identify(HMODULE module) {
@@ -176,7 +197,10 @@ HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
     auto* state=bufferTrace.load(std::memory_order_acquire);
     if(!state||!state->next)return E_UNEXPECTED;
     const auto caller=_ReturnAddress();
-    const auto result=state->next(swap,index,iid,output);
+    const auto owned=state->ownedArmed.load(std::memory_order_acquire);
+    const auto result=owned?state->route->getBufferForCaller(
+        reinterpret_cast<std::uintptr_t>(caller),state->gameBase,state->gameHash,
+        swap,index,iid,output):state->next(swap,index,iid,output);
     const auto sequence=state->calls.fetch_add(1,std::memory_order_relaxed)+1;
     if(sequence<=64) {
         try {
@@ -191,12 +215,12 @@ HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
                 reinterpret_cast<IUnknown*>(*output)->QueryInterface(IID_PPV_ARGS(&texture));
             D3D11_TEXTURE2D_DESC desc{};
             if(texture)texture->GetDesc(&desc);
-            spdlog::info("Nested GetBuffer #{}: swap=0x{:x}; index={}; IID.Data1=0x{:08x}; callerModule={}; callerRVA=0x{:x}; HRESULT=0x{:08x}; texture={}x{}; pass-through",
+            spdlog::info("Nested GetBuffer #{}: swap=0x{:x}; index={}; IID.Data1=0x{:08x}; callerModule={}; callerRVA=0x{:x}; HRESULT=0x{:08x}; texture={}x{}; ownedRouteArmed={}",
                 sequence,reinterpret_cast<std::uintptr_t>(swap),index,
                 iid.Data1,
                 std::filesystem::path(name).filename().string(),
                 owner?reinterpret_cast<std::uintptr_t>(caller)-reinterpret_cast<std::uintptr_t>(owner):0,
-                static_cast<std::uint32_t>(result),desc.Width,desc.Height);
+                static_cast<std::uint32_t>(result),desc.Width,desc.Height,owned);
         } catch(...) {
             try {spdlog::warn("Nested GetBuffer trace #{} unavailable",sequence);} catch(...) {}
         }
@@ -224,6 +248,7 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     if(bufferTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     auto pending=std::make_unique<BufferTraceLease>();
     pending->next=reinterpret_cast<SwapGetBufferFn>(base+site.methodRva);
+    pending->selectedSwap=swap;
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&swapGetBufferTrace),&pinnedSelf)||
@@ -334,6 +359,22 @@ struct SwapLease {
 };
 std::atomic<SwapLease*> swapLease{nullptr};
 std::mutex swapInstallMutex;
+void retireOwnedSceneForResize(std::uintptr_t swap) noexcept {
+    auto* trace=bufferTrace.load(std::memory_order_acquire);
+    if(!trace||!trace->ownedArmed.load(std::memory_order_acquire)||
+       reinterpret_cast<std::uintptr_t>(trace->outerSwap)!=swap)return;
+    const auto owner=ownedFrameThread.load(std::memory_order_acquire);
+    if(owner&&owner!=GetCurrentThreadId()) {
+        try {spdlog::warn("Owned scene resize cannot retire on another render thread; native RTV retained");}
+        catch(...) {}
+        return;
+    }
+    trace->ownedArmed.store(false,std::memory_order_release);
+    ownedDomain.suspend();
+    releasePreparedUiHook(true);
+    try {spdlog::warn("Owned scene retired before ResizeBuffers; native forwarding until next game launch");}
+    catch(...) {}
+}
 void swapObserved(const SwapEvent& event) {
     auto* state=swapLease.load(std::memory_order_acquire);
     if(!state)return;
@@ -344,7 +385,10 @@ void swapObserved(const SwapEvent& event) {
         return;
     }
     if(event.call==SwapCall::Resize||event.call==SwapCall::Resize1) {
-        if(event.before)state->resizes.fetch_add(1);
+        if(event.before) {
+            state->resizes.fetch_add(1);
+            retireOwnedSceneForResize(event.object);
+        }
         spdlog::info("Swap {} {}: object=0x{:x}; requested={}x{}; buffers={}; format={}; flags=0x{:x}; HRESULT=0x{:08x}; thread={}",
             event.call==SwapCall::Resize?"ResizeBuffers":"ResizeBuffers1",event.before?"begin":"end",
             event.object,event.width,event.height,event.buffers,static_cast<unsigned>(event.format),event.flags,
@@ -454,6 +498,85 @@ Result<bool> installSwapObserver(IDXGISwapChain* swap,std::string_view disabledP
     spdlog::info("Installed {}: vtable RVA=0x{:x}; methods={}; process-lifetime pass-through; no retained resources",profile.id,profile.tableRva,profile.methodCount);
     return true;
 }
+void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
+    const RendererSnapshot& snapshot,std::string_view disabledPatchIds) noexcept {
+#ifdef RK_WITH_NGX
+    auto* trace=bufferTrace.load(std::memory_order_acquire);
+    if(!trace||!trace->selectedSwap||trace->ownedArmed.load(std::memory_order_acquire)||
+       !rectHook.load(std::memory_order_acquire)||
+       !args.device||!*args.device||!args.context||!*args.context||
+       !args.swapChain||!*args.swapChain)return;
+    const Extent display{snapshot.width,snapshot.height};
+    auto* device=*args.device;
+    auto* context=*args.context;
+    auto* swap=*args.swapChain;
+    bool sessionAttempted=false;
+    bool committed=false;
+    try {
+        auto native=acquireNativeFlipTarget(swap,device,display);
+        if(const auto error=std::get_if<Error>(&native)) {
+            spdlog::warn("Owned scene preparation deferred: {}",error->message);return;
+        }
+        sessionAttempted=true;
+        auto plan=prepareWorldOwnedSrPlan(device,context,display);
+        if(const auto error=std::get_if<Error>(&plan)) {
+            spdlog::info("Owned scene plan unavailable: {}",error->message);
+            abandonWorldOwnedSrPlan(context);
+            return;
+        }
+        const auto render=std::get<Extent>(plan);
+        auto surface=createReducedSdrSurface(device,display,render);
+        if(const auto error=std::get_if<Error>(&surface))
+            throw std::runtime_error(error->message);
+        auto route=std::make_unique<OwnedSwapBufferRoute>();
+        if(FAILED(route->configure(trace->selectedSwap,trace->next,
+            std::move(std::get<ReducedSdrSurface>(surface)),1)))
+            throw std::runtime_error("Verified ReShade swap rejected reduced alias");
+        if(!ownedDomain.configure({render,display,1}))
+            throw std::runtime_error("Owned world phase plan rejected");
+        const auto ui=installOwnedUiContextHooks(context,ownedDomain,
+            route->sceneTexture(),std::get<NativeFlipTarget>(native).view.Get(),
+            disabledPatchIds);
+        if(const auto error=std::get_if<Error>(&ui))
+            throw std::runtime_error(error->message);
+        if(!std::get<bool>(ui))
+            throw std::runtime_error("Verified ENB UI context hook disabled");
+        DXGI_SWAP_CHAIN_DESC chain{};
+        if(FAILED(swap->GetDesc(&chain))||!chain.OutputWindow)
+            throw std::runtime_error("Owned game window unavailable");
+        trace->route=std::move(route);
+        trace->outerSwap=swap;
+        trace->gameBase=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        trace->gameHash=std::string(skyrim1170CreationProfile().gameSha256);
+        const auto rect=activateOwnedRendererRect(ownedDomain,chain.OutputWindow);
+        if(const auto error=std::get_if<Error>(&rect))
+            throw std::runtime_error(error->message);
+        if(!std::get<bool>(rect))
+            throw std::runtime_error("Owned renderer rectangle was already activated");
+        trace->ownedArmed.store(true,std::memory_order_release);
+        ownedEverActive.store(true,std::memory_order_release);
+        committed=true;
+        try {spdlog::info("Owned scene route armed before Skyrim view-cache GetBuffer: render={}x{} display={}x{}; native flip index={}; UI/rect hooks prepared",
+            render.width,render.height,display.width,display.height,
+            std::get<NativeFlipTarget>(native).index);}catch(...) {}
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Owned scene preparation failed; alias remains native: {}",error.what());}
+        catch(...) {}
+        if(!committed)releasePreparedUiHook();
+        if(sessionAttempted&&!committed) {
+            const auto stopped=abandonWorldOwnedSrPlan(context);
+            if(const auto problem=std::get_if<Error>(&stopped))
+                try {spdlog::warn("Owned scene NGX teardown failed: {}",problem->message);}catch(...) {}
+        }
+    } catch(...) {
+        try {spdlog::warn("Owned scene preparation failed; alias remains native");}catch(...) {}
+        if(!committed)releasePreparedUiHook();
+        if(sessionAttempted&&!committed)abandonWorldOwnedSrPlan(context);
+    }
+#else
+    (void)args;(void)snapshot;(void)disabledPatchIds;
+#endif
+}
 void observed(const DeviceCreationArgs& args,HRESULT result) {
     auto* state=lease.load(std::memory_order_acquire);
     if (!state) return;
@@ -481,6 +604,7 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
         const auto hooked=installSwapObserver(*args.swapChain,state->disabledPatchIds);
         if(const auto error=std::get_if<Error>(&hooked))spdlog::warn("Swap observation not installed: {}",error->message);
     }
+    if(sequence==1)prepareOwnedSceneAtCreation(args,snapshot,state->disabledPatchIds);
     if (state->notification) state->notification(snapshot);
 }
 HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMODULE software,UINT flags,
@@ -561,8 +685,8 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
             return *error;
         }
         published->armed.store(true,std::memory_order_release);
-        spdlog::info("Installed verified ENB UI context slots {} and {}; dormant until owned NativeUi phase",
-            omSite.id,viewportSite.id);
+        try {spdlog::info("Installed verified ENB UI context slots {} and {}; dormant until owned NativeUi phase",
+            omSite.id,viewportSite.id);}catch(...) {}
         return true;
     } catch(const std::exception& error) {
         return Error{ErrorCode::Unavailable,
@@ -572,6 +696,18 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
 NativeUiRedirector* ownedUiRedirector() noexcept {
     auto* state=uiHook.load(std::memory_order_acquire);
     return state&&state->armed.load(std::memory_order_acquire)?&state->redirect:nullptr;
+}
+OwnedSceneDomain* activeOwnedSceneDomain() noexcept {
+    auto* state=bufferTrace.load(std::memory_order_acquire);
+    return state&&state->ownedArmed.load(std::memory_order_acquire)?&ownedDomain:nullptr;
+}
+ID3D11Texture2D* activeOwnedSceneTexture() noexcept {
+    auto* state=bufferTrace.load(std::memory_order_acquire);
+    return state&&state->ownedArmed.load(std::memory_order_acquire)?
+        state->route->sceneTexture():nullptr;
+}
+bool ownedScenePreviouslyActive() noexcept {
+    return ownedEverActive.load(std::memory_order_acquire);
 }
 Result<bool> installOwnedRendererRectHook(HMODULE game,
     std::string_view verifiedGameHash,const Settings& settings) {
@@ -630,8 +766,8 @@ Result<bool> installOwnedRendererRectHook(HMODULE game,
         delete published;
         return *error;
     }
-    spdlog::info("Installed {} at RVA 0x{:x}; User32 forwarding until owned scene activation",
-        id,descriptor.siteRva);
+    try {spdlog::info("Installed {} at RVA 0x{:x}; User32 forwarding until owned scene activation",
+        id,descriptor.siteRva);}catch(...) {}
     return true;
 }
 Result<bool> activateOwnedRendererRect(OwnedSceneDomain& domain,HWND gameWindow) {

@@ -102,7 +102,8 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
     boundResource=viewResource(bound.Get());
     REQUIRE(identity(boundResource.Get()).Get()==identity(nextNative.Get()).Get());
-    context->OMSetRenderTargets(0,nullptr,nullptr);
     bound.Reset();boundResource.Reset();
-    route.suspend();redirect.releaseAfterRetirement();
+    route.suspend();redirect.releaseAfterRetirement(true);
+    context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
+    REQUIRE(bound==nullptr);
 }

@@ -6,7 +6,7 @@
 #include <string_view>
 
 namespace rk {
-enum class DisplayMode : std::uint8_t { Native, Dlaa, DlssSr };
+enum class DisplayMode : std::uint8_t { Native, Dlaa, DlssSr, SpatialFallback };
 
 // A snapshot of what was submitted on the most recent source frame.
 struct DiagnosticsSnapshot {
@@ -15,7 +15,7 @@ struct DiagnosticsSnapshot {
     std::uint32_t displayWidth{},displayHeight{};
     std::uint64_t worldFrames{},dlssFrames{},skippedFrames{};
     bool dlssDisabled{},skyrimTaaActive{true},engineDrsKnown{},dlaaSuspendedByDrs{};
-    bool srRequested{},srSourceReady{};
+    bool srRequested{},srSourceReady{},ownedSceneActive{};
 };
 
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept;
