@@ -63,6 +63,8 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
         ImGui::Text("DLAA: %s",status.mode==DisplayMode::Dlaa?"On":"Off");
         ImGui::Text("DLSS Super Resolution: %s",
             status.mode==DisplayMode::DlssSr?"On":"Off");
+        ImGui::Text("Reduced scene source: %s",status.srSourceReady?
+            "verified for this ratio":status.srRequested?"awaiting same-frame proof":"not requested");
         ImGui::Text("Native display: %u x %u",width,height);
         if(status.engineDrsKnown) {
             ImGui::Text("Skyrim DRS target: %u x %u",
@@ -86,7 +88,6 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
         ImGui::Separator();
         ImGui::TextDisabled("Skyrim TAA: %s",
             status.skyrimTaaActive?"still enabled":"off");
-        ImGui::TextDisabled("Reduced DLSS SR: not active in this build");
     }
     ImGui::End();
 }

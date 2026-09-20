@@ -1,7 +1,9 @@
 #pragma once
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace rk {
 struct EngineDrsTarget { std::uint32_t width{},height{}; };
@@ -24,4 +26,10 @@ private:
     unsigned consecutive_{};
     bool hasTuple_{},emitted_{};
 };
+// A conservative one-frame check for a reduced SDR image in the top-left
+// rectangle of a display-sized allocation. Rejects a detailed image outside
+// the rectangle, which would indicate that the SDR source was already enlarged.
+bool reducedSdrRegionLooksUnscaled(std::span<const std::uint8_t> rgba,
+    std::uint32_t displayWidth,std::uint32_t displayHeight,std::size_t rowBytes,
+    std::uint32_t renderWidth,std::uint32_t renderHeight) noexcept;
 }

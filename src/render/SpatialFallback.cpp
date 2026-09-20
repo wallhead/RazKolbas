@@ -85,14 +85,14 @@ SpatialFallbackFrame::SpatialFallbackFrame(Microsoft::WRL::ComPtr<ID3D11Texture2
     source_(std::move(source)),output_(std::move(output)),
     completion_(std::move(completion)),width_(width),height_(height) {}
 Result<bool> SpatialFallbackFrame::complete(ID3D11DeviceContext* context) const {
-    if(!context||!completion_||!source_||!output_)
+    if(!context||!completion_||!source_)
         return Error{ErrorCode::InvalidInput,"Fallback frame or context is incomplete"};
-    ComPtr<ID3D11Device> contextDevice,outputDevice;
+    ComPtr<ID3D11Device> contextDevice,sourceDevice;
     context->GetDevice(&contextDevice);
-    output_->GetDevice(&outputDevice);
-    ComPtr<IUnknown> contextIdentity,outputIdentity;
-    if(!contextDevice||!outputDevice||FAILED(contextDevice.As(&contextIdentity))||
-       FAILED(outputDevice.As(&outputIdentity))||contextIdentity.Get()!=outputIdentity.Get())
+    source_->GetDevice(&sourceDevice);
+    ComPtr<IUnknown> contextIdentity,sourceIdentity;
+    if(!contextDevice||!sourceDevice||FAILED(contextDevice.As(&contextIdentity))||
+       FAILED(sourceDevice.As(&sourceIdentity))||contextIdentity.Get()!=sourceIdentity.Get())
         return Error{ErrorCode::Conflict,"Fallback completion uses another device"};
     const auto status=context->GetData(completion_.Get(),nullptr,0,D3D11_ASYNC_GETDATA_DONOTFLUSH);
     if(status==S_FALSE)return false;
@@ -199,8 +199,10 @@ Result<SpatialFallbackFrame> produceSdrSpatialFallbackToDisplay(
             output.Width,output.Height);const auto error=std::get_if<Error>(&rendered))
         return *error;
     context->End(completion.Get());
+    // D3D11 retains the draw target for submitted commands; the result must
+    // not hold the swap buffer across ResizeBuffers.
     return SpatialFallbackFrame{ComPtr<ID3D11Texture2D>(source),
-        ComPtr<ID3D11Texture2D>(display),std::move(completion),
+        {},std::move(completion),
         output.Width,output.Height};
 }
 }

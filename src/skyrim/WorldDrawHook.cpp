@@ -6,6 +6,7 @@
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
 #include "rk/SrInput.hpp"
+#include "rk/SdrSrPresentation.hpp"
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
 #include "rk/DiagnosticsMenu.hpp"
@@ -24,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <filesystem>
 #include <wrl/client.h>
@@ -53,6 +55,9 @@ struct WorldState {
     std::atomic<bool> drsSuppressed{false};
     std::mutex drsTupleMutex;
     StableDrsTupleGate drsTupleGate;
+    std::atomic<bool> srSourceVerified{false};
+    UINT srVerifiedWidth{},srVerifiedHeight{};
+    std::uint64_t srGeneration{};
     std::mutex stagePairMutex;
     std::optional<StagePairCapture> stagePair;
     std::uint64_t stagePairFrame{};
@@ -66,6 +71,14 @@ struct WorldState {
     OffscreenDlssProbe dlssProbe;
     bool probeFailed{};
     SdrDlssPresenter sdrPresenter;
+    SdrDlssPresenter srPresenter;
+    std::array<std::optional<SdrSrFrameResult>,3> srFallbacks;
+    bool srRequested{};
+    bool srDisabled{};
+    bool nativePresenterStoppedForSr{};
+    UINT srWidth{},srHeight{};
+    std::uint64_t srActiveGeneration{};
+    std::uint64_t srSkipped{};
     bool sdrDisabled{},firstSdrCaptured{};
     std::uint64_t sdrSkipped{},sdrJitterSkipped{};
 #endif
@@ -368,12 +381,14 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                 drsRatios[0],drsRatios[1],drsRatios[2],drsRatios[3],drsRead); } catch(...) {}
         }
     } else if(state->drsSuppressed.exchange(false,std::memory_order_acq_rel)) {
+        state->srSourceVerified=false;
 #ifdef RK_WITH_NGX
         state->sdrPresenter.requestReset();
 #endif
         try { spdlog::info("Engine DRS ratios returned to native; DLAA history reset"); } catch(...) {}
     }
     if(stableDrsGeneration&&!nativeRatios) {
+        state->srSourceVerified=false;
         const bool settled=std::abs(drsRatios[0]-drsRatios[2])<=0.0001f&&
             std::abs(drsRatios[1]-drsRatios[3])<=0.0001f;
         try { spdlog::info("Engine DRS tuple stable: generation={} worldFrame={} current=({},{}), previous=({},{}), settled={}; post-world diagnostic only",
@@ -400,21 +415,47 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                         motion.Width,motion.Height,static_cast<unsigned>(motion.Format),
                         depth.Width,depth.Height,static_cast<unsigned>(depth.Format),
                         viewport.Width,viewport.Height,viewport.TopLeftX,viewport.TopLeftY);
+                    Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+                    const auto got=numbers.swap?
+                        reinterpret_cast<IDXGISwapChain*>(numbers.swap)->GetBuffer(0,
+                            IID_PPV_ARGS(&backbuffer)):E_INVALIDARG;
+                    if(FAILED(got)||!backbuffer)
+                        throw std::runtime_error("SDR world source backbuffer unavailable");
+                    D3D11_TEXTURE2D_DESC display{};backbuffer->GetDesc(&display);
                     const std::array<ID3D11Texture2D*,3> guides{
-                        colourSource,motionSource,depthSource};
+                        backbuffer.Get(),motionSource,depthSource};
                     const auto captured=readbackCandidates(immediate,guides,48*1024*1024);
                     if(const auto error=std::get_if<Error>(&captured))
                         spdlog::warn("Engine DRS same-frame guide readback unavailable: {}",error->message);
                     else {
                         const auto& images=std::get<std::vector<ProbeImage>>(captured);
-                        const auto sampled=sampleWorldDepth(images[2].pixels,
-                            images[2].descriptor.Width,images[2].descriptor.Height,
-                            images[2].rowBytes);
+                        const auto target=engineDrsTarget(display.Width,display.Height,
+                            drsRatios[0],drsRatios[1]);
+                        const bool matchingGuides=target&&
+                            display.Format==DXGI_FORMAT_R8G8B8A8_UNORM&&
+                            motion.Width==display.Width&&motion.Height==display.Height&&
+                            depth.Width==display.Width&&depth.Height==display.Height;
+                        const auto sampled=matchingGuides?
+                            sampleWorldDepth(images[2].pixels,target->width,target->height,
+                                images[2].rowBytes):Result<DepthSampleStats>{
+                                    Error{ErrorCode::Conflict,"DRS guide extents differ"}};
                         const auto depthStats=std::get_if<DepthSampleStats>(&sampled);
-                        spdlog::info("Engine DRS same-frame guides: generation={} worldFrame={} colourSHA256={} motionSHA256={} depthSHA256={} depthDistinct={} depthNonFar={}; post-world pixels, producer phase unverified",
+                        const bool reducedColour=matchingGuides&&
+                            reducedSdrRegionLooksUnscaled(images[0].pixels,
+                                display.Width,display.Height,images[0].rowBytes,
+                                target->width,target->height);
+                        state->srSourceVerified=reducedColour&&depthStats&&
+                            depthStats->worldLike();
+                        if(state->srSourceVerified) {
+                            state->srVerifiedWidth=target->width;
+                            state->srVerifiedHeight=target->height;
+                            state->srGeneration=*stableDrsGeneration;
+                        }
+                        spdlog::info("Engine DRS same-frame guides: generation={} worldFrame={} sdrColourSHA256={} motionSHA256={} depthSHA256={} depthDistinct={} depthNonFar={} reducedColour={} SRSourceAccepted={}; post-world pixels",
                             *stableDrsGeneration,sequence,sha256(images[0].pixels),
                             sha256(images[1].pixels),sha256(images[2].pixels),
-                            depthStats?depthStats->distinct:0,depthStats?depthStats->nonFar:0);
+                            depthStats?depthStats->distinct:0,depthStats?depthStats->nonFar:0,
+                            reducedColour,state->srSourceVerified.load(std::memory_order_relaxed));
                     }
                 } catch(const std::exception& error) {
                     try { spdlog::warn("Engine DRS stable guide diagnostic failed: {}",error.what()); } catch(...) {}
@@ -524,9 +565,168 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     }
 #endif
 #ifdef RK_WITH_NGX
+    {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&
+           numbers.lockRecursion>0&&
+           numbers.context==state->createdContext.load(std::memory_order_acquire)) {
+            auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
+            for(auto& pending:state->srFallbacks)if(pending) {
+                const auto retired=pending->complete(immediate);
+                if(const auto error=std::get_if<Error>(&retired)) {
+                    state->srDisabled=true;
+                    try { spdlog::warn("Reduced SR fallback retirement failed: {}; resources retained",
+                        error->message); } catch(...) {}
+                    break;
+                }
+                if(std::get<bool>(retired))pending.reset();
+            }
+        }
+    }
+    bool fallbackCapacity=false;
+    for(const auto& pending:state->srFallbacks)fallbackCapacity|=!pending;
+    const bool reducedRatios=drsRead&&!nativeRatios&&
+        std::abs(drsRatios[0]-drsRatios[2])<=0.0001f&&
+        std::abs(drsRatios[1]-drsRatios[3])<=0.0001f;
+    if(state->srRequested&&reducedRatios&&!fallbackCapacity) {
+        state->srPresenter.requestReset();
+        ++state->srSkipped;
+    }
+    if(state->srRequested&&!state->srDisabled&&fallbackCapacity&&
+       !drsProbeHasRun()&&
+       reducedRatios&&state->srSourceVerified) {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+           numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+           numbers.context==state->createdContext.load(std::memory_order_relaxed)&&
+           numbers.swap==state->createdSwap.load(std::memory_order_relaxed)&&
+           numbers.motion&&numbers.depth) {
+            try {
+                auto* device=reinterpret_cast<ID3D11Device*>(numbers.device);
+                auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+                if(FAILED(reinterpret_cast<IDXGISwapChain*>(numbers.swap)->GetBuffer(0,
+                    IID_PPV_ARGS(&backbuffer)))||!backbuffer)
+                    throw std::runtime_error("Reduced SR display backbuffer unavailable");
+                D3D11_TEXTURE2D_DESC display{};backbuffer->GetDesc(&display);
+                const auto target=engineDrsTarget(display.Width,display.Height,
+                    drsRatios[0],drsRatios[1]);
+                if(target&&target->width==state->srVerifiedWidth&&
+                   target->height==state->srVerifiedHeight&&
+                   target->width<display.Width&&target->height<display.Height) {
+                    if(!state->nativePresenterStoppedForSr) {
+                        const auto stopped=state->sdrPresenter.stop(immediate);
+                        if(const auto error=std::get_if<Error>(&stopped))
+                            throw std::runtime_error(error->message);
+                        state->nativePresenterStoppedForSr=std::get<bool>(stopped);
+                    }
+                    if(state->nativePresenterStoppedForSr) {
+                    if(state->srActiveGeneration&&
+                       (state->srActiveGeneration!=state->srGeneration||
+                        state->srWidth!=target->width||state->srHeight!=target->height)) {
+                        const auto stopped=state->srPresenter.stop(immediate);
+                        if(const auto error=std::get_if<Error>(&stopped))
+                            throw std::runtime_error(error->message);
+                        if(std::get<bool>(stopped))state->srActiveGeneration=0;
+                    }
+                    if(!state->srActiveGeneration) {
+                        state->srActiveGeneration=state->srGeneration;
+                        state->srWidth=target->width;state->srHeight=target->height;
+                    }
+                    if(state->srActiveGeneration==state->srGeneration) {
+                        const auto jitter=readNgxJitter(state->jitterCamera,
+                            display.Width,display.Height);
+                        if(const auto error=std::get_if<Error>(&jitter))
+                            throw std::runtime_error(error->message);
+                        const auto displayJitter=std::get<NgxJitter>(jitter);
+                        const NgxJitter renderJitter{
+                            displayJitter.x*target->width/display.Width,
+                            displayJitter.y*target->height/display.Height};
+                        const std::array<ID3D11Texture2D*,3> sources{
+                            backbuffer.Get(),
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
+                        auto prepared=prepareSdrSrInputsFromRegion(immediate,sources,
+                            SrSourceRegion{0,0,target->width,target->height},
+                            display.Width,display.Height);
+                        if(const auto error=std::get_if<Error>(&prepared))
+                            throw std::runtime_error(error->message);
+                        auto frame=std::move(std::get<PreparedSrInputs>(prepared));
+                        Microsoft::WRL::ComPtr<ID3D11Texture2D> preserved=frame.color();
+                        const auto presented=presentSdrSrFrame(immediate,preserved.Get(),
+                            backbuffer.Get(),[&]()->Result<bool> {
+                                const auto evaluated=state->srPresenter.evaluatePrepared(device,
+                                    immediate,std::move(frame),
+                                    SrFrameMetadata{sequence,state->srGeneration,false},
+                                    renderJitter);
+                                if(const auto error=std::get_if<Error>(&evaluated))return *error;
+                                const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
+                                if(!token)return false;
+                                return state->srPresenter.publishEvaluated(immediate,*token,
+                                    backbuffer.Get());
+                            });
+                        if(const auto error=std::get_if<Error>(&presented))
+                            throw std::runtime_error(error->message);
+                        auto outcome=std::move(std::get<SdrSrFrameResult>(presented));
+                        if(outcome.mode()==SdrSrFrameMode::Provider) {
+                            state->displayedMode.store(DisplayMode::DlssSr,
+                                std::memory_order_release);
+                            const auto count=state->srPresenter.submittedFrames();
+                            state->statusDlssFrames.store(
+                                state->sdrPresenter.submittedFrames()+count,
+                                std::memory_order_relaxed);
+                            if(count==1||count%600==0)
+                                spdlog::info("Reduced DLSS SR displayed: worldFrame={} generation={} source={}x{} display={}x{} submissions={} jitter=({},{}); UI follows",
+                                    sequence,state->srGeneration,target->width,target->height,
+                                    display.Width,display.Height,count,renderJitter.x,renderJitter.y);
+                        } else {
+                            state->srPresenter.requestReset();
+                            ++state->srSkipped;
+                            for(auto& pending:state->srFallbacks)if(!pending) {
+                                pending.emplace(std::move(outcome));
+                                break;
+                            }
+                            if(state->srSkipped==1||state->srSkipped%600==0)
+                                spdlog::warn("Reduced DLSS SR unavailable; current-frame spatial fallback displayed: worldFrame={} skipped={}",
+                                    sequence,state->srSkipped);
+                        }
+                    }
+                    }
+                }
+            } catch(const std::exception& error) {
+                state->srDisabled=true;
+                try { spdlog::warn("Reduced DLSS SR disabled; native frame retained: {}",
+                    error.what()); } catch(...) {}
+            } catch(...) {
+                state->srDisabled=true;
+                try { spdlog::warn("Reduced DLSS SR disabled; native frame retained"); } catch(...) {}
+            }
+        }
+    }
+    bool srRetiredForNative=true;
+    if(nativeRatios&&state->nativePresenterStoppedForSr) {
+        srRetiredForNative=false;
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&
+           numbers.lockRecursion>0&&
+           numbers.context==state->createdContext.load(std::memory_order_acquire)) {
+            const auto stopped=state->srPresenter.stop(
+                reinterpret_cast<ID3D11DeviceContext*>(numbers.context));
+            if(const auto error=std::get_if<Error>(&stopped)) {
+                state->srDisabled=true;
+                try { spdlog::warn("Reduced SR teardown failed; native frame retained: {}",
+                    error->message); } catch(...) {}
+            } else if(std::get<bool>(stopped)) {
+                state->srActiveGeneration=0;
+                state->nativePresenterStoppedForSr=false;
+                srRetiredForNative=true;
+            }
+        }
+    }
     if(drsProbeHasRun())
         state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
-    if(state->completedOutput&&!state->sdrDisabled&&!drsProbeHasRun()&&nativeRatios) {
+    if(state->completedOutput&&!state->sdrDisabled&&!drsProbeHasRun()&&
+       nativeRatios&&srRetiredForNative) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
         if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
            numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
@@ -606,9 +806,11 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             }
         }
     }
-    state->statusSkippedFrames.store(state->sdrSkipped+state->sdrJitterSkipped,
+    state->statusSkippedFrames.store(state->sdrSkipped+state->sdrJitterSkipped+
+        state->srSkipped,
         std::memory_order_relaxed);
-    state->statusDlssDisabled.store(state->sdrDisabled,std::memory_order_relaxed);
+    state->statusDlssDisabled.store(state->sdrDisabled||state->srDisabled,
+        std::memory_order_relaxed);
 #endif
     if(!sample)return;
     const auto after=readWorldNumbers(world,state->expectedRenderer);
@@ -621,16 +823,17 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
         if(SUCCEEDED(reinterpret_cast<IDXGISwapChain*>(after.swap)->GetBuffer(0,
             IID_PPV_ARGS(&backbuffer)))&&backbuffer)backbuffer->GetDesc(&display);
-        try { spdlog::info("Experimental DRS extent map: kMAIN={}x{} format={}; motion={}x{} format={}; depth={}x{} format={}; display={}x{} format={}; DLSS SR not submitted",
+        try { spdlog::info("Experimental DRS extent map: kMAIN={}x{} format={}; motion={}x{} format={}; depth={}x{} format={}; display={}x{} format={}; displayedMode={}",
             colour.Width,colour.Height,static_cast<unsigned>(colour.Format),
             motion.Width,motion.Height,static_cast<unsigned>(motion.Format),
             depth.Width,depth.Height,static_cast<unsigned>(depth.Format),
-            display.Width,display.Height,static_cast<unsigned>(display.Format)); } catch(...) {}
+            display.Width,display.Height,static_cast<unsigned>(display.Format),
+            static_cast<unsigned>(state->displayedMode.load(std::memory_order_relaxed))); } catch(...) {}
     }
     try {
         spdlog::info("World stage #{}: thread={}; flags=0x{:x}; rendererMatch={}; beforeRead={}; afterRead={}; "
             "beforeLock={}/{}; afterLock={}/{}; device=0x{:x}; context=0x{:x}; swap=0x{:x}; "
-            "colour=0x{:x}->0x{:x}; motion=0x{:x}->0x{:x}; depth=0x{:x}->0x{:x}; read-only",
+            "colour=0x{:x}->0x{:x}; motion=0x{:x}->0x{:x}; depth=0x{:x}->0x{:x}; world callback",
             sequence,GetCurrentThreadId(),flags,
             reinterpret_cast<std::uintptr_t>(world)==state->expectedRenderer,before.valid,after.valid,
             before.lockOwner,before.lockRecursion,after.lockOwner,after.lockRecursion,
@@ -672,6 +875,10 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
         }
     }
     snapshot.dlaaSuspendedByDrs=state->drsSuppressed.load(std::memory_order_acquire);
+#ifdef RK_WITH_NGX
+    snapshot.srRequested=state->srRequested;
+    snapshot.srSourceReady=state->srSourceVerified.load(std::memory_order_acquire);
+#endif
     snapshot.worldFrames=state->forwarded.load(std::memory_order_relaxed);
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
     snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);
@@ -773,6 +980,10 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(const auto error=std::get_if<Error>(&planned))return *error;
     const auto& plan=std::get<CallSitePlan>(planned);
     auto pending=std::make_unique<WorldState>();
+#ifdef RK_WITH_NGX
+    const auto provider=settings.get<Choice>("Upscaling.Provider").value;
+    pending->srRequested=provider=="Auto"||provider=="DLSS";
+#endif
     pending->expectedRenderer=base+renderer1170Rva;
     constexpr std::array<std::uint8_t,7> cameraLoad{0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02};
     constexpr std::array<std::uint8_t,5> jitterCall{0xe8,0x99,0x43,0x01,0x00};
@@ -814,7 +1025,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; experimental SDR DLAA armed",worldDrawPatchId); } catch (...) {}
+    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; SDR DLAA armed; guarded native-DRS SR requested={}",worldDrawPatchId,published->srRequested); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif
