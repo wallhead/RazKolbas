@@ -39,11 +39,14 @@ exceptions; any future reuse needs a deliberate license/provenance review.
 
 ## Use in the current investigation
 
-Our 0.1.17 read-only target map should compare the game's world-colour
-candidate, active OM targets and swap backbuffer. The reference's split
-between `kMAIN` and the backbuffer makes these identities especially useful.
-If they are different, a Present-time overwrite would operate after effects
-and potentially UI; if they alias, timing still requires verification before
-any display write. The reference's DRS/jitter and D3D11/D3D12 fence paths
-will be revisited only after our live resource map and temporal contracts are
-known. The supplied reference remains outside the product package.
+The 0.1.17 user-run map found distinct post-world colour and pre-ENB-Present
+backbuffer resources in this modlist. A saved renderer snapshot has a null
+first render-target slot, consistent with the reference's reported failure
+of its `kFRAMEBUFFER` route, although the exact slot name remains unverified
+here. Its source comment identifying AE UI-entry RVA `0xfa3dc0` differs from
+RazKolbas's independently decoded Address Library ID 82084 base RVA
+`0xfa4f00`. Neither address is yet an established pre-UI interception point
+for this product. Present-time replacement would risk including effects and
+UI in the SR input. The reference's DRS/jitter and D3D11/D3D12 fence paths
+will be revisited after tracing the exact game transition. The supplied
+reference remains outside the product package; see `SR_REPLAY.md`.

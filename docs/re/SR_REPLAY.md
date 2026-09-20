@@ -474,3 +474,45 @@ following eligible `pre-ENB-Present` snapshot. A later accepted world-like
 depth frame can still produce a second target map and offscreen DLAA result.
 The initial map may be a menu frame, so its alias evidence must be labeled
 accordingly. It remains read-only and makes no display write.
+
+### 0.1.17 user-run result, September 20 at 11:03
+
+The exact-profile process loaded the installed 0.1.17 DLL and recorded both
+snapshots at 11:03:28. The post-world callback had `RTV0` bound to the
+canonical world-colour identity `0x2141361cb80` (2560x1440, format 10,
+`R16G16B16A16_FLOAT`). The swap backbuffer had a distinct identity
+`0x212f9404f60` (2560x1440, format 28, `R8G8B8A8_UNORM`). At the following
+pre-ENB-Present observation, `RTV0` was that backbuffer, not the world-colour
+resource. The DSV identity remained `0x21413620640`. The map therefore
+**ran and distinguished the two resources**. It does not identify the
+intervening draw/copy, the exact UI boundary, or ENB/ReShade effects order.
+
+The ignored read-only process snapshot
+`artifacts/local/target-map-live-2026-09-20-1108/renderer.bin` was taken from
+the same exact-hash Skyrim 1.6.1170 process (PID 2220, image base
+`0x7ff6f59a0000`). At renderer-relative `0xa58`, the first eight bytes were
+zero; at `0xa88`, they were `0x2141361cc70`, matching the raw colour pointer
+logged at world call #600; at `0xba8`, they were `0x2141361efb0`, matching the
+raw motion pointer. These are slot-layout observations, not COM identity
+values or proof that the zero slot is the engine's named `kFRAMEBUFFER`.
+The user-supplied DynamicShaderFrameGen source reports a null
+`kFRAMEBUFFER.texture` in its own runtime. Its comment assigning AE address
+`0xfa3dc0` to the UI-entry hook conflicts with the independently decoded
+Address Library ID 82084 base `0xfa4f00` in this installation. The address
+and UI semantics require exact live-code tracing, not adoption of that
+comment as a verified hook.
+
+All 24 depth-readiness attempts in this 0.1.17 run sampled uniform far-plane
+depth and exhausted at 11:05:40; **NGX was not evaluated in this run**.
+Present and world-forwarded counters matched through #33,000, with
+`failed=0` at the last log entry. The log does not establish whether a loaded
+world was visible during the attempts. A separate earlier 0.1.15 game run
+did validate one offscreen DLAA output; this run neither repeats nor negates
+it. No display write was performed and no visual SR/ENB/UI result is claimed.
+
+Next read-only RE step: during a user-started session, capture the decoded
+exact-game code at `0xfa4f00`, the source-claimed `0xfa3dc0` entry, and the
+immediately post-world call target `0xfc32e0` with the expanded,
+hash-gated `tools/re/inspect_live_renderer.py`. The game executable's on-disk
+code at these RVAs is encoded, so the saved live bytes are necessary. Then
+trace the world-to-backbuffer transition before considering a display write.
