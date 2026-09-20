@@ -667,3 +667,17 @@ two frames. It does not write captures or change pixels. Release build and
 35 CTest groups pass; actual DLSS evaluation and visible output are
 **NOT RUN** for this source candidate. No timing or UI remapping fix is
 claimed until the additional boundary evidence is observed.
+
+The 0.1.38 present-probe candidate is source commit `e3424d2` and package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.38-present-probe-e3424d2.zip`
+(SHA-256 `3fd4e3387192e17a579ca256ce24df298390a42d4b981dc993edb594134910be`).
+The ZIP has only the four manifest-listed payloads plus manifest. Skyrim was
+stopped, the restored 0.1.35 mod was verified against all manifest hashes
+and backed up to ignored `artifacts/local/mo2-install-backup-0.1.38-e3424d2`.
+Only the MO2 DLL and manifest were replaced; the installed 0.1.38 DLL
+SHA-256 is `90043344aea45dfe5e3541318875b9685bab41d4dab7f9924ab67c950ce495ed`.
+All installed payloads match the new manifest; the user's INI and signed
+NVIDIA runtime are unchanged. The assistant did not start Skyrim.
+Runtime result: **NOT RUN**. Next is one user-started menu session; inspect
+the first two pre-Present samples and provider log, close the game, then
+restore 0.1.35 if the image remains black. No save load is needed.
