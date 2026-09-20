@@ -228,3 +228,17 @@ only changing the DRS ratio or scissor: an owned reduced scene surface,
 display-sized destination and native UI transition must be prepared and
 switched together. The unknown existing `ResizeBuffers` owner at game RVA
 `0xe43e84` remains untouched.
+
+## Owned reduced SDR surface checkpoint
+
+`ReducedSdrSurface` allocates a default-usage, single-sample RGBA8 texture
+with RTV and SRV bindings at a validated smaller render extent. It records
+the separate display extent and owns both the texture and its RTV. It does
+not implement `IDXGISwapChain`, substitute `GetBuffer`, or alter a Skyrim
+target. A WARP integration test clears the owned 4x4 target, passes it through
+the existing SDR SR input copy, forces provider failure, and reads back the
+expected red 8x8 display fallback after retiring the original surface and
+copied input. A separate test rejects invalid extents and proves an old
+surface stays distinct when a new extent is allocated. Debug and Release
+builds passed 25/25 CTest groups. This proves the offscreen resource and
+fallback handoff; genuine in-game reduced world rendering remains NOT RUN.
