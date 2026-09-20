@@ -709,3 +709,19 @@ It aims to restore a visible image and test DLSS on non-black input; it does
 scene/UI boundary remains necessary. Release build and all 35 CTest groups
 pass; visible output, colour quality, UI behavior and continuous submissions
 are **NOT RUN** for this source candidate.
+
+The 0.1.39 pre-Present SR candidate is source commit `eb463cd`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.39-present-sr-eb463cd.zip`
+(SHA-256 `d25e9599cabeda41cd3f966c771de2fcba52e786b7ff78c5d03b54e218c6239d`).
+The package has only the four manifest-listed payloads plus manifest.
+Skyrim was stopped. The restored 0.1.35 mod passed manifest verification
+and was copied to ignored `artifacts/local/mo2-install-backup-0.1.39-eb463cd`
+with matching hashes. Only the MO2 DLL and manifest were replaced; all
+installed payload hashes match the 0.1.39 manifest. DLL SHA-256 is
+`53b580cdd96159da9888339f2fdc77c01a2aefa97bfadf4cb2f96d947dc95e6f`.
+The user's INI and signed NVIDIA runtime remain unchanged. The assistant
+did not start Skyrim. Actual-game visible SR and stability are **NOT RUN**;
+next action is a user-started menu run. If the image is still black, inspect
+the first pre-Present source and destination samples, close the game, and
+restore 0.1.35. If it is visible, inspect continuous submissions and UI
+appearance before treating this as more than an interim whole-frame route.
