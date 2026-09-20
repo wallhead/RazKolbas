@@ -44,8 +44,10 @@ void logReferenceSites(std::uintptr_t base,std::string_view verifiedGameHash) {
     // already own these instructions. No signature or hook claim is made here.
     struct Site { const char* name; std::uint32_t rva; };
     constexpr std::array sites{
-        Site{"Renderer Begin jitter reference #1",0xe44675},
-        Site{"Renderer Begin jitter reference #2",0xe446c3},
+        Site{"Renderer Begin aligned jitter CALL (ID 77245 +0xe2)",0xe44672},
+        Site{"Game jitter update candidate (ID 77518 +0x11)",0xe58a21},
+        Site{"Camera target context (ID 77518 +0x1d3)",0xe58be3},
+        Site{"Camera copied-byte source (ID 77520 +0x1d5)",0xe58d55},
         Site{"Main_DrawWorld_MainDraw reference call",0xfa507a},
     };
     constexpr char digits[]="0123456789abcdef";

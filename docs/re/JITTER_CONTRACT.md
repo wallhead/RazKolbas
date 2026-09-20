@@ -48,6 +48,19 @@ three-byte `mov r9,r14` at `0xe58be3`. This blocks transplanting the
 reference's patch sites into this executable. No camera/jitter patch was
 installed; exact runtime ownership and ABIs remain to be established.
 
+The decoded game code also suggests a narrower independent route. The valid
+Renderer Begin CALL invokes game routine `0xe58a10`, whose gated eight-phase
+path writes its own normalized jitter to the camera object's `+0x44/+0x48`.
+The separate game camera-builder function starts at `0xe58b80`; its branch
+at `0xe58d55` reads `+0x44/+0x48` when the game gate is enabled. An
+original-first observer at the verified Renderer Begin CALL could therefore
+read the jitter Skyrim actually applied and carry that sample toward the
+same frame's NGX evaluation without patching the incompatible camera site.
+This is an inference from code flow, not an implemented or runtime-tested
+hook. The camera object's identity, sample lifetime, frame pairing, units,
+and interaction with Skyrim TAA still require verification before changing
+NGX jitter or TAA behavior.
+
 At `0x157190`, the reference callback first calls its retained original
 target, then `PDPerfPlugin!GetJitterPhaseCount` and `GetJitterOffset`. It
 increments its phase counter at state `+0x04` before converting it to an
@@ -102,8 +115,8 @@ NGX-only Halton counter would break that pairing.
 
 Before enabling a RazKolbas jitter/TAA replacement: identify compatible,
 aligned hook sites and verify their forwarding ABIs under the existing
-exact-hash and ownership policy; define one frame counter and a safe reset on scene or
-render-size transitions; bind camera and NGX offsets to that frame; validate
+exact-hash and ownership policy; define one frame counter and a safe reset on
+scene or render-size transitions; bind camera and NGX offsets to that frame; validate
 motion direction, units and jitter inclusion; and retain native rendering if
 the transaction cannot fully activate. Reduced-resolution SR also needs a
 separate, validated world-render extent from the native UI/display extent.
