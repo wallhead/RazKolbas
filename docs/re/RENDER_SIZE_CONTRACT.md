@@ -46,29 +46,63 @@ user-supplied DynamicShaderFrameGen source at pinned commit
 | Candidate | Exact installed-library RVA | Source comment RVA | State |
 | --- | --- | --- | --- |
 | Renderer Begin, ID 77245 | `0xe44590`; `+0xe2`=`0xe44672` | `0xe43450` | `+0xe2` was previously verified as an aligned CALL in decoded live code. |
-| DRS control, ID 36555 | `0x643c00`; `+0x2d`=`0x643c2d` | `0x643300` | **Unverified code bytes and semantics**. |
-| Scissor function, ID 77365 | `0xe4adf0` | `0xe49cb0` | **Unverified code bytes and ABI**. |
-| BSGraphics::State, ID 411479 | `0x328cc20` | — | Previously sampled as static camera state; DRS field layout unverified. |
+| DRS control, ID 36555 | `0x643c00`; `+0x2d`=`0x643c2d` | `0x643300` | Decoded CALL to `0xe587f0` verified; no RazKolbas write. |
+| Scissor function, ID 77365 | `0xe4adf0` | `0xe49cb0` | Decoded x/y/width/height ABI and original bytes verified; no detour. |
+| BSGraphics::State, ID 411479 | `0x328cc20` | — | Ratio, previous-ratio and lock field accesses decoded; sampled menu values below. |
 
 The source comment RVAs for DRS and scissor differ from this installed
 Address Library, so they are not patch locations for RazKolbas. The source
 calls the original jitter update, sets previous/current dynamic-resolution
-ratios and lock, adjusts scissor coordinates, and disables vanilla DRS. That
-sequence is a hypothesis about the engine contract; neither the exact field
-offsets nor a safe patch transaction has been established for this process.
+ratios and lock, adjusts scissor coordinates, and disables vanilla DRS. The
+exact game code and state field accesses are now decoded below; the reference's
+entire hook sequence and a safe activation transaction remain unverified for
+RazKolbas.
 The supplied executable SHA-256 is
 `c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9`.
 The executable's on-disk text is encoded, so `tools/re/inspect_live_renderer.py`
 now captures only bounded decoded bytes at the mapped DRS/scissor candidates
 during a user-started game session. It performs no writes or remote calls.
 
+## User-started decoded-code inspection, 14:36 on 2026-09-20
+
+The user started `D:/TESV_EX/SkyrimSE.exe` (PID 20924); the inspector verified
+the executable SHA-256 above and read decoded regions from image base
+`0x7ff6f59a0000` without writing to or controlling the process. Raw captures
+and the manifest remain ignored under
+`artifacts/local/drs-live-2026-09-20-1436-extended/`. The 256-byte DRS
+candidate SHA-256 is
+`381d157c08454d3e6631b7ecf4b64a3ae021a9d3a70ed774bdb410668e0ed4b6`;
+the 384-byte scissor candidate SHA-256 is
+`9f5ebf128617965c575acdc46592cc846bacef4d3cb97ade6f1eb3e64a6c1d64`.
+
+The exact DRS site at `0x643c2d` is the aligned five-byte
+`e8 be 4b 81 00`, a `CALL` to RVA `0xe587f0`. The preceding instruction
+loads `RCX` with the static graphics state at RVA `0x328cc20`. The callee
+first checks the dword at state `+0x118` and skips updates when it is
+nonzero. Otherwise it copies current float ratios `+0x104/+0x108` to
+previous `+0x10c/+0x110`, then conditionally adjusts/quantizes the current
+ratios using the dimensions at `+0x24/+0x28` and flags at `+0x11c` through
+`+0x11e`. The sampled menu state held dimensions 2560x1440, all four ratios
+at 1.0, counter `+0x118` at zero, and bytes `+0x11c/+0x11d/+0x11e` at
+1/0/0. This confirms the reference's DRS concept for this process but also
+shows its NOP would suppress an entire ratio-update CALL. Any RazKolbas
+replacement must forward the original when reduced-render SR is inactive.
+
+The scissor candidate at RVA `0xe4adf0` starts with `48 83 ec 38`, is not
+already detoured in this capture, and returns at `0xe4ae2e`. Its Win64
+arguments are a renderer pointer followed by **x, y, width, height**: the
+function constructs a `RECT` of `(x, y, x+width, y+height)` before calling
+the renderer's vtable slot `+0x168`. This resolves the reference's ambiguous
+`right/bottom` parameter names. A future size adapter must scale the four
+extent arguments consistently and validate which rendering domains call it;
+blindly scaling every UI scissor would damage native-resolution UI.
+
 ## Activation boundary
 
 Skyrim still renders at 2560x1440, TAA remains enabled, and installed 0.1.24
-retains the working full-resolution DLAA path. Reduced game sizing cannot be
-activated until the exact DRS/scissor field and instruction contracts, native
-UI placement, output ownership and the connection to the display-sized
-failure fallback are ready as one reversible transition. The next live step
-is a **read-only capture** of the mapped code during a user-started game
-session. The user has deferred a cursor-only game test; no new plugin package
-or MO2 install is needed for this source-only fallback.
+retains the working full-resolution DLAA path. The DRS CALL, state field
+accesses and scissor entry ABI are now decoded for this executable. Reduced
+game sizing still requires guarded DRS/scissor ownership, native UI placement,
+output ownership and connection to the display-sized failure fallback as one
+reversible transition. No new plugin package or MO2 install resulted from this
+read-only inspection. In-game reduced-render SR and FG remain NOT RUN.

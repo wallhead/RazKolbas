@@ -29,6 +29,12 @@ Result<CallSitePlan> prepareCallSite(std::span<const std::uint8_t> live,
 // forwarding ABI. Does not infer the semantic type of the game pointer.
 Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
     std::span<const std::uint8_t> originalTarget);
+// Read-only exact-code gate for the decoded DRS update CALL and scissor
+// function. A successful check does not activate reduced rendering or grant
+// permission to modify either site during an active game session.
+Result<bool> verifySkyrim1170DrsAbi(std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget,
+    std::span<const std::uint8_t> scissor);
 // Builds the complete direct-CALL instruction for a verified plan. This is
 // preparation only: the caller must separately establish exclusive execution
 // quiescence, recheck the live bytes, and own the target's lifetime before write.
