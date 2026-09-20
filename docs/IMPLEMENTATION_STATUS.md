@@ -528,3 +528,12 @@ through three successful Present calls and rejection of an incorrect display
 extent. The fixture reported index zero throughout those calls, so it did
 not prove index rotation; the real ENB/ReShade wrapper and rotating native
 target remain **NOT RUN**. The resolver is not yet wired to the UI adapter.
+
+An owned UI context installer now validates the exact local ENB immediate
+context table, module SHA-256/file size, both downstream method pointers and
+prologues before applying slot-33 `OMSetRenderTargets` and slot-44
+`RSSetViewports` CAS hooks. It pins the callback and owner modules, retains
+the downstream chain, and leaves hooks pass-through until fully installed;
+the redirector itself remains dormant outside a published native-UI phase.
+The Release DLL builds. No caller activates this installer yet, and neither
+slot was modified in the installed 0.1.35 game build.

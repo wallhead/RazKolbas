@@ -10,6 +10,7 @@
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/OwnedSwapBufferRoute.hpp"
+#include "rk/NativeUiRedirector.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -50,6 +51,31 @@ struct BufferTraceLease {
 };
 std::atomic<BufferTraceLease*> bufferTrace{nullptr};
 std::atomic_flag bufferTraceAttempted=ATOMIC_FLAG_INIT;
+struct UiHookLease {
+    explicit UiHookLease(OwnedSceneDomain& domain) noexcept:redirect(domain) {}
+    PointerPatch omPatch,viewportPatch;
+    UiContextNext next{};
+    NativeUiRedirector redirect;
+    std::atomic<bool> armed{false};
+};
+std::atomic<UiHookLease*> uiHook{nullptr};
+std::mutex uiInstallMutex;
+void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
+    ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
+    auto* state=uiHook.load(std::memory_order_acquire);
+    if(!state)return;
+    if(state->armed.load(std::memory_order_acquire))
+        state->redirect.onOMSetRenderTargets(context,count,views,depth);
+    else state->next.om(context,count,views,depth);
+}
+void STDMETHODCALLTYPE uiViewportProxy(ID3D11DeviceContext* context,UINT count,
+    const D3D11_VIEWPORT* views) noexcept {
+    auto* state=uiHook.load(std::memory_order_acquire);
+    if(!state)return;
+    if(state->armed.load(std::memory_order_acquire))
+        state->redirect.onRSSetViewports(context,count,views);
+    else state->next.viewport(context,count,views);
+}
 struct FileIdentity { std::string hash; std::size_t size; };
 FileIdentity identify(HMODULE module) {
     wchar_t name[32768];
@@ -453,6 +479,76 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
         swapDesc,swapChain,device,featureLevel,context};
     return observeDeviceCreation(state->original,args,&observed);
 }
+}
+Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
+    OwnedSceneDomain& domain,ID3D11Texture2D* reducedScene,
+    ID3D11RenderTargetView* nativeTarget,std::string_view disabledPatchIds) {
+    std::scoped_lock lock(uiInstallMutex);
+    if(uiHook.load(std::memory_order_acquire))return false;
+    if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
+       !reducedScene||!nativeTarget||!domain.plan().valid())
+        return Error{ErrorCode::InvalidInput,"Owned UI context is not prepared"};
+    const auto& omSite=enbContextOmSite();
+    const auto& viewportSite=enbContextViewportSite();
+    if(patchDisabled(disabledPatchIds,omSite.id)||
+       patchDisabled(disabledPatchIds,viewportSite.id))return false;
+    try {
+        auto** table=*reinterpret_cast<void***>(context);
+        HMODULE owner=nullptr;
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(table),&owner))
+            return Error{ErrorCode::Unsupported,"UI context table has no loaded-module owner"};
+        struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
+        const auto id=identify(owner);
+        const auto base=reinterpret_cast<std::uintptr_t>(owner);
+        const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
+        if(tableAddress<base||tableAddress-base!=omSite.tableRva||
+           omSite.tableRva!=viewportSite.tableRva)
+            return Error{ErrorCode::Unsupported,"UI context is not the verified ENB table"};
+        const auto mapped=snapshotModule(owner,omSite.imageSize);
+        for(const auto* site:{&omSite,&viewportSite}) {
+            const auto checked=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+                static_cast<std::uint32_t>(tableAddress-base),*site);
+            if(const auto error=std::get_if<Error>(&checked))return *error;
+        }
+        auto pending=std::make_unique<UiHookLease>(domain);
+        pending->next={reinterpret_cast<UiContextNext::OM>(base+omSite.methodRva),
+            reinterpret_cast<UiContextNext::VP>(base+viewportSite.methodRva)};
+        const auto configured=pending->redirect.configure(context,GetCurrentThreadId(),
+            pending->next,reducedScene,nativeTarget);
+        if(FAILED(configured))
+            return Error{ErrorCode::Conflict,"Owned UI redirector rejected the ENB context or target"};
+        HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
+        constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+        if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&uiOmProxy),&pinnedSelf)||
+           !GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))
+            return Error{ErrorCode::Unavailable,"Cannot pin owned UI callback lifetimes"};
+        auto* published=pending.release();
+        uiHook.store(published,std::memory_order_release);
+        const auto om=published->omPatch.apply(table+omSite.slot,
+            reinterpret_cast<void*>(published->next.om),reinterpret_cast<void*>(&uiOmProxy));
+        if(const auto error=std::get_if<Error>(&om))return *error;
+        const auto viewport=published->viewportPatch.apply(table+viewportSite.slot,
+            reinterpret_cast<void*>(published->next.viewport),
+            reinterpret_cast<void*>(&uiViewportProxy));
+        if(const auto error=std::get_if<Error>(&viewport)) {
+            const auto restored=published->omPatch.restore();
+            if(const auto rollback=std::get_if<Error>(&restored);
+               rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
+            return *error;
+        }
+        published->armed.store(true,std::memory_order_release);
+        spdlog::info("Installed verified ENB UI context slots {} and {}; dormant until owned NativeUi phase",
+            omSite.id,viewportSite.id);
+        return true;
+    } catch(const std::exception& error) {
+        return Error{ErrorCode::Unavailable,
+            std::string("Owned UI context preparation failed: ")+error.what()};
+    }
+}
+NativeUiRedirector* ownedUiRedirector() noexcept {
+    auto* state=uiHook.load(std::memory_order_acquire);
+    return state&&state->armed.load(std::memory_order_acquire)?&state->redirect:nullptr;
 }
 bool rendererObserverArmed() noexcept {
     const auto* state=lease.load(std::memory_order_acquire);
