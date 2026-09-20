@@ -167,3 +167,36 @@ local NVIDIA device, using the captured UI-free SDR scene and synthetic scene
 guides, completed with a stable changed output and clean process exit. Actual
 0.1.20 in-game display and image-quality acceptance are NOT RUN until the
 user starts Skyrim and loads a save.
+
+## User-launched 0.1.20 continuous display result (2026-09-20)
+
+The user-launched process PID 26724 loaded the deployed 0.1.20 plugin and
+accepted world-like depth on attempt 12. The one-shot HDR probe retired and
+shut NGX down before the persistent SDR feature began. The first SDR DLAA
+submission occurred at world frame 6614. The trace reached 13,800 continuous
+submissions with zero reported busy-slot skips and world/Present counts equal
+through at least 20,400, with Present failures zero. No disable/error was
+logged in this interval; Skyrim remained running during inspection.
+The final log before the process exited reached 19,800 submissions with
+skipped=0 and equal world/Present counts through 26,400, failed=0. No new
+crash log appeared for this session; the exit mechanism was not observed.
+
+Two complete, independently rehashed stage pairs were saved. Frame 6613 was
+the native pre-DLAA diagnostic; frame 6614 was captured after SDR copyback.
+The latter post-world image shows a coherent UI-free scene, and the same-frame
+pre-ENB-Present image contains the HUD and dialogue. The RGB delta between
+post-world and pre-Present affects 143,936 pixels; 100,739 pixels change by
+more than 10 levels in at least one channel, close to the prior native pair's
+143,592 and 100,733. The >10-level change masks overlap with IoU 0.893.
+These measurements support continued UI composition after DLAA copyback.
+Adjacent native/DLAA post-world frames differ, but time/scene animation also
+changed, so that pixel delta alone cannot isolate the DLAA effect. The
+capture manifest's fixed text `no display write` is inaccurate for the
+frame-6614 pair; the callback log and captured frame ordering identify it as
+the post-copyback capture. Final ReShade/display pixels were not captured.
+
+The user reported that TAA flickering appeared to be disappearing during the
+run. This is a subjective visual observation, not a measured temporal-quality
+comparison. Skyrim's existing TAA/jitter pipeline was not disabled or
+reconfigured by 0.1.20. Real motion-vector convention, jitter, stability
+under camera motion, reduced-resolution SR, FG and NR remain open.

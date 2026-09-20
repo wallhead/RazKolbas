@@ -73,7 +73,7 @@ Result<bool> StagePairCapture::save(const std::filesystem::path& directory) cons
         }
         std::ofstream manifest(directory/"manifest.pending");
         manifest.exceptions(std::ios::failbit|std::ios::badbit);
-        manifest<<"RazKolbas stage pair; same world frame; no display write\n";
+        manifest<<"RazKolbas stage pair; same world frame\n";
         for(std::size_t i=0;i<images.size();++i) {
             const auto& frame=*images[i];
             manifest<<names[i]<<" width="<<frame.descriptor.Width
