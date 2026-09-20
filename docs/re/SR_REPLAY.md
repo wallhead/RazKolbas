@@ -325,3 +325,37 @@ yet. WARP independently checked byte-identical copies of all three formats,
 including typeless depth, and rejected missing, swapped and foreign-device
 sources. Debug and Release passed all 16 CTest groups. In-game copy completion
 is **NOT RUN** until the next user launch.
+
+The user-run 0.1.13 launch at 10:01:54 on 2026-09-20 loaded the installed
+DLL with its expected hash. At 10:02:24 the guarded callback queued the three
+owned 2560x1440 copies on the game's RTX 4080 SUPER D3D11 context; the next
+callback observed the D3D11 event query complete and a healthy device. The
+original-first world forwarding and Present counters matched through #18,000,
+with `failed=0`; no warning or error appeared in this launch's 98 log lines.
+The process remained responsive. This is a **PASS for in-game GPU copy
+completion**. It does not prove copied pixel equivalence in this game run,
+in-game NGX evaluation, image quality, or displayed SR. The assistant did not
+launch or control Skyrim.
+
+## 0.1.14 guarded live-device DLAA probe
+
+The next build reuses the exact-hash NVIDIA SR runtime and the already completed
+owned colour/motion/native-typeless-depth copies. Under the verified renderer
+lock, it attempts one reset-only DLAA evaluation on Skyrim's actual D3D11
+device. An isolated D3D11.1 context state protects the game's graphics
+bindings. Output goes only to a separate texture, then staging readback after
+an event-query fence. The readback must have finite, nonuniform RGB and gets a
+SHA-256. NGX release, parameter destruction and shutdown follow successful
+fence/readback; uncertain failures keep resources until process exit. No
+backbuffer, game render target, ENB output, or ReShade input is replaced.
+
+The module requires the supplied signed `nvngx_dlss.dll` to be installed beside
+the plugin under `RazKolbasRuntime/` and checks its exact size and SHA-256
+before init, then checks the loaded module's hash. It does not use the unsigned
+community `_dlssnr.dll` or either reference host. The experiment uses the same
+explicit reset/jitter/MV/exposure assumptions as the offline replay; those
+values remain unverified for a temporal game pipeline. WARP verified full
+render-target and viewport restoration across state switching; Debug and
+Release passed all 17 CTest groups. **In-game NGX evaluation is NOT RUN** until
+the next user launch. This diagnostic result cannot establish displayed SR or
+visual quality.

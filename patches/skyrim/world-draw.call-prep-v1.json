@@ -2,7 +2,7 @@
   "id": "skyrim1170.world-draw.sr-v1",
   "status": "EXPERIMENTAL_PASS_THROUGH_MENU_VALIDATED",
   "shipping_enabled": false,
-  "purpose": "Pass through Skyrim's original world draw and, once per process under its renderer lock, prepare owned SR input copies without changing game render targets",
+  "purpose": "Pass through Skyrim's original world draw, prepare owned SR input copies, then run one guarded offscreen NGX DLAA probe without changing game render targets",
   "target": {
     "module": "SkyrimSE.exe",
     "architecture": "x64",
@@ -19,11 +19,11 @@
     "original_target_address_library_id": 77247
   },
   "original_live_bytes": "e8d1f7e9ff",
-  "replacement": "encodeCallSiteReplacement to a prepared near relay ending in FF 25 00000000 plus the pinned RazKolbas worldDrawProxy address; original-first forwarding, guarded one-shot owned input CopyResource operations, no NGX evaluation or display write",
+  "replacement": "encodeCallSiteReplacement to a prepared near relay ending in FF 25 00000000 plus the pinned RazKolbas worldDrawProxy address; original-first forwarding, guarded one-shot owned input CopyResource and exact-runtime offscreen NGX evaluation, no display write",
   "abi": "0.1.10 decoded live caller sets EDX=0 and RCX=&renderer object at RVA 0x32887c0 (Address Library ID 411393) before the CALL. Original target saves RCX in RBP and zero-extends DL to R15D. Caller overwrites RAX immediately. Reference callback also forwards RCX and EDX. Target's complete effects remain unverified.",
   "activation": "0.1.11 experimental opt-in at SKSEPlugin_Load before renderer/world execution; exact executable hash, decoded caller/target ABI, original CALL, relay bytes, and executable page ownership rechecked before the bounded write",
-  "lifetime": "Callback DLL pinned and relay plus forwarding state retained for process lifetime; owned copied textures retained until event-query GPU completion, or until process exit on uncertain failure; no hot unpatch",
+  "lifetime": "Callback DLL pinned and relay plus forwarding state retained for process lifetime; owned copied textures and NGX resources retained until event-query GPU completion and validated retirement, or until process exit on uncertain failure; no hot unpatch",
   "recovery": "On validation/write preparation failure no game instruction is written. A post-write protection/flush/readback failure terminates rather than resuming half-patched code. Disable this patch ID or SafeMode for the next game launch; restore only when exact installed bytes and execution quiescence are proven",
   "evidence": ["docs/re/SR_REPLAY.md", "tests/unit/CallSiteTests.cpp", "tests/unit/WorldDrawTests.cpp"],
-  "game_runtime": "0.1.12 user-run post-world numeric stage PASS through #15600 with owned lock and stable candidates; 0.1.13 GPU copies and in-game NGX evaluation NOT RUN"
+  "game_runtime": "0.1.13 user-run three-input GPU copy completion PASS through Present #18000; 0.1.14 offscreen NGX evaluation NOT RUN"
 }

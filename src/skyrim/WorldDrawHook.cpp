@@ -5,6 +5,9 @@
 #include "rk/SwapObserver.hpp"
 #include "rk/SrInput.hpp"
 #include "rk/WorldDraw.hpp"
+#ifdef RK_WITH_NGX
+#include "rk/OffscreenDlssProbe.hpp"
+#endif
 #include <spdlog/spdlog.h>
 #include <array>
 #include <atomic>
@@ -24,6 +27,10 @@ struct WorldState {
     std::atomic<CopyStatus> copyStatus{CopyStatus::NotAttempted};
     Microsoft::WRL::ComPtr<ID3D11Query> copyEvent;
     std::optional<PreparedSrInputs> copiedFrame;
+#ifdef RK_WITH_NGX
+    OffscreenDlssProbe dlssProbe;
+    bool probeFailed{};
+#endif
 };
 std::atomic<WorldState*> active{nullptr};
 struct WorldNumbers {
@@ -69,7 +76,27 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
                 try { spdlog::warn("Owned SR input copy device removed: HRESULT=0x{:08x}; resources retained",static_cast<std::uint32_t>(removed)); } catch (...) {}
                 return;
             }
-            state->copiedFrame.reset();state->copyEvent.Reset();
+#ifdef RK_WITH_NGX
+            try {
+                const auto begun=state->dlssProbe.begin(reinterpret_cast<ID3D11Device*>(device),
+                    immediate,*state->copiedFrame);
+                if(const auto error=std::get_if<Error>(&begun)) {
+                    state->probeFailed=true;
+                    spdlog::warn("Offscreen DLSS probe rejected: {}; owned resources retained",error->message);
+                } else {
+                    spdlog::info("Offscreen DLAA evaluation submitted on game device; no display write");
+                }
+            } catch(const std::exception& error) {
+                state->probeFailed=true;
+                try { spdlog::warn("Offscreen DLSS probe exception: {}; owned resources retained",error.what()); } catch(...) {}
+            } catch(...) {
+                state->probeFailed=true;
+                try { spdlog::warn("Offscreen DLSS probe exception; owned resources retained"); } catch(...) {}
+            }
+#else
+            state->copiedFrame.reset();
+#endif
+            state->copyEvent.Reset();
             state->copyStatus.store(WorldState::CopyStatus::Complete,std::memory_order_release);
             try { spdlog::info("Owned SR input copies completed on game GPU: original colour/motion/native typeless depth; no NGX evaluation or display write"); } catch (...) {}
         } else if(FAILED(result)) {
@@ -104,8 +131,10 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
         try { spdlog::info("Owned SR input copies queued: {}x{} colour/motion/native typeless depth; original resources unchanged; no NGX evaluation",
             state->copiedFrame->width(),state->copiedFrame->height()); } catch (...) {}
     } catch(const std::exception& error) {
+        state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
         try { spdlog::warn("Owned SR input copy aborted: {}",error.what()); } catch (...) {}
     } catch(...) {
+        state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
         try { spdlog::warn("Owned SR input copy aborted by unknown exception"); } catch (...) {}
     }
 }
@@ -121,6 +150,34 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     if(const auto status=state->copyStatus.load(std::memory_order_acquire);
        status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
         copyWorldInputsOnce(state,readWorldNumbers(world,state->expectedRenderer));
+#ifdef RK_WITH_NGX
+    if(state->dlssProbe.pending()&&!state->probeFailed) {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+           numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+           numbers.context==state->createdContext.load(std::memory_order_relaxed)&&
+           numbers.swap==state->createdSwap.load(std::memory_order_relaxed)) {
+            try {
+                const auto polled=state->dlssProbe.poll(reinterpret_cast<ID3D11Device*>(numbers.device),
+                    reinterpret_cast<ID3D11DeviceContext*>(numbers.context));
+                if(const auto error=std::get_if<Error>(&polled)) {
+                    state->probeFailed=true;
+                    spdlog::warn("Offscreen DLSS probe failed: {}; owned resources retained",error->message);
+                } else if(!std::get<std::string>(polled).empty()) {
+                    spdlog::info("Offscreen DLAA output validated: {}x{} finite nonuniform RGB; SHA256={}; no display write",
+                        state->dlssProbe.width(),state->dlssProbe.height(),std::get<std::string>(polled));
+                    state->copiedFrame.reset();
+                }
+            } catch(const std::exception& error) {
+                state->probeFailed=true;
+                try { spdlog::warn("Offscreen DLSS probe exception: {}; owned resources retained",error.what()); } catch(...) {}
+            } catch(...) {
+                state->probeFailed=true;
+                try { spdlog::warn("Offscreen DLSS probe exception; owned resources retained"); } catch(...) {}
+            }
+        }
+    }
+#endif
     if(!sample)return;
     const auto after=readWorldNumbers(world,state->expectedRenderer);
     try {
