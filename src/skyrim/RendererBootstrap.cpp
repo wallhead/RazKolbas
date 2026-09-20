@@ -86,6 +86,7 @@ void swapObserved(const SwapEvent& event) {
     }
     if(event.before) {
         if(!(event.flags&DXGI_PRESENT_TEST)&&frameProbeBoundary(state->profileId,event.call)) {
+            probePresentationTargets(reinterpret_cast<IDXGISwapChain*>(event.object));
             try { probePresentCandidates(reinterpret_cast<IDXGISwapChain*>(event.object)); }
             catch(const std::exception& error) { spdlog::warn("Candidate probe aborted: {}",error.what()); }
         }

@@ -15,6 +15,7 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <wrl/client.h>
 
 namespace rk {
 namespace {
@@ -30,6 +31,8 @@ struct WorldState {
     unsigned copyAttempts{};
     Microsoft::WRL::ComPtr<ID3D11Query> copyEvent;
     std::optional<PreparedSrInputs> copiedFrame;
+    std::atomic<bool> presentTargetProbeDue{false};
+    std::atomic<std::uintptr_t> worldColourIdentity{0};
 #ifdef RK_WITH_NGX
     OffscreenDlssProbe dlssProbe;
     bool probeFailed{};
@@ -41,6 +44,47 @@ struct WorldNumbers {
     std::int32_t lockRecursion{};
     bool valid{};
 };
+std::uintptr_t identity(IUnknown* object) noexcept {
+    Microsoft::WRL::ComPtr<IUnknown> canonical;
+    return object&&SUCCEEDED(object->QueryInterface(IID_PPV_ARGS(&canonical)))?
+        reinterpret_cast<std::uintptr_t>(canonical.Get()):0;
+}
+void logTargetBoundary(const char* stage,ID3D11DeviceContext* context,
+    IDXGISwapChain* swap,std::uintptr_t colourIdentity) {
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+    const auto backResult=swap->GetBuffer(0,IID_PPV_ARGS(&backbuffer));
+    const auto backIdentity=identity(backbuffer.Get());
+    D3D11_TEXTURE2D_DESC backDesc{};
+    if(backbuffer)backbuffer->GetDesc(&backDesc);
+    spdlog::info("Target map {}: colourIdentity=0x{:x}; backbuffer=0x{:x} {}x{} format={}; GetBuffer=0x{:08x}; colourIsBackbuffer={}; read-only",
+        stage,colourIdentity,backIdentity,backDesc.Width,backDesc.Height,
+        static_cast<unsigned>(backDesc.Format),static_cast<std::uint32_t>(backResult),
+        colourIdentity&&colourIdentity==backIdentity);
+    std::array<ID3D11RenderTargetView*,8> rawViews{};
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthView;
+    context->OMGetRenderTargets(static_cast<UINT>(rawViews.size()),rawViews.data(),&depthView);
+    for(unsigned i=0;i<rawViews.size();++i) {
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
+        view.Attach(rawViews[i]);
+        if(!view)continue;
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+        view->GetResource(&resource);
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        if(resource)resource.As(&texture);
+        D3D11_TEXTURE2D_DESC desc{};
+        if(texture)texture->GetDesc(&desc);
+        const auto targetIdentity=identity(resource.Get());
+        spdlog::info("Target map {} RTV{}: resource=0x{:x} {}x{} format={}; matchesColour={}; matchesBackbuffer={}; read-only",
+            stage,i,targetIdentity,desc.Width,desc.Height,static_cast<unsigned>(desc.Format),
+            colourIdentity&&targetIdentity==colourIdentity,
+            backIdentity&&targetIdentity==backIdentity);
+    }
+    if(depthView) {
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+        depthView->GetResource(&resource);
+        spdlog::info("Target map {} DSV: resource=0x{:x}; read-only",stage,identity(resource.Get()));
+    }
+}
 WorldNumbers readWorldNumbers(void* world,std::uintptr_t expected) noexcept {
     WorldNumbers result{};
     if(!world||reinterpret_cast<std::uintptr_t>(world)!=expected)return result;
@@ -119,6 +163,17 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
                 spdlog::info("Offscreen DLAA input frame accepted: attempt={}; depthDistinct={}; depthNonFar={}; colourSHA256={}; motionSHA256={}; depthSHA256={}",
                     state->copyAttempts,stats.distinct,stats.nonFar,
                     sha256(images[0].pixels),sha256(images[1].pixels),sha256(image.pixels));
+                try {
+                    const auto colourIdentity=identity(reinterpret_cast<IUnknown*>(numbers.colour));
+                    logTargetBoundary("post-world",immediate,
+                        reinterpret_cast<IDXGISwapChain*>(swap),colourIdentity);
+                    state->worldColourIdentity.store(colourIdentity,std::memory_order_relaxed);
+                    state->presentTargetProbeDue.store(true,std::memory_order_release);
+                } catch(const std::exception& error) {
+                    spdlog::warn("Post-world target map unavailable: {}; DLAA probe continues",error.what());
+                } catch(...) {
+                    spdlog::warn("Post-world target map unavailable; DLAA probe continues");
+                }
             } catch(const std::exception& error) {
                 state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
                 try { spdlog::warn("Owned SR readiness diagnostic failed: {}; resources retained",error.what()); } catch(...) {}
@@ -257,6 +312,22 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
 std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
+}
+void probePresentationTargets(IDXGISwapChain* swap) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
+       reinterpret_cast<std::uintptr_t>(swap)||
+       !state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel))return;
+    try {
+        const auto context=state->createdContext.load(std::memory_order_relaxed);
+        if(!context)return;
+        logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
+            state->worldColourIdentity.load(std::memory_order_relaxed));
+    } catch(const std::exception& error) {
+        try { spdlog::warn("Pre-Present target map unavailable: {}",error.what()); } catch(...) {}
+    } catch(...) {
+        try { spdlog::warn("Pre-Present target map unavailable"); } catch(...) {}
+    }
 }
 void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
     IDXGISwapChain* swap) noexcept {

@@ -18,4 +18,7 @@ std::uint64_t worldDrawForwardedCalls() noexcept;
 // retain COM references; the world callback validates them under the engine lock.
 void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
     IDXGISwapChain* swap) noexcept;
+// One bounded, read-only D3D11 target identity snapshot on the next eligible
+// ENB Present after a world-like frame. Never dereferences renderer memory.
+void probePresentationTargets(IDXGISwapChain* swap) noexcept;
 }

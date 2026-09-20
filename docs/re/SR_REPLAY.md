@@ -143,6 +143,19 @@ vendor call with explicit resource transfer; merely invoking NGX at Present
 would omit part of the reference's image path. These interface methods and
 resource roles are still under investigation.
 
+Further operand tracing resolves the direction of all four calls. Vtable
+slot `0x178` is D3D11 `CopyResource(destination, source)`. At `0x1f4d16`,
+the reference copies `[caller + 0x140]` into its private `[host + 0x4e8]`;
+the next two calls copy `[host + 0x228]` to `[host + 0x540]`
+and `[host + 0x280]` to `[host + 0x598]`. At `0x1f5092`, it copies the
+caller-supplied `[caller + 0x140]` into `[host + 0x4e8]`. Thus that fourth
+call is **not evidence of copying NGX output to a game/display resource**.
+The caller at `0x156d92..0x156dab` supplies game-side resource slots to
+`0x1f4ca0`, and `0x156e89` also copies from a game-side indexed slot into
+private `[host + 0x1d0]`. These are static observations of the exact-hash
+reference, not a proven output placement for RazKolbas. The actual display
+destination and UI/ENB order still need a live resource-identity trace.
+
 The first MO2 run logged a `BSWin32KeyboardDevice::Process` access violation at
 00:45:23. The crash log has the same faulting instruction, call stack and
 invalid-pointer pattern as the September 19 18:55:50 crash, which preceded
@@ -425,3 +438,18 @@ or error appeared in this launch slice. This is a **PASS for a single offscreen
 NGX DLAA frame on the actual Skyrim device**. It does not establish displayed
 SR, temporal stability, correct guide units/jitter, or image quality. The
 assistant did not launch or control Skyrim.
+
+## 0.1.16 read-only display-target identity diagnostic
+
+The successful offscreen output does not establish the game texture that
+should receive SR before UI, ENB and ReShade processing. The exact-hash
+reference trace above shows input copies into private textures; it does not
+prove a copyback address. On the first world-like frame, the next diagnostic
+queries the current D3D11 OM render-target views, DSV, and swap backbuffer
+through COM, logs their canonical IUnknown identities, dimensions and formats,
+then repeats that bounded snapshot before the next eligible ENB Present. It
+compares those identities with the verified world-colour candidate. All COM
+references are released in the callback. No renderer pointer is dereferenced
+at Present, no game texture is written, and the DLAA output remains offscreen.
+This can establish resource aliasing at the two observed boundaries; it cannot
+by itself prove every intervening UI/ENB pass or visual quality.
