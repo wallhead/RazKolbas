@@ -166,3 +166,18 @@ next engineering step is a quiescent, lifetime-safe pass-through call-site
 detour with verified forwarding ABI, followed by attaching owned resource
 preparation and direct NGX evaluation. Neither pass-through detour nor
 in-game SR is claimed by this checkpoint.
+
+## Offline CALL forwarding fixture
+
+The prepared `CALL rel32` replacement now has a checked encoder. It verifies
+the recorded original target again and rejects address overflow and a detour
+outside the signed 32-bit displacement range. An owned executable fixture
+changes only its five-byte call instruction, forwards through a counting
+detour to the original callee, observes exactly one visit per call, and
+restores the original route. Both Debug and Release passed all 15 CTest groups.
+This proves the instruction encoding and controlled fixture behavior; it does
+not establish safe quiescence for Skyrim threads, the real callee ABI, a
+nearby thunk allocation, or an in-game hook. A separate 14-byte RIP-indirect
+absolute jump relay ran in an executable fixture and preserved two Win64
+integer arguments and the caller's return path; no relay is installed in
+Skyrim. The game was not started for this change at the user's request.
