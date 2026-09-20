@@ -5,6 +5,7 @@
 #include "rk/Logging.hpp"
 #include "rk/Settings.hpp"
 #include "rk/RendererBootstrap.hpp"
+#include "rk/DiagnosticsMenu.hpp"
 #include <fstream>
 #include <mutex>
 
@@ -48,7 +49,7 @@ rk::Settings loadSettings() {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 22, 0});
+    metadata.PluginVersion({0, 1, 23, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -72,6 +73,9 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
         if (host.state() != rk::HostState::Created) return host.state() != rk::HostState::Stopping;
         if (!rk::initializeLogging()) return false;
         auto settings = loadSettings();
+        rk::configureDiagnosticsMenu(settings.get<bool>("Interface.Enabled"),
+            settings.get<rk::Text>("Interface.ToggleMenuKey").value,
+            settings.get<double>("Interface.FontScale"));
         const auto messaging = static_cast<SKSE::detail::SKSEMessagingInterface*>(skse->QueryInterface(SKSE::LoadInterface::kMessaging));
         if (!messaging || !messaging->RegisterListener || messaging->interfaceVersion < SKSE::MessagingInterface::kVersion) {
             spdlog::error("SKSE messaging interface unavailable; initialization aborted");

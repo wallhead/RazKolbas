@@ -2,6 +2,7 @@
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include "rk/SwapObserver.hpp"
+#include "rk/DiagnosticsMenu.hpp"
 #include "rk/FrameProbeRuntime.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/WorldDrawHook.hpp"
@@ -89,6 +90,9 @@ void swapObserved(const SwapEvent& event) {
             probePresentationTargets(reinterpret_cast<IDXGISwapChain*>(event.object));
             try { probePresentCandidates(reinterpret_cast<IDXGISwapChain*>(event.object)); }
             catch(const std::exception& error) { spdlog::warn("Candidate probe aborted: {}",error.what()); }
+            if(const auto status=worldDiagnosticsSnapshot(
+                reinterpret_cast<IDXGISwapChain*>(event.object)))
+                drawDiagnosticsMenu(reinterpret_cast<IDXGISwapChain*>(event.object),*status);
         }
         return;
     }

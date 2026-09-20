@@ -29,6 +29,11 @@ if ($NvidiaSrRuntime) {
     New-Item -ItemType Directory -Path $runtimeTarget -Force | Out-Null
     Copy-Item -LiteralPath $runtimeFile -Destination (Join-Path $runtimeTarget 'nvngx_dlss.dll')
 }
+$imguiNotice = Join-Path $root 'licenses/DearImGui-MIT.txt'
+if (-not (Test-Path -LiteralPath $imguiNotice -PathType Leaf)) { throw 'Dear ImGui MIT notice is missing' }
+$licenses = Join-Path $destinationPath 'LICENSES'
+New-Item -ItemType Directory -Path $licenses -Force | Out-Null
+Copy-Item -LiteralPath $imguiNotice -Destination (Join-Path $licenses 'DearImGui-MIT.txt')
 $destinationPrefix = $destinationPath.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar
 $files = @(Get-ChildItem -LiteralPath $destinationPath -File -Recurse | ForEach-Object {
     if (-not $_.FullName.StartsWith($destinationPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Staged file escaped destination' }

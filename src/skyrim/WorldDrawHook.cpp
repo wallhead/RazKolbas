@@ -8,6 +8,7 @@
 #include "rk/SrInput.hpp"
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
+#include "rk/DiagnosticsMenu.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/SdrDlssPresenter.hpp"
@@ -30,6 +31,10 @@ namespace {
 struct WorldState {
     WorldDrawForwarder forwarder;
     std::atomic<std::uint64_t> forwarded{0};
+    std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
+    std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
+    std::atomic<std::uint64_t> statusDlssFrames{0},statusSkippedFrames{0};
+    std::atomic<bool> statusDlssDisabled{false};
     std::uintptr_t expectedRenderer{};
     std::uintptr_t jitterCamera{};
     std::atomic_flag creationBound=ATOMIC_FLAG_INIT;
@@ -338,6 +343,7 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     const bool sample=sequence<=3||sequence%600==0;
     const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
     state->forwarder.dispatch(world,flags);
+    state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
     if((sequence<=12||sequence%600==0)&&state->jitterCamera) {
         std::array<std::uint8_t,0x4c> camera{};
         if(read(state->jitterCamera,camera.data(),camera.size())) {
@@ -434,6 +440,8 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                 } else {
                     D3D11_TEXTURE2D_DESC backDesc{};
                     backbuffer->GetDesc(&backDesc);
+                    state->statusWidth.store(backDesc.Width,std::memory_order_relaxed);
+                    state->statusHeight.store(backDesc.Height,std::memory_order_relaxed);
                     const auto jitter=readNgxJitter(state->jitterCamera,
                         backDesc.Width,backDesc.Height);
                     if(const auto jitterError=std::get_if<Error>(&jitter)) {
@@ -453,7 +461,10 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                             spdlog::warn("Continuous SDR DLAA disabled; native frame retained: {}",
                                 error->message);
                         } else if(std::get<bool>(displayed)) {
+                            state->displayedMode.store(DisplayMode::Dlaa,
+                                std::memory_order_release);
                             const auto count=state->sdrPresenter.submittedFrames();
+                            state->statusDlssFrames.store(count,std::memory_order_relaxed);
                             if(count==1||count%600==0)
                                 spdlog::info("Continuous SDR DLAA submitted for display: source frame {}; submitted={}; skipped={}; jitter=({},{}); UI follows; experimental SDR placement",
                                     state->forwarded.load(std::memory_order_relaxed),count,
@@ -491,6 +502,9 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             }
         }
     }
+    state->statusSkippedFrames.store(state->sdrSkipped+state->sdrJitterSkipped,
+        std::memory_order_relaxed);
+    state->statusDlssDisabled.store(state->sdrDisabled,std::memory_order_relaxed);
 #endif
     if(!sample)return;
     const auto after=readWorldNumbers(world,state->expectedRenderer);
@@ -513,6 +527,22 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
 std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
+}
+std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
+       reinterpret_cast<std::uintptr_t>(swap))return std::nullopt;
+    DiagnosticsSnapshot snapshot{};
+    snapshot.mode=state->displayedMode.load(std::memory_order_acquire);
+    snapshot.displayWidth=state->statusWidth.load(std::memory_order_relaxed);
+    snapshot.displayHeight=state->statusHeight.load(std::memory_order_relaxed);
+    snapshot.renderWidth=snapshot.displayWidth;
+    snapshot.renderHeight=snapshot.displayHeight;
+    snapshot.worldFrames=state->forwarded.load(std::memory_order_relaxed);
+    snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
+    snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);
+    snapshot.dlssDisabled=state->statusDlssDisabled.load(std::memory_order_relaxed);
+    return snapshot;
 }
 void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);

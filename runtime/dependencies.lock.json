@@ -6,7 +6,7 @@
     "fmt": {"repository": "https://github.com/fmtlib/fmt.git", "commit": "e69e5f977d458f2650bb346dadf2ad30c5320281", "version": "10.2.1"},
     "spdlog": {"repository": "https://github.com/gabime/spdlog.git", "commit": "27cb4c76708608465c413f6d0e6b8d99a4d84302", "version": "1.14.1"},
     "catch2": {"repository": "https://github.com/catchorg/Catch2.git", "commit": "2b60af89e23d28eefc081bc930831ee9d45ea58b", "version": "3.8.1"},
-    "imgui": {"repository": "https://github.com/ocornut/imgui.git", "commit": "f5befd2d29e66809cd1110a152e375a7f1981f06", "version": "1.91.9b", "use": "reserved for T10"},
+    "imgui": {"repository": "https://github.com/ocornut/imgui.git", "commit": "f5befd2d29e66809cd1110a152e375a7f1981f06", "version": "1.91.9b", "use": "End-key read-only diagnostics menu, MIT license"},
     "zydis": {"repository": "https://github.com/zyantific/zydis.git", "commit": "a2278f1d254e492f6a6b39f6cb5d1f5d515659dc", "version": "4.1.1", "use": "instruction decoder for T04"},
     "detours": {"repository": "https://github.com/microsoft/Detours.git", "commit": "e4bfd6b03e50de46b47abfbd1e46b384f0c5f833", "version": "4.0.1", "use": "reserved for verified engine detours"}
   },
