@@ -91,3 +91,48 @@ TEST_CASE("Raw depth sample gate distinguishes a menu clear from world geometry"
     REQUIRE(stats.worldLike());
     REQUIRE(std::holds_alternative<rk::Error>(rk::sampleWorldDepth(bytes,width,height,width*4-1)));
 }
+
+TEST_CASE("SDR scene preparation accepts an RTV-only backbuffer and preserves its pixels", "[sr_input]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,
+        D3D11_SDK_VERSION,&device,nullptr,&context)));
+    constexpr UINT width=8,height=6;
+    const std::array formats{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R24G8_TYPELESS};
+    const std::array<UINT,3> binds{D3D11_BIND_RENDER_TARGET,
+        D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE,
+        D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE};
+    std::array<ComPtr<ID3D11Texture2D>,3> sources;
+    std::array<std::vector<std::uint8_t>,3> bytes;
+    for(std::size_t i=0;i<sources.size();++i) {
+        bytes[i].resize(width*height*4);
+        for(std::size_t p=0;p<bytes[i].size();++p)
+            bytes[i][p]=static_cast<std::uint8_t>((p+i*19)%251);
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width=width;desc.Height=height;desc.MipLevels=desc.ArraySize=1;
+        desc.SampleDesc.Count=1;desc.Format=formats[i];desc.BindFlags=binds[i];
+        const D3D11_SUBRESOURCE_DATA initial{bytes[i].data(),width*4,0};
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,&initial,&sources[i])));
+    }
+    const std::array<ID3D11Texture2D*,3> raw{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    auto prepared=rk::prepareSdrSrInputs(context.Get(),raw);
+    REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(prepared));
+    auto& owned=std::get<rk::PreparedSrInputs>(prepared);
+    D3D11_TEXTURE2D_DESC colorDesc{},outputDesc{};
+    owned.color()->GetDesc(&colorDesc);owned.output()->GetDesc(&outputDesc);
+    REQUIRE(colorDesc.Format==DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE((colorDesc.BindFlags&D3D11_BIND_SHADER_RESOURCE)!=0);
+    REQUIRE(outputDesc.Format==DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE((outputDesc.BindFlags&D3D11_BIND_UNORDERED_ACCESS)!=0);
+    const std::array<ID3D11Texture2D*,3> copied{
+        owned.color(),owned.motion(),owned.depth()};
+    const auto readback=rk::readbackCandidates(context.Get(),copied);
+    REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(readback));
+    const auto& images=std::get<std::vector<rk::ProbeImage>>(readback);
+    for(std::size_t i=0;i<3;++i)REQUIRE(images[i].pixels==bytes[i]);
+    auto invalid=raw;
+    invalid[0]=sources[1].Get();
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputs(context.Get(),invalid)));
+}

@@ -31,8 +31,9 @@ Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
     return stats;
 }
 
-Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
-    std::span<ID3D11Texture2D* const> sources) {
+namespace {
+Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,DXGI_FORMAT colorFormat) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
         return Error{ErrorCode::InvalidInput,"SR preparation requires an immediate context and three textures"};
     ComPtr<ID3D11Device> device;
@@ -40,7 +41,7 @@ Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     ComPtr<IUnknown> deviceIdentity;
     if(!device||FAILED(device.As(&deviceIdentity)))
         return Error{ErrorCode::Unavailable,"SR preparation device unavailable"};
-    constexpr std::array expected{DXGI_FORMAT_R16G16B16A16_FLOAT,DXGI_FORMAT_R16G16_FLOAT,
+    const std::array expected{colorFormat,DXGI_FORMAT_R16G16_FLOAT,
         DXGI_FORMAT_R24G8_TYPELESS};
     std::array<D3D11_TEXTURE2D_DESC,3> descriptions{};
     for(std::size_t i=0;i<sources.size();++i) {
@@ -53,7 +54,9 @@ Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
         auto& d=descriptions[i];sources[i]->GetDesc(&d);
         if(d.Format!=expected[i]||!d.Width||!d.Height||d.Width>8192||d.Height>8192||
            d.MipLevels!=1||d.ArraySize!=1||d.SampleDesc.Count!=1||
-           d.Usage!=D3D11_USAGE_DEFAULT||!(d.BindFlags&D3D11_BIND_SHADER_RESOURCE))
+           d.Usage!=D3D11_USAGE_DEFAULT||
+           (i||colorFormat!=DXGI_FORMAT_R8G8B8A8_UNORM)&&
+           !(d.BindFlags&D3D11_BIND_SHADER_RESOURCE))
             return Error{ErrorCode::Unsupported,"SR source format or texture geometry differs"};
         if(i&&(d.Width!=descriptions[0].Width||d.Height!=descriptions[0].Height))
             return Error{ErrorCode::Conflict,"SR source dimensions differ"};
@@ -63,6 +66,8 @@ Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     for(std::size_t i=0;i<copies.size();++i) {
         auto d=descriptions[i];
         d.CPUAccessFlags=0;d.MiscFlags=0;
+        if(i==0&&colorFormat==DXGI_FORMAT_R8G8B8A8_UNORM)
+            d.BindFlags|=D3D11_BIND_SHADER_RESOURCE;
         if(FAILED(device->CreateTexture2D(&d,nullptr,&copies[i])))
             return Error{ErrorCode::Unavailable,"Cannot allocate owned SR source texture"};
     }
@@ -74,5 +79,14 @@ Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     for(std::size_t i=0;i<copies.size();++i)context->CopyResource(copies[i].Get(),sources[i]);
     return PreparedSrInputs{std::move(copies[0]),std::move(copies[1]),std::move(copies[2]),
         std::move(output),d.Width,d.Height};
+}
+}
+Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources) {
+    return prepareInputs(context,sources,DXGI_FORMAT_R16G16B16A16_FLOAT);
+}
+Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources) {
+    return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM);
 }
 }

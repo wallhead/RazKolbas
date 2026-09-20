@@ -7,9 +7,12 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <array>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -40,12 +43,23 @@ ComPtr<ID3D11Texture2D> texture(ID3D11Device* device,DXGI_FORMAT format,
 }
 }
 int wmain(int argc,wchar_t** argv) {
-    if(argc!=2) { std::cerr<<"Usage: RazKolbasSrLivePathReplay <verified capture directory>\n";return 2; }
+    const bool sdr=(argc==3||argc==4)&&std::wstring_view(argv[1])==L"--sdr";
+    if(argc!=2&&!sdr) {
+        std::cerr<<"Usage: RazKolbasSrLivePathReplay [--sdr] <verified capture directory> [output.raw]\n";
+        return 2;
+    }
     try {
-        const fs::path capture=fs::absolute(argv[1]);
-        const auto colorBytes=read(capture/L"main-colour-candidate.raw",width*height*8);
-        const auto motionBytes=read(capture/L"motion-candidate.raw",width*height*4);
-        const auto depthBytes=read(capture/L"depth-candidate.raw",width*height*4);
+        const fs::path capture=fs::absolute(argv[sdr?2:1]);
+        const auto colorBytes=read(capture/(sdr?L"post-world-backbuffer.raw":
+            L"main-colour-candidate.raw"),width*height*(sdr?4:8));
+        auto motionBytes=sdr?std::vector<std::uint8_t>(width*height*4):
+            read(capture/L"motion-candidate.raw",width*height*4);
+        auto depthBytes=sdr?std::vector<std::uint8_t>(width*height*4):
+            read(capture/L"depth-candidate.raw",width*height*4);
+        if(sdr)for(std::size_t i=0;i<static_cast<std::size_t>(width)*height;++i) {
+            const auto depth=static_cast<std::uint32_t>(0x00400000+(i%4096));
+            std::memcpy(depthBytes.data()+i*4,&depth,4);
+        }
         ComPtr<IDXGIFactory6> factory;
         checked(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)),"FACTORY_CREATE");
         ComPtr<IDXGIAdapter1> adapter;
@@ -66,14 +80,17 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ID3D11DeviceContext> context;
         checked(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,
             nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context),"DEVICE_CREATE");
-        const auto color=texture(device.Get(),DXGI_FORMAT_R16G16B16A16_FLOAT,8,
-            D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET,colorBytes.data());
+        const auto color=texture(device.Get(),sdr?DXGI_FORMAT_R8G8B8A8_UNORM:
+            DXGI_FORMAT_R16G16B16A16_FLOAT,sdr?4:8,
+            sdr?D3D11_BIND_RENDER_TARGET:
+                D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET,colorBytes.data());
         const auto motion=texture(device.Get(),DXGI_FORMAT_R16G16_FLOAT,4,
             D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET,motionBytes.data());
         const auto depth=texture(device.Get(),DXGI_FORMAT_R24G8_TYPELESS,4,
             D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_DEPTH_STENCIL,depthBytes.data());
         const std::array<ID3D11Texture2D*,3> sources{color.Get(),motion.Get(),depth.Get()};
-        auto prepared=rk::prepareSrInputs(context.Get(),sources);
+        auto prepared=sdr?rk::prepareSdrSrInputs(context.Get(),sources):
+            rk::prepareSrInputs(context.Get(),sources);
         if(const auto error=std::get_if<rk::Error>(&prepared))stop(error->message);
         auto owned=std::move(std::get<rk::PreparedSrInputs>(prepared));
         rk::OffscreenDlssProbe probe;
@@ -85,6 +102,23 @@ int wmain(int argc,wchar_t** argv) {
             const auto polled=probe.poll(device.Get(),context.Get());
             if(const auto error=std::get_if<rk::Error>(&polled))stop(error->message);
             if(const auto& hash=std::get<std::string>(polled);!hash.empty()) {
+                if(sdr&&argc==4) {
+                    D3D11_TEXTURE2D_DESC output{};owned.output()->GetDesc(&output);
+                    output.Usage=D3D11_USAGE_STAGING;output.BindFlags=0;
+                    output.CPUAccessFlags=D3D11_CPU_ACCESS_READ;output.MiscFlags=0;
+                    ComPtr<ID3D11Texture2D> staging;
+                    checked(device->CreateTexture2D(&output,nullptr,&staging),"OUTPUT_STAGING");
+                    context->CopyResource(staging.Get(),owned.output());
+                    D3D11_MAPPED_SUBRESOURCE mapped{};
+                    checked(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped),"OUTPUT_MAP");
+                    std::ofstream file(argv[3],std::ios::binary);
+                    if(!file)stop("OUTPUT_FILE");
+                    for(UINT y=0;y<height;++y)
+                        file.write(reinterpret_cast<const char*>(mapped.pData)+
+                            static_cast<std::size_t>(y)*mapped.RowPitch,width*4);
+                    context->Unmap(staging.Get(),0);
+                    if(!file)stop("OUTPUT_WRITE");
+                }
                 std::cout<<"LIVE_PATH_OUTPUT_SHA256="<<hash<<std::endl;
                 std::cout<<"LIVE_PATH_REPLAY=PASS"<<std::endl;
                 return 0;

@@ -10,6 +10,7 @@
 #include "rk/WorldDraw.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
+#include "rk/SdrDlssPresenter.hpp"
 #endif
 #include <spdlog/spdlog.h>
 #include <ShlObj.h>
@@ -52,6 +53,9 @@ struct WorldState {
     std::optional<CompletedOutput> completedOutput;
     OffscreenDlssProbe dlssProbe;
     bool probeFailed{};
+    SdrDlssPresenter sdrPresenter;
+    bool sdrDisabled{},firstSdrCaptured{};
+    std::uint64_t sdrSkipped{};
 #endif
 };
 std::atomic<WorldState*> active{nullptr};
@@ -377,6 +381,69 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             } catch(...) {
                 state->probeFailed=true;
                 try { spdlog::warn("Offscreen DLSS probe exception; owned resources retained"); } catch(...) {}
+            }
+        }
+    }
+#endif
+#ifdef RK_WITH_NGX
+    if(state->completedOutput&&!state->sdrDisabled) {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+           numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+           numbers.context==state->createdContext.load(std::memory_order_relaxed)&&
+           numbers.swap==state->createdSwap.load(std::memory_order_relaxed)) {
+            try {
+                auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+                const auto got=reinterpret_cast<IDXGISwapChain*>(numbers.swap)->GetBuffer(0,
+                    IID_PPV_ARGS(&backbuffer));
+                if(FAILED(got)||!backbuffer) {
+                    state->sdrDisabled=true;
+                    spdlog::warn("Continuous SDR DLAA disabled: backbuffer unavailable 0x{:08x}",
+                        static_cast<std::uint32_t>(got));
+                } else {
+                    const auto displayed=state->sdrPresenter.render(
+                        reinterpret_cast<ID3D11Device*>(numbers.device),immediate,
+                        backbuffer.Get(),reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                        reinterpret_cast<ID3D11Texture2D*>(numbers.depth));
+                    if(const auto error=std::get_if<Error>(&displayed)) {
+                        state->sdrDisabled=true;
+                        spdlog::warn("Continuous SDR DLAA disabled; native frame retained: {}",
+                            error->message);
+                    } else if(std::get<bool>(displayed)) {
+                        const auto count=state->sdrPresenter.submittedFrames();
+                        if(count==1||count%600==0)
+                            spdlog::info("Continuous SDR DLAA submitted for display: source frame {}; submitted={}; skipped={}; UI follows; experimental SDR placement",
+                                state->forwarded.load(std::memory_order_relaxed),count,
+                                state->sdrSkipped);
+                        if(!state->firstSdrCaptured) {
+                            state->firstSdrCaptured=true;
+                            auto captured=StagePairCapture::capturePostWorld(immediate,
+                                reinterpret_cast<ID3D11Texture2D*>(numbers.colour),
+                                backbuffer.Get());
+                            if(const auto captureError=std::get_if<Error>(&captured))
+                                spdlog::warn("SDR display submission capture unavailable: {}",captureError->message);
+                            else {
+                                std::scoped_lock lock(state->stagePairMutex);
+                                state->stagePair.emplace(std::move(std::get<StagePairCapture>(captured)));
+                                state->stagePairFrame=state->forwarded.load(std::memory_order_relaxed);
+                                state->presentTargetProbeDue.store(true,std::memory_order_release);
+                                spdlog::info("SDR display submission captured before HUD at world frame {}; awaiting same-frame Present",
+                                    state->stagePairFrame);
+                            }
+                        }
+                    } else {
+                        ++state->sdrSkipped;
+                        if(state->sdrSkipped==1||state->sdrSkipped%600==0)
+                            spdlog::warn("SDR DLAA slot busy; native frame displayed; skipped={}",state->sdrSkipped);
+                    }
+                }
+            } catch(const std::exception& error) {
+                state->sdrDisabled=true;
+                try { spdlog::warn("Continuous SDR DLAA exception; native frame retained: {}",error.what()); } catch(...) {}
+            } catch(...) {
+                state->sdrDisabled=true;
+                try { spdlog::warn("Continuous SDR DLAA exception; native frame retained"); } catch(...) {}
             }
         }
     }

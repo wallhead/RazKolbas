@@ -29,7 +29,7 @@ private:
     NVSDK_NGX_Handle* feature_{};
     Microsoft::WRL::ComPtr<ID3D11Texture2D> readback_;
     Microsoft::WRL::ComPtr<ID3D11Query> completion_;
-    unsigned width_{},height_{};
+    unsigned width_{},height_{},pixelBytes_{};
     bool initialized_{},pending_{};
 };
 }

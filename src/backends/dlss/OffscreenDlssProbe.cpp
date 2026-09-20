@@ -43,6 +43,15 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     if(!inputs.color()||!inputs.motion()||!inputs.depth()||!inputs.output()||
         !inputs.width()||!inputs.height())
         return Error{ErrorCode::InvalidInput,"DLSS probe inputs are incomplete"};
+    D3D11_TEXTURE2D_DESC inputDescription{};
+    inputs.color()->GetDesc(&inputDescription);
+    D3D11_TEXTURE2D_DESC outputDescription{};
+    inputs.output()->GetDesc(&outputDescription);
+    const bool hdr=inputDescription.Format==DXGI_FORMAT_R16G16B16A16_FLOAT;
+    const bool sdr=inputDescription.Format==DXGI_FORMAT_R8G8B8A8_UNORM;
+    if((!hdr&&!sdr)||outputDescription.Format!=inputDescription.Format||
+        outputDescription.Width!=inputs.width()||outputDescription.Height!=inputs.height())
+        return Error{ErrorCode::Unsupported,"DLSS probe input/output format differs"};
     const auto folder=pluginDirectory();
     if(folder.empty())return Error{ErrorCode::Unavailable,"Cannot locate RazKolbas plugin directory"};
     const auto runtimeDir=folder/L"RazKolbasRuntime";
@@ -81,7 +90,7 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     create.Feature.InWidth=create.Feature.InTargetWidth=inputs.width();
     create.Feature.InHeight=create.Feature.InTargetHeight=inputs.height();
     create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_DLAA;
-    create.InFeatureCreateFlags=NVSDK_NGX_DLSS_Feature_Flags_IsHDR|
+    create.InFeatureCreateFlags=(hdr?NVSDK_NGX_DLSS_Feature_Flags_IsHDR:0)|
         NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     if(!success(NGX_D3D11_CREATE_DLSS_EXT(context,&feature_,parameters_,&create))||!feature_)
         return Error{ErrorCode::Unavailable,"NVIDIA DLAA feature creation failed"};
@@ -91,7 +100,7 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     if(!length||length>=32768)
         return Error{ErrorCode::Conflict,"Cannot identify loaded NVIDIA SR runtime"};
     if(const auto checked=exactRuntime(loadedName);const auto error=std::get_if<Error>(&checked))return *error;
-    D3D11_TEXTURE2D_DESC output{};inputs.output()->GetDesc(&output);
+    auto output=outputDescription;
     output.Usage=D3D11_USAGE_STAGING;output.BindFlags=0;output.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
     output.MiscFlags=0;
     if(FAILED(device->CreateTexture2D(&output,nullptr,&readback_)))
@@ -119,7 +128,7 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     scope.reset(); // Restore Skyrim's complete context state before returning.
     context->CopyResource(readback_.Get(),inputs.output());
     context->End(completion_.Get());context->Flush();
-    width_=inputs.width();height_=inputs.height();pending_=true;
+    width_=inputs.width();height_=inputs.height();pixelBytes_=hdr?8:4;pending_=true;
     return true;
 }
 
@@ -129,24 +138,30 @@ Result<std::string> OffscreenDlssProbe::poll(ID3D11Device* device,ID3D11DeviceCo
     if(status==S_FALSE)return std::string{};
     if(FAILED(status)||FAILED(device->GetDeviceRemovedReason()))
         return Error{ErrorCode::DeviceRemoved,"DLSS probe completion or device failed; resources retained"};
-    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(width_)*height_*8);
+    const auto rowBytes=static_cast<std::size_t>(width_)*pixelBytes_;
+    std::vector<std::uint8_t> bytes(rowBytes*height_);
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if(FAILED(context->Map(readback_.Get(),0,D3D11_MAP_READ,0,&mapped)))
         return Error{ErrorCode::Unavailable,"DLSS output readback failed; resources retained"};
     for(unsigned y=0;y<height_;++y)
-        std::memcpy(bytes.data()+static_cast<std::size_t>(y)*width_*8,
+        std::memcpy(bytes.data()+static_cast<std::size_t>(y)*rowBytes,
             static_cast<const std::uint8_t*>(mapped.pData)+static_cast<std::size_t>(y)*mapped.RowPitch,
-            static_cast<std::size_t>(width_)*8);
+            rowBytes);
     context->Unmap(readback_.Get(),0);
     std::uint16_t first{};bool varying=false;std::size_t finite=0,zero=0,nanSentinel=0;
     for(std::size_t pixel=0;pixel<static_cast<std::size_t>(width_)*height_;++pixel) {
         for(unsigned channel=0;channel<3;++channel) {
-            std::uint16_t half{};
-            std::memcpy(&half,bytes.data()+pixel*8+channel*2,2);
-            if((half&0x7c00U)!=0x7c00U)++finite;
-            if(half==0)++zero;
-            if((half&0x7fffU)==0x7e00U)++nanSentinel;
-            if(pixel||channel) varying|=half!=first;else first=half;
+            std::uint16_t value{};
+            if(pixelBytes_==8) {
+                std::memcpy(&value,bytes.data()+pixel*8+channel*2,2);
+                if((value&0x7c00U)!=0x7c00U)++finite;
+                if((value&0x7fffU)==0x7e00U)++nanSentinel;
+            } else {
+                value=bytes[pixel*4+channel];
+                ++finite;
+            }
+            if(value==0)++zero;
+            if(pixel||channel) varying|=value!=first;else first=value;
         }
     }
     const auto hash=sha256(bytes);

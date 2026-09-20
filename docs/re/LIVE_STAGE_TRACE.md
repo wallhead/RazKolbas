@@ -104,3 +104,66 @@ draw anything. The next exact question is whether the game/ENB leaves its
 HDR-to-display PS and scene SRV bound after the world call. If not, a more
 precise hook within the world draw is required; no guessed shader replay or
 display write is enabled by this diagnostic.
+
+## User-launched 0.1.19 shader snapshot and SDR replay (2026-09-20)
+
+The user-launched process PID 14048 started at 12:31:54 and accepted world
+depth on attempt 12 (94 distinct, 93 non-far). The installed binary was
+0.1.19 by its unique new pipeline log and DLL hash, although the bootstrap
+text still mistakenly printed `0.1.18`; this text needs correction in the
+next deployed build. The post-world shader snapshot found PS
+`0x25fb52ef580`, VS `0x25fb52ef740`, triangle-list topology, one viewport,
+and 13 bound PS texture slots. **None** was the HDR scene. Consequently the
+shader left bound at this callback cannot be replayed with the DLSS HDR
+output; the HDR-to-display conversion happened earlier or in a different
+call. The game remained unmodified by the probe. A new same-frame stage pair
+and a fenced finite, nonuniform offscreen HDR DLAA output were saved. The
+read-only exact-executable-hash code snapshot under ignored
+`artifacts/local/live-stage-2026-09-20-1234/` includes the original call
+target `0xe44850`: its decoded function primarily selects/clears D3D11
+targets through device-context vtable calls; it does not expose a direct
+HDR-to-display draw after our callback.
+
+The paired backbuffer is 2560x1440 `R8G8B8A8_UNORM`, shows the scene without
+HUD after the world callback, and is in the user's SDR Windows display mode.
+An owned SDR input preparation path now copies that RTV-only source into a
+shader-readable texture with matching motion/depth copies and an RGBA8 UAV
+output. A WARP test verifies its pixel preservation and resource contracts.
+The isolated NVIDIA NGX replay used the captured post-world SDR scene,
+synthetic zero motion and varying depth, with `IsHDR` cleared and reset=1.
+Its input SHA-256 was
+`1ddb0d81b4397ab874570f23c21150412fc59d7bf09766aeadca2dd79f2548e2`;
+the finite, nonuniform 2560x1440 RGBA8 output was
+`6bebd29eb1fb87ed84f1014df6fe38d33dcee2274c7ae30e810403d88425b4fd`.
+An independent hash of the saved output matched; visual inspection found a
+coherent scene. About 32.69% of pixels differed from the input, with mean
+absolute RGB changes of 0.70/0.67/0.63 in 8-bit units. The previous HDR
+replay path also passed after the format-specific change. This establishes
+an API-compatible SDR experiment, **not** actual-game copyback, correct
+motion/jitter, image-quality acceptance, or reduced-resolution SR. NVIDIA's
+integration checklist recommends applying DLSS SR near the start of
+post-processing, so the SDR post-world route is an incremental display
+slice rather than the final quality placement:
+https://developer.nvidia.com/rtx/streamline/get-started
+
+## Continuous SDR display experiment (0.1.20 source checkpoint)
+
+The new post-world path uses the verified renderer lock and currently bound
+2560x1440 SDR backbuffer as its scene source. It copies the scene, motion and
+depth into three owned frame slots, evaluates a persistent NVIDIA SDR DLAA
+feature, and copies its RGBA8 output back to the same RTV0 backbuffer before
+the later UI work. Each slot has a D3D11 event query; a busy slot leaves that
+frame native. The first submitted frame is captured immediately after the
+copy and again before Present so the user run can check both the scene change
+and subsequent UI composition. Errors disable further DLAA submissions.
+
+This is a display experiment, not reduced-resolution super resolution. The
+real game's motion-vector units, jitter, temporal history, ENB/ReShade visual
+interaction, and continuous in-game stability remain unverified. The live
+plugin retains its NGX session for process lifetime because a safe Skyrim
+device-teardown callback has not yet been established. The standalone harness
+explicitly drains GPU queries and shuts NGX down. A 30-frame replay on the
+local NVIDIA device, using the captured UI-free SDR scene and synthetic scene
+guides, completed with a stable changed output and clean process exit. Actual
+0.1.20 in-game display and image-quality acceptance are NOT RUN until the
+user starts Skyrim and loads a save.

@@ -46,4 +46,9 @@ Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
 // does not wait for GPU completion or alter Skyrim's source textures.
 Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
+// Uses the already tone-mapped, HUD-free SDR scene in an RTV-only backbuffer.
+// The owned copy is shader-readable; the original backbuffer is never bound
+// to NGX and remains unchanged until an explicit presentation decision.
+Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources);
 }
