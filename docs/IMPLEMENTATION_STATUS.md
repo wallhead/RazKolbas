@@ -458,5 +458,20 @@ IDXGIFactory CreateSwapChain ABI and preserved result. The refactored NGX
 session returned a 1707x960 Quality plan for 2560x1440 and evaluated 30
 synthetic-guide frames on the RTX 4080 SUPER with zero fallback. This is a
 GPU replay, not Skyrim's scene. Release build and all 33 CTest groups passed.
-Skyrim 0.1.35
-runtime is NOT RUN; DLSS SR is still not on in Skyrim.
+Skyrim 0.1.35 runtime is NOT RUN; DLSS SR is still not on in Skyrim.
+
+0.1.35 MO2 diagnostic deployment: source commit `dcc7d26`; package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.35-factory-trace-dcc7d26.zip`
+SHA-256 `cd1a90dcb102e93b173ba1a9bce5138555546e19f27732f1c2eef6966fbe1482`.
+Independent ZIP inspection found exactly the four manifest-listed payloads and
+manifest; every ZIP/staged file matched its SHA-256. SkyrimSE.exe was absent.
+The previous installed four files matched their manifest and the complete mod
+folder was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.35-dcc7d26`. Only the DLL and
+manifest were replaced. The installed four files match the new manifest; DLL
+SHA-256 is `320d3493f21e352587d29d0e053baf822aba2642e478d2a6849953c78e9e1274`.
+The user INI and signed NVIDIA SR runtime hashes are unchanged. The assistant
+did not start or close Skyrim. The exact next runtime action is one normal
+user-started game session; inspect `Nested factory CreateSwapChain` and
+`Nested GetBuffer` log entries to establish the early consumer path. Reduced
+Skyrim scene rendering and DLSS SR remain NOT RUN.
