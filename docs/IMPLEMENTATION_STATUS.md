@@ -101,3 +101,7 @@ The user launched Skyrim through MO2 at 09:36:08 on 2026-09-20. At 09:36:16 the 
 ## 0.1.12 sparse world-boundary numeric telemetry
 
 The next diagnostic build samples only the verified renderer object's numeric fields immediately before and after the original world target on the first three calls and every 600th call. It logs argument flags, callback thread, renderer pointer match, lock owner/recursion, creation device/context/swap and candidate colour/motion/depth pointers. It does not dereference candidates, acquire the lock, call D3D, copy GPU data or alter rendering. Debug and Release: all 15 CTest groups PASS. In-game 0.1.12 telemetry: NOT RUN. The existing 0.1.11 user run remains the validated pass-through baseline.
+
+## 0.1.12 managed MO2 world-stage deployment
+
+At 09:45:39 on 2026-09-20, after confirming SkyrimSE.exe was absent, exact prior DLL/INI hashes were checked and backed up under artifacts/local/world-stage-install-2026-09-20-094539. Installed only RazKolbas 0.1.12 DLL plus matching install manifest in D:/TESV_EX/MO2/mods/RazKolbas; INI remained SHA256 7de35e2d1e60a0bdc1e06517cec25e9b50a34af7ee47f3583035a7a88535fea1. New DLL SHA256 e32c178c2a43e007052edcbe2b0eb39b8fbcec7f9d654aa351b245a8ebb6f2d6. MO2 package D:/TESV_EX/MO2/downloads/RazKolbas-0.1.12-world-stage-9f1d3b1.zip SHA256 663063d81be94788d3f153ddc9f04ff2fbf235b7a5715ffac702a2549b2f21dd. The user must launch Skyrim and load a save for world-stage telemetry; game outcome remains NOT RUN. The assistant did not start the game.
