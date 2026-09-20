@@ -519,3 +519,12 @@ guides; the Release build and all 33 CTest groups passed. This fixes an input
 contract that would otherwise reject the planned reduced alias. It is
 source-only: the installed MO2 build remains 0.1.35, the alias is not armed,
 and Skyrim DLSS SR remains **NOT RUN**.
+
+The source now has a strict current-native-flip-target resolver. It queries
+`IDXGISwapChain3::GetCurrentBackBufferIndex` on the outer swap, obtains that
+buffer through the same wrapper, validates the native SDR extent and device,
+and creates its RTV. A three-buffer WARP flip fixture tested acquisition
+through three successful Present calls and rejection of an incorrect display
+extent. The fixture reported index zero throughout those calls, so it did
+not prove index rotation; the real ENB/ReShade wrapper and rotating native
+target remain **NOT RUN**. The resolver is not yet wired to the UI adapter.
