@@ -725,3 +725,37 @@ next action is a user-started menu run. If the image is still black, inspect
 the first pre-Present source and destination samples, close the game, and
 restore 0.1.35. If it is visible, inspect continuous submissions and UI
 appearance before treating this as more than an interim whole-frame route.
+
+## 0.1.39 crash and rollback (September 20)
+
+The user reported a crash with 0.1.39. Three CrashLogger logs at 22:30:12,
+22:31:04 and 22:32:42 show the same null-read access violation in
+`nvwgf2umx.dll+0x1B61A4` on an NVIDIA worker thread. This does not by
+itself prove which RazKolbas submission/resource caused it. In the latest
+run, the pre-Present route submitted DLSS for frames one through three;
+both the reduced scene and native buffer had non-black 16x16 samples, and
+the first two Present calls returned success. The log ends after the frame
+three submission, within the crash second. Thus pre-Present publication
+produced non-black native pixels, but **continuous game SR is unstable**;
+visible appearance was not confirmed by the user. The assistant did not
+start any of these sessions. SkyrimSE.exe had exited when checked. The
+assistant restored the MO2 0.1.35 DLL and manifest from the verified
+pre-0.1.39 backup and checked all four installed payload hashes. The user
+INI and signed NVIDIA runtime remain unchanged. Do not reinstall 0.1.39.
+
+The next investigation must separate a menu frame with unverified depth/
+motion guides from a valid loaded-world SR frame, and distinguish NGX
+in-flight resource handling from pre-Present display writes. The current
+source is known crash-prone and is not a release candidate. A bounded
+fallback-only or depth-gated pre-Present experiment can isolate those
+causes, but must be labelled as a diagnostic, not working DLSS.
+
+The next source candidate keeps the verified pre-Present placement but
+forces the spatial fallback for owned frames, so it does **not** submit NGX.
+It samples the renderer's depth in the 1707x960 owned render rectangle on
+frame one and every 600 frames, logging the established 10x10 world-depth
+readiness statistics. This isolates the NVIDIA crash from pre-Present
+source-to-native publication and lets a visible menu reach a loaded world
+if the fallback is stable. A WARP two-frame owned-route regression and the
+Release build pass; all 35 CTest groups pass. This is a diagnostic, not a
+claim of DLSS SR. Runtime result is **NOT RUN** until a user-started game.

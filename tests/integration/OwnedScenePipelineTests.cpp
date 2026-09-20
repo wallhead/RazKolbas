@@ -104,6 +104,33 @@ TEST_CASE("Owned reduced SDR scene publishes spatial fallback before native UI",
         if(!retired)Sleep(1);
     }
     REQUIRE(retired);
+    REQUIRE(domain.closePublishedFrame(1,1));
+    REQUIRE(domain.begin(2,1,GetCurrentThreadId()));
+    ui.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
+    const float red[4]{1,0,0,1};
+    context->ClearRenderTargetView(sceneView,red);
+    REQUIRE(domain.startProcessing(2,1));
+    REQUIRE(SUCCEEDED(ui.replaceNativeTarget(native.view.Get())));
+    REQUIRE(SUCCEEDED(ui.bindNativeForProcessing(2)));
+    auto nextFrame=rk::presentSdrSrFrame(context.Get(),scene.texture(),
+        native.texture.Get(),[]()->rk::Result<bool> {
+            return rk::Error{rk::ErrorCode::Unavailable,"spatial-only fixture"};
+        });
+    REQUIRE(std::holds_alternative<rk::SdrSrFrameResult>(nextFrame));
+    REQUIRE(std::get<rk::SdrSrFrameResult>(nextFrame).mode()==
+        rk::SdrSrFrameMode::SpatialFallback);
+    REQUIRE(SUCCEEDED(ui.commitPublishedUi(2)));
+    REQUIRE(domain.closePublishedFrame(2,1));
+    REQUIRE_FALSE(ui.compatibilityFault());
+    context->Flush();
+    retired=false;
+    for(unsigned attempt=0;attempt<100&&!retired;++attempt) {
+        const auto done=std::get<rk::SdrSrFrameResult>(nextFrame).complete(context.Get());
+        REQUIRE(std::holds_alternative<bool>(done));
+        retired=std::get<bool>(done);
+        if(!retired)Sleep(1);
+    }
+    REQUIRE(retired);
     context->OMSetRenderTargets(0,nullptr,nullptr);
     bound.Reset();boundResource.Reset();
     domain.suspend();ui.releaseAfterRetirement();

@@ -81,6 +81,9 @@ struct WorldState {
     std::vector<SdrSrFrameResult> ownedFallbacks;
     bool srRequested{};
     bool srDisabled{};
+    // Temporary crash-isolation candidate: keep the completed reduced frame
+    // visible without submitting menu guides to NGX.
+    bool ownedSpatialDiagnostic{true};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
     std::uint64_t srActiveGeneration{};
@@ -391,6 +394,30 @@ void probeOwnedPixels(const char* stage,ID3D11DeviceContext* context,
             image.descriptor.Width,image.descriptor.Height,nonBlack,distinct);
     }
 }
+void probeOwnedDepth(ID3D11DeviceContext* context,ID3D11Texture2D* depth,
+    Extent render,std::uint64_t frame) {
+    const std::array<ID3D11Texture2D*,1> texture{depth};
+    const auto readback=readbackCandidates(context,texture,16*1024*1024);
+    if(const auto error=std::get_if<Error>(&readback)) {
+        spdlog::warn("Owned spatial diagnostic depth frame {} unavailable: {}",
+            frame,error->message);return;
+    }
+    const auto& image=std::get<std::vector<ProbeImage>>(readback).at(0);
+    if(image.descriptor.Width<render.width||image.descriptor.Height<render.height) {
+        spdlog::warn("Owned spatial diagnostic depth frame {} extent differs: {}x{}",
+            frame,image.descriptor.Width,image.descriptor.Height);return;
+    }
+    const auto sampled=sampleWorldDepth(image.pixels,render.width,render.height,
+        image.rowBytes);
+    if(const auto error=std::get_if<Error>(&sampled)) {
+        spdlog::warn("Owned spatial diagnostic depth frame {} sample unavailable: {}",
+            frame,error->message);return;
+    }
+    const auto stats=std::get<DepthSampleStats>(sampled);
+    spdlog::info("Owned spatial diagnostic depth frame {}: source={}x{} sampled={}x{} distinct={} nonFar={} worldLike={}",
+        frame,image.descriptor.Width,image.descriptor.Height,
+        render.width,render.height,stats.distinct,stats.nonFar,stats.worldLike());
+}
 bool processOwnedWorldFrame(WorldState* state,void* world,
     std::uint64_t sequence) noexcept {
     auto* domain=activeOwnedSceneDomain();
@@ -442,8 +469,13 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     domain->plan().display.width,domain->plan().display.height);
             }
         }
+        if(state->ownedSpatialDiagnostic&&(sequence==1||sequence%600==0))
+            probeOwnedDepth(context,reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
+                domain->plan().render,sequence);
         const auto presented=presentSdrSrFrame(context,scene,display,
             [&]()->Result<bool> {
+                if(state->ownedSpatialDiagnostic)
+                    return Error{ErrorCode::Unavailable,"Spatial-only crash isolation; NGX not submitted"};
                 const std::array<ID3D11Texture2D*,3> sources{
                     scene,reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
                     reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
