@@ -565,3 +565,24 @@ pass. **No 0.1.36 Skyrim run has occurred; actual alias acceptance, reduced
 scene pixels, NGX submissions, ENB/ReShade placement, UI behavior and resize
 remain NOT RUN.** The installed MO2 build remains 0.1.35 until package
 deployment below.
+
+0.1.36 MO2 candidate deployment: source commit `6ee6b53`; ZIP
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.36-owned-sr-6ee6b53.zip` SHA-256
+`ac1ba7a2878968e89ed77f69469a484d6ee9ef33ab2edce83cfc98e390755f17`.
+Independent ZIP inspection found exactly the four manifest-listed payloads
+plus manifest, and all ZIP payload hashes match. SkyrimSE.exe was absent.
+The prior 0.1.35 payloads matched their manifest and the full mod folder
+was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.36-6ee6b53` with hashes verified.
+Only `RazKolbas.dll` and `install-manifest.json` were replaced in
+`D:/TESV_EX/MO2/mods/RazKolbas`. All installed payloads match the 0.1.36
+manifest. DLL SHA-256 is
+`d42c3240bc478bc075975906f2cd9164970b585844a47c173a627e0af06e653c`;
+the user's INI remains
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and the signed NVIDIA SR runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The assistant did not start Skyrim. The installed candidate's actual alias,
+DLSS SR, fallback, UI and resize results are **NOT RUN**; the next action is
+one normal user-started Skyrim session through MO2, then inspect
+`RazKolbas.log` for `Owned scene route armed` and `Owned world frame` evidence.
