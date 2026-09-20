@@ -143,16 +143,11 @@ target. Its branch at `0xe445c3..0xe44625` invokes two renderer-state
 callees, `0xe43bc0` and `0xe44050`. Later, at `0xe44725..0xe4475c`, it
 constructs a stack descriptor with width and height from renderer state or
 fallback globals, loads static object `0x328be80` into RCX, and calls
-`0xe4fb90`. The exact dimensions represented by that descriptor, the
-allocation/recreation side effects, and the relation to DRS ratios are not
-established by this caller alone. These four callees were absent from the
-prior decoded captures. The read-only, exact-executable-hash inspector now
-includes bounded regions at those four RVAs for the next **user-started**
-game session. It still makes no writes, remote calls, or game-control inputs.
-The capture will test whether this path creates genuinely reduced world
-colour before the post-world SDR conversion; it may identify a source for
-the already implemented display-sized SR/fallback stage. No DRS hook or
-reduced-render mode is enabled on this inference.
+`0xe4fb90`. These callees were absent from the prior decoded captures, so
+their effects could not be inferred from Renderer Begin alone. The targeted
+user-started capture below resolves their immediate behavior, while the DRS
+world-source question remains open. No DRS hook or reduced-render mode was
+enabled on the earlier inference.
 
 Skyrim still renders at 2560x1440, TAA remains enabled, and installed 0.1.24
 retains the working full-resolution DLAA path. The DRS CALL, state field
@@ -161,3 +156,42 @@ game sizing still requires guarded DRS/scissor ownership, native UI placement,
 output ownership and connection to the display-sized failure fallback as one
 reversible transition. No new plugin package or MO2 install resulted from this
 read-only inspection. In-game reduced-render SR and FG remain NOT RUN.
+
+## User-started decoded resize trace, 15:07 on 2026-09-20
+
+The user-started SkyrimSE.exe PID 24652 had the same exact executable hash
+and image base `0x7ff6f59a0000`. The inspector captured the missing decoded
+callees without writing memory or sending game input. The complete ignored
+bundle is `artifacts/local/render-size-live-2026-09-20-1512-loaded/`.
+The loaded-world graphics-state snapshot still reported 2560x1440, current
+and previous DRS ratios 1.0, and lock counter zero. The installed 0.1.24
+log reached world/Present count 22,800 with no Present failure and reported
+16,200 continuous full-resolution DLAA submissions with skipped=0 before
+the process exited. No new crash log was found; the exit mechanism was not
+observed. These observations do not exercise reduced rendering.
+
+The caller at `0xe4475c` invokes `0xe4fb90`, which only copies 28 bytes from
+the stack descriptor into static object `0x328be80` and returns at
+`0xe4fba6`. It neither allocates nor resizes a target. This corrects the
+earlier candidate interpretation above. The actual renderer reset path is
+`0xe43bc0`: after checking the current swap dimensions, a changed-extent
+branch releases entries across the renderer's colour and depth target tables
+and reaches the swap-chain vtable `+0x68` (`ResizeBuffers`) call at
+`0xe43e9f`. The separate `0xe44050` compares current and requested
+dimensions and can call vtable `+0x70` (`ResizeTarget`) at `0xe44151`.
+These are display/swap reset paths; this trace does not show how DRS sets a
+smaller world viewport or which scene texture should feed DLSS before the
+game's SDR conversion.
+
+There is already an indirect jump at game RVA `0xe43e84`, immediately before
+the `ResizeBuffers` call. A bounded read of its pointer led to an executable
+stub at `0x7ffc691506c0`; that stub reads a separate 12-byte dimension/
+format payload, sets Win64 arguments, and jumps back to game RVA `0xe43e9c`.
+The hook owner was not identified. RazKolbas must not overwrite or bypass this
+existing resize owner. The captured first 1536 bytes from `0xe43bc0` have
+SHA-256 `def9e8e1ec4117ed3deb6b3f27620b31b09f63eb92527801bcf9db56d5132867`;
+the 768 bytes from `0xe44050` have SHA-256
+`6c926f2a19a7253168113b888a144ea50fa37e784cf875cadbbf7a04084ed25d`.
+Raw code and disassembly remain ignored, not staged. A DRS transaction still
+requires a verified reduced scene source and post-world display/UI ownership
+before it can be activated.
