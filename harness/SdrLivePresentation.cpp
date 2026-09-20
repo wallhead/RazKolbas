@@ -74,12 +74,17 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ID3D11Texture2D> depth;
         checked(device->CreateTexture2D(&depthDesc,&zeros,&depth),"DEPTH");
         rk::SdrDlssPresenter presenter;
+        constexpr std::array<rk::NgxJitter,8> observedGameCycle{{
+            {-0.25f,-1.0f/6.0f},{0.25f,7.0f/18.0f},
+            {-0.375f,1.0f/18.0f},{0.125f,-5.0f/18.0f},
+            {-0.125f,5.0f/18.0f},{0.375f,-1.0f/18.0f},
+            {-0.4375f,-7.0f/18.0f},{0.0f,1.0f/6.0f}}};
         unsigned rendered=0;
         const auto started=GetTickCount64();
         while(rendered<30) {
             context->UpdateSubresource(backbuffer.Get(),0,nullptr,scene.data(),width*4,0);
             const auto result=presenter.render(device.Get(),context.Get(),backbuffer.Get(),
-                motion.Get(),depth.Get());
+                motion.Get(),depth.Get(),observedGameCycle[rendered%observedGameCycle.size()]);
             if(const auto error=std::get_if<rk::Error>(&result))stop(error->message);
             if(std::get<bool>(result))++rendered;
             context->Flush();

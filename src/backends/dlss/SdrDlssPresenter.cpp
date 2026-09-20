@@ -4,6 +4,7 @@
 #include "rk/SdrDisplayCopy.hpp"
 #include <nvsdk_ngx_helpers_d3d.h>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -112,7 +113,10 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
 }
 Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
     ID3D11DeviceContext* context,ID3D11Texture2D* backbuffer,
-    ID3D11Texture2D* motion,ID3D11Texture2D* depth) {
+    ID3D11Texture2D* motion,ID3D11Texture2D* depth,NgxJitter jitter) {
+    if(!std::isfinite(jitter.x)||!std::isfinite(jitter.y)||
+       std::abs(jitter.x)>0.5001f||std::abs(jitter.y)>0.5001f)
+        return Error{ErrorCode::InvalidInput,"SDR DLAA jitter is invalid"};
     if(!device||!context||!backbuffer||!motion||!depth||
        context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
         return Error{ErrorCode::InvalidInput,"SDR DLAA needs device/context and scene guides"};
@@ -163,8 +167,9 @@ Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
     eval.pInDepth=slot.frame->depth();
     eval.pInMotionVectors=slot.frame->motion();
     eval.InRenderSubrectDimensions={width_,height_};
-    eval.InReset=submittedFrames_==0?1:0;
-    eval.InJitterOffsetX=eval.InJitterOffsetY=0;
+    eval.InReset=(submittedFrames_==0||resetPending_)?1:0;
+    eval.InJitterOffsetX=jitter.x;
+    eval.InJitterOffsetY=jitter.y;
     eval.InMVScaleX=static_cast<float>(width_);
     eval.InMVScaleY=static_cast<float>(height_);
     eval.InPreExposure=eval.InExposureScale=1.0f;
@@ -175,6 +180,7 @@ Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
     if(const auto error=std::get_if<Error>(&copied))return *error;
     context->End(slot.completion.Get());
     slot.inFlight=true;
+    resetPending_=false;
     ++submittedFrames_;
     return true;
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "rk/Result.hpp"
 #include "rk/SrInput.hpp"
+#include "rk/JitterContract.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <Windows.h>
@@ -18,7 +19,9 @@ namespace rk {
 class SdrDlssPresenter final {
 public:
     Result<bool> render(ID3D11Device* device,ID3D11DeviceContext* context,
-        ID3D11Texture2D* backbuffer,ID3D11Texture2D* motion,ID3D11Texture2D* depth);
+        ID3D11Texture2D* backbuffer,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
+        NgxJitter jitter);
+    void requestReset() noexcept { resetPending_=true; }
     // Returns false while GPU work still owns a slot. Call again after a
     // present/flush, then release NGX before destroying the D3D11 device.
     Result<bool> stop(ID3D11DeviceContext* context);
@@ -40,5 +43,6 @@ private:
     std::uint64_t submittedFrames_{};
     unsigned nextSlot_{};
     bool initialized_{};
+    bool resetPending_{};
 };
 }

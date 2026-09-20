@@ -48,7 +48,7 @@ rk::Settings loadSettings() {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 21, 0});
+    metadata.PluginVersion({0, 1, 22, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -81,7 +81,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
             return messaging->RegisterListener(skse->GetPluginHandle(), "SKSE", reinterpret_cast<void*>(&onMessage));
         });
         if (started) requestedSettings = std::make_unique<rk::Settings>(std::move(settings));
-        spdlog::info("RazKolbas native host bootstrap {}; guarded offscreen DLAA and same-frame stage pair", started ? "ready" : "failed");
+        spdlog::info("RazKolbas native host bootstrap {}; experimental SDR DLAA and same-frame stage pair", started ? "ready" : "failed");
         if (started) {
             const auto observer=rk::installRendererObserver(*requestedSettings,&rendererObserved);
             if (const auto error=std::get_if<rk::Error>(&observer))

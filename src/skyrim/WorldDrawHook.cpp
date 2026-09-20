@@ -57,11 +57,21 @@ struct WorldState {
     bool probeFailed{};
     SdrDlssPresenter sdrPresenter;
     bool sdrDisabled{},firstSdrCaptured{};
-    std::uint64_t sdrSkipped{};
+    std::uint64_t sdrSkipped{},sdrJitterSkipped{};
 #endif
 };
 std::atomic<WorldState*> active{nullptr};
 bool read(std::uintptr_t address,void* destination,std::size_t size);
+#ifdef RK_WITH_NGX
+Result<NgxJitter> readNgxJitter(std::uintptr_t camera,
+    std::uint32_t targetWidth,std::uint32_t targetHeight) {
+    if(!camera)return Error{ErrorCode::Unavailable,"Verified game camera is unavailable"};
+    std::array<std::uint8_t,0x4c> bytes{};
+    if(!read(camera,bytes.data(),bytes.size()))
+        return Error{ErrorCode::Io,"Cannot read same-frame game camera jitter"};
+    return ngxJitterFromGameCamera(bytes,targetWidth,targetHeight);
+}
+#endif
 struct WorldNumbers {
     std::uintptr_t device{},context{},swap{},colour{},motion{},depth{},lockOwner{};
     std::int32_t lockRecursion{};
@@ -340,10 +350,10 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             if(width&&height&&width<=8192&&height<=8192&&
                std::isfinite(jitterX)&&std::isfinite(jitterY)&&
                std::abs(jitterX)<=2.0f&&std::abs(jitterY)<=2.0f)
-                try { spdlog::info("World jitter observation: frame={} thread={} camera=0x{:x} extent={}x{} projection=({},{}); read-only; NGX jitter unchanged",
+                try { spdlog::info("World jitter observation: frame={} thread={} camera=0x{:x} extent={}x{} projection=({},{}); read-only camera sample",
                     sequence,GetCurrentThreadId(),state->jitterCamera,width,height,jitterX,jitterY); } catch(...) {}
-            else try { spdlog::warn("World jitter observation rejected: invalid camera dimensions or offsets; frame={}; NGX jitter unchanged",sequence); } catch(...) {}
-        } else try { spdlog::warn("World jitter observation unavailable: camera read failed; frame={}; NGX jitter unchanged",sequence); } catch(...) {}
+            else try { spdlog::warn("World jitter observation rejected: invalid camera dimensions or offsets; frame={}",sequence); } catch(...) {}
+        } else try { spdlog::warn("World jitter observation unavailable: camera read failed; frame={}",sequence); } catch(...) {}
     }
     if(const auto status=state->copyStatus.load(std::memory_order_acquire);
        status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
@@ -422,40 +432,54 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                     spdlog::warn("Continuous SDR DLAA disabled: backbuffer unavailable 0x{:08x}",
                         static_cast<std::uint32_t>(got));
                 } else {
-                    const auto displayed=state->sdrPresenter.render(
-                        reinterpret_cast<ID3D11Device*>(numbers.device),immediate,
-                        backbuffer.Get(),reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
-                        reinterpret_cast<ID3D11Texture2D*>(numbers.depth));
-                    if(const auto error=std::get_if<Error>(&displayed)) {
-                        state->sdrDisabled=true;
-                        spdlog::warn("Continuous SDR DLAA disabled; native frame retained: {}",
-                            error->message);
-                    } else if(std::get<bool>(displayed)) {
-                        const auto count=state->sdrPresenter.submittedFrames();
-                        if(count==1||count%600==0)
-                            spdlog::info("Continuous SDR DLAA submitted for display: source frame {}; submitted={}; skipped={}; UI follows; experimental SDR placement",
-                                state->forwarded.load(std::memory_order_relaxed),count,
-                                state->sdrSkipped);
-                        if(!state->firstSdrCaptured) {
-                            state->firstSdrCaptured=true;
-                            auto captured=StagePairCapture::capturePostWorld(immediate,
-                                reinterpret_cast<ID3D11Texture2D*>(numbers.colour),
-                                backbuffer.Get());
-                            if(const auto captureError=std::get_if<Error>(&captured))
-                                spdlog::warn("SDR display submission capture unavailable: {}",captureError->message);
-                            else {
-                                std::scoped_lock lock(state->stagePairMutex);
-                                state->stagePair.emplace(std::move(std::get<StagePairCapture>(captured)));
-                                state->stagePairFrame=state->forwarded.load(std::memory_order_relaxed);
-                                state->presentTargetProbeDue.store(true,std::memory_order_release);
-                                spdlog::info("SDR display submission captured before HUD at world frame {}; awaiting same-frame Present",
-                                    state->stagePairFrame);
-                            }
-                        }
+                    D3D11_TEXTURE2D_DESC backDesc{};
+                    backbuffer->GetDesc(&backDesc);
+                    const auto jitter=readNgxJitter(state->jitterCamera,
+                        backDesc.Width,backDesc.Height);
+                    if(const auto jitterError=std::get_if<Error>(&jitter)) {
+                        state->sdrPresenter.requestReset();
+                        ++state->sdrJitterSkipped;
+                        if(state->sdrJitterSkipped==1||state->sdrJitterSkipped%600==0)
+                            spdlog::warn("SDR DLAA same-frame jitter unavailable; native frame retained: {}; skipped={}",
+                                jitterError->message,state->sdrJitterSkipped);
                     } else {
-                        ++state->sdrSkipped;
-                        if(state->sdrSkipped==1||state->sdrSkipped%600==0)
-                            spdlog::warn("SDR DLAA slot busy; native frame displayed; skipped={}",state->sdrSkipped);
+                        const auto offsets=std::get<NgxJitter>(jitter);
+                        const auto displayed=state->sdrPresenter.render(
+                            reinterpret_cast<ID3D11Device*>(numbers.device),immediate,
+                            backbuffer.Get(),reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.depth),offsets);
+                        if(const auto error=std::get_if<Error>(&displayed)) {
+                            state->sdrDisabled=true;
+                            spdlog::warn("Continuous SDR DLAA disabled; native frame retained: {}",
+                                error->message);
+                        } else if(std::get<bool>(displayed)) {
+                            const auto count=state->sdrPresenter.submittedFrames();
+                            if(count==1||count%600==0)
+                                spdlog::info("Continuous SDR DLAA submitted for display: source frame {}; submitted={}; skipped={}; jitter=({},{}); UI follows; experimental SDR placement",
+                                    state->forwarded.load(std::memory_order_relaxed),count,
+                                    state->sdrSkipped,offsets.x,offsets.y);
+                            if(!state->firstSdrCaptured) {
+                                state->firstSdrCaptured=true;
+                                auto captured=StagePairCapture::capturePostWorld(immediate,
+                                    reinterpret_cast<ID3D11Texture2D*>(numbers.colour),
+                                    backbuffer.Get());
+                                if(const auto captureError=std::get_if<Error>(&captured))
+                                    spdlog::warn("SDR display submission capture unavailable: {}",captureError->message);
+                                else {
+                                    std::scoped_lock lock(state->stagePairMutex);
+                                    state->stagePair.emplace(std::move(std::get<StagePairCapture>(captured)));
+                                    state->stagePairFrame=state->forwarded.load(std::memory_order_relaxed);
+                                    state->presentTargetProbeDue.store(true,std::memory_order_release);
+                                    spdlog::info("SDR display submission captured before HUD at world frame {}; awaiting same-frame Present",
+                                        state->stagePairFrame);
+                                }
+                            }
+                        } else {
+                            state->sdrPresenter.requestReset();
+                            ++state->sdrSkipped;
+                            if(state->sdrSkipped==1||state->sdrSkipped%600==0)
+                                spdlog::warn("SDR DLAA slot busy; native frame displayed; skipped={}",state->sdrSkipped);
+                        }
                     }
                 }
             } catch(const std::exception& error) {
@@ -600,8 +624,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
        liveCameraLoad==cameraLoad&&liveJitterCall==jitterCall&&
        liveJitterEntry==jitterEntry) {
         pending->jitterCamera=base+0x328cc20;
-        spdlog::info("Read-only Skyrim camera jitter observation armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; NGX jitter unchanged");
-    } else spdlog::warn("Read-only Skyrim camera jitter observation unavailable: caller/CALL/target bytes differ; NGX jitter unchanged");
+        spdlog::info("Skyrim camera jitter source armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; same-frame DLAA jitter enabled");
+    } else spdlog::warn("Skyrim camera jitter source unavailable: caller/CALL/target bytes differ; DLAA will retain native frames");
     const auto configured=pending->forwarder.configure(
         reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);
     if(const auto error=std::get_if<Error>(&configured))return *error;
@@ -626,7 +650,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; guarded offscreen DLAA diagnostic armed",worldDrawPatchId); } catch (...) {}
+    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; experimental SDR DLAA armed",worldDrawPatchId); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

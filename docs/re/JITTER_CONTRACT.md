@@ -59,9 +59,31 @@ installing another patch. Source 0.1.21 now does a bounded read after the
 original world call on early and periodic frames, gated by the exact caller,
 CALL and target bytes. It logs the object's dimensions and projection offsets
 only; it does not change NGX jitter or Skyrim TAA. The source build and local
-tests pass, but this observation has not yet run in the game. Sample lifetime,
-frame pairing, units, and interaction with Skyrim TAA still require runtime
-verification before changing NGX inputs.
+tests pass. In the user-started 0.1.21 run, the first 12 world frames at
+2560x1440 yielded a finite eight-sample cycle: converted pixel offsets were
+`(-.25,-.166667)`, `(.25,.388889)`, `(-.375,.055556)`,
+`(.125,-.277778)`, `(-.125,.277778)`, `(.375,-.055556)`,
+`(-.4375,-.388889)`, `(0,.166667)`, then the first four repeated.
+The `x=projectionX*width/2`, `y=-projectionY*height/2` conversion follows
+the reference's projection/payload signs. All samples passed validity checks;
+the observation alone left NGX jitter unchanged. The same run logged more
+than 25,000 world frames and continuous DLAA submissions without jitter-read
+or DLAA-disable errors at inspection time.
+
+Source 0.1.22 now reads the camera object immediately after the original
+world call for each prospective DLAA frame and passes that converted sample
+to NGX. It requires the camera dimensions to match the backbuffer, finite
+offsets within a half pixel and the previously verified caller/CALL/target
+bytes. If the sample is unavailable, it leaves that frame native and marks
+NGX history for reset on the next accepted frame. The Release build passed
+all 22 local test groups. A standalone NVIDIA replay used the 0.1.21
+post-world SDR capture, synthetic guides and the measured eight-sample jitter
+cycle for 30 DLAA submissions; its changed output SHA-256 was
+`863ef90ba5686d8d464baed17a2a5985c50f90653c9b174f644c6f035cadf322`,
+and teardown completed. This does not validate game motion vectors or
+in-game 0.1.22 behavior, which are not yet tested.
+Skyrim TAA remains active; motion-vector jitter convention and visual quality
+remain open.
 
 At `0x157190`, the reference callback first calls its retained original
 target, then `PDPerfPlugin!GetJitterPhaseCount` and `GetJitterOffset`. It
