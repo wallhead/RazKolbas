@@ -116,7 +116,7 @@ DumpCapabilitiesAtStartup = true
 LogResourceGenerations = false
 ; Validation is for a development build and can change timing/performance.
 GraphicsDebugValidation = false
-; Explicit one-run engine DRS extent probe. No DLSS SR claim; leave off in normal play.
+; Retired ratio-only experiment. A true value is rejected without changing the renderer.
 ProbeReducedWorld = false
 
 [Patching]

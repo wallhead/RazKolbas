@@ -387,3 +387,68 @@ at swap-chain `GetBuffer`, which explains why adapting only the DRS ratio was
 insufficient here. That proxy behavior is an RE reference, not a RazKolbas
 implementation or a safe instruction to replace the existing ENB/ReShade
 swap-chain owner without an owned presentation transaction.
+
+## Full decoded-code capture and allocation xrefs, user run 16:57
+
+The user started installed 0.1.27 as exact-hash SkyrimSE.exe PID 8012 at
+16:57:14. `capture_decoded_text.py` read its 24,435,000-byte executable
+`.text` section without calling, pausing or writing to the process. SHA-256
+is `75105f3ae0c7bcb7ece2ab5bc6b41ae1be062ccb8379ac9ea5e557eafe2a34f3`;
+raw bytes and offline candidate reports remain ignored at
+`artifacts/local/skyrim-decoded-text-2026-09-20-1657/`. Disk bytes at DRS
+RVA `0xe587f0` are encrypted; the captured live bytes decode to the verified
+`cmp [rcx+0x118],0`. The probe was off in the installed INI. The observed
+menu-like run forwarded more than 28,200 world/Present calls with zero
+reported Present failures. Its sampled depth was initially uniform, so this
+run does not establish a continuous DLAA display submission or exercise the
+new rejected-probe recovery path. The assistant did not start, control or
+close the game.
+
+The decoded function at `0xe58980` treats state `+0x118` as an **atomic
+reference counter**: `DL=0` performs `lock inc`, while nonzero `DL` performs
+a guarded `lock dec`. Exactly eight direct CALL sites were found at
+`0x643db3`, `0x643df8`, `0x643eb0`, `0x643ed1`, `0x643f57`, `0x643f82`,
+`0x6d2201` and `0x6d22dd`. The `0x6d2201` call increments the counter just
+before Renderer Begin `0xe44590`; `0x6d22dd` decrements it after Renderer End.
+This explains the frequent lock 1 at our jitter callback and why a later
+callback could see 3 after our raw assignment. The ratio-only probe's
+exclusive-lock policy was an invalid ownership model. Any future DRS
+transaction must preserve this shared count through the game's counted
+interface; writing a literal 1 or 0 would risk corrupting another phase's
+lock. The opt-in probe is disabled in the installed package.
+
+The renderer target allocator at `0xe44d90` receives a descriptor in `R9`.
+At `0xe44dc3..0xe44e00` it copies descriptor width, height, format and flags
+to a D3D11_TEXTURE2D_DESC; `0xe44e40` calls device vtable `+0x28`
+(`CreateTexture2D`) and stores the colour texture at renderer record
+`+0xa58`, followed by view creation. The allocation initializer at
+`0x14cf210` loads display width and height from state RVAs `0x328cc44` and
+`0x328cc48`, then builds target descriptors and calls wrapper `0xe4fbb0`
+many times (including early target indices 2–7). It does not use the DRS
+ratio for those descriptor dimensions. This is why a ratio write alone did
+not change kMAIN/motion/depth texture extents. It does **not** by itself
+settle whether Skyrim can reduce viewport pixel work inside full-size
+textures; that still requires a measured viewport/region trace.
+
+The current decoded entry at `0xe4fbb0` begins with an indirect JMP
+`ff 25 f1 40 19 ff`, indicating an existing hook on the texture-creation
+wrapper in this modlist. The original wrapper body tail-jumps to `0xe44d90`
+at `0xe4fbe7`. The hook target/owner was not captured before the user exited,
+so RazKolbas must not patch or bypass that entry. The next exact run should
+read the indirect target and loaded-module owner, and trace viewport and
+buffer transitions without changing game memory. Offline helper scripts
+`find_drs_accesses.py` and `find_static_lea_xrefs.py` list **candidate** xrefs;
+overlapping x86 decoding means each patch-relevant site still needs aligned
+function verification.
+
+The world viewport is a separate D3D11_VIEWPORT at static RVA `0x202abe0`.
+`e44b5f` and `e4b8c3` pass it to `RSSetViewports`. Skyrim's setup functions
+write its width/height (`+8`/`+c`) at `e43fe1/e43fd9` and
+`e442f4/e442ec`; the former path reads current DRS ratios from state
+`+0x104/+0x108` at `e43f10/e43f18` and multiplies them into viewport
+dimensions. This supports a *possible* reduced viewport inside full-size
+textures, but the 0.1.26 runtime probe did not measure the viewport or a
+valid cropped colour/depth/motion rectangle. Texture allocation remains
+native sized. Its shared counter model makes the old ratio-writing probe
+unsafe, so it is retired in source; `ProbeReducedWorld=true` now returns
+Unsupported without installing the call-site hook.

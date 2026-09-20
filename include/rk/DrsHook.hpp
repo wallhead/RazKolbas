@@ -9,8 +9,9 @@
 
 namespace rk {
 inline constexpr std::string_view drsProbePatchId="skyrim1170.jitter-drs.sr-v1";
-// Experimental engine DRS probe, installed only at SKSE startup. The
-// default settings keep the callback an exact pass-through.
+// The ratio-only DRS probe is retired after identifying Skyrim's shared
+// counter and full-size scene-target allocator. An opt-in request is rejected
+// without installing a hook; these accessors remain for the native path.
 Result<bool> installDrsProbe(HMODULE game,std::string_view verifiedGameHash,
     const Settings& settings);
 void bindDrsDisplay(std::uint32_t width,std::uint32_t height) noexcept;

@@ -1,8 +1,8 @@
 {
   "id": "skyrim1170.jitter-drs.sr-v1",
-  "status": "EXPERIMENTAL_REDUCED_WORLD_PROBE_NOT_GAME_TESTED",
+  "status": "RETIRED_AFTER_GAME_TEST_AND_DECODED_CODE_REVIEW",
   "shipping_enabled": false,
-  "purpose": "Forward Skyrim's original render-time jitter update, then set guarded engine dynamic-resolution ratios so the game's kMAIN world extent can be measured without claiming DLSS SR",
+  "purpose": "Historical 0.1.25-0.1.26 ratio-only experiment; retained as an exact patch record, not an installable patch",
   "target": {
     "module": "SkyrimSE.exe",
     "architecture": "x64",
@@ -18,11 +18,11 @@
     "original_target_rva": "0xe58a10"
   },
   "original_live_bytes": "e899430100",
-  "replacement": "encodeCallSiteReplacement to a verified near relay and pinned RazKolbas jitterProxy; original e58a10 called first; any ratio update gated by Diagnostics.ProbeReducedWorld, ManualRenderScale [0.5,1), exact BSGraphics::State pointer/layout, unclaimed lock, live kMAIN texture, and display-sized swap snapshot",
+  "replacement": "Historical encodeCallSiteReplacement relay. Current installDrsProbe rejects ProbeReducedWorld=true and never writes this CALL site.",
   "abi": "Renderer Begin at e44664 loads RCX=&BSGraphics::State RVA 328cc20, sets a byte, then CALLs e58a10. The original target prologue and the full 23-byte caller context must match. Return value is unused. Ratio floats are state +104/+108, previous floats +10c/+110, lock dword +118; width/height +24/+28.",
   "activation": "SKSEPlugin_Load only, before renderer/world threads; exact game file hash, decoded caller/target bytes, direct CALL and relay verified before write. Probe ratio remains disabled by default.",
   "lifetime": "DLL and relay pinned for process lifetime; no hot unpatch. Callback forwards original every time; display dimensions published from verified device-creation output.",
-  "recovery": "Mismatch rejects before write. If the target or display extent changes while the probe owns its exact ratio/lock, the render-time callback restores ratio 1 and lock 0, then remains dormant. A foreign ratio or lock is never overwritten. Disable this patch ID or SafeMode on the next launch. UI/scissor compatibility is not yet established.",
+  "recovery": "The probe was retired after decoded code established +0x118 is a shared atomic counter, not an exclusive lock. Current code installs no callback or writes. Historical recovery assumed exclusive ownership and must not be reused.",
   "evidence": ["docs/re/RENDER_SIZE_CONTRACT.md", "tests/unit/CallSiteTests.cpp", "tests/unit/DrsStateTests.cpp"],
-  "game_runtime": "NOT RUN"
+  "game_runtime": "0.1.25 rejected lock 1; 0.1.26 wrote ratios once after 5078 waits, then rejected lock 3; scene guide textures remained display-sized. No DLSS SR submission."
 }
