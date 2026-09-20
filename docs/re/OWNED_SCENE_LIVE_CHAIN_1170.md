@@ -53,3 +53,42 @@ The corresponding return RVAs are `0xE48F0D` and `0xE4CC87`. This is static
 call-shape evidence; the running 0.1.34 build did not record whether either
 site passes through the selected ReShade swap instance, nor when ENB caches
 views. An alias must not be enabled for these sites solely from the call shape.
+
+## User-started 0.1.35 run
+
+The user started PID `15076` at 21:15:59. The version-gated factory slot-10
+pass-through installed before ENB device creation. At 21:16:13 its first
+CreateSwapChain call used the same adapter-parent factory, native 2560x1440
+descriptor and device `0x279057F05D0`, and returned ReShade swap
+`0x279054EA6A0` at table RVA `0x3D7F90`. The exact slot-9 GetBuffer hook then
+installed before returning to ENB. Its first two index-zero texture calls
+returned native 2560x1440 to `d3d11.dll` (ENB) caller RVAs `0x5E580` and
+`0x5E795`. The third call returned native 2560x1440 to `SkyrimSE.exe` return
+RVA `0xE4CC87`, proving the statically recovered callsite `0xE4CC84` reaches
+this ReShade object after ENB has received native buffers. Calls 4 onward
+included RazKolbas diagnostic reads; they must continue to see native output.
+
+A final read-only `ReadProcessMemory` inspection used loaded game base
+`0x7FF6F59A0000`. The indexed-renderer global at game RVA `0x3286A08`
+contained `0x7FF6F8C287D0`. Record zero's swap field at `+0x60` was ENB outer
+swap `0x27949B0EBB0`, matching renderer `+0x70`. Record-zero fields at `+0x78`
+and `+0x80` were non-null view pointers; records one through three had null
+swap/view fields. This confirms the game-side call routes through the ENB outer
+object to the ReShade GetBuffer hook and that the caller caches views from
+that result. No memory was written by this inspection.
+
+The game subsequently accepted a world-like depth sample at world frame
+7815 (`depthDistinct=97`, `depthNonFar=96`) and submitted native SDR DLAA
+from frame 7816, reaching at least 2,400 displayed submissions with zero
+reported skips. This validates the existing native processing context, not
+reduced scene or DLSS SR. The user authorized the assistant to close the game
+after collection. A normal window-close request succeeded; PID 15076 exited
+without a forced kill. No reduced alias or rectangle patch was activated.
+
+For the next implementation, retain native forwarding for ENB's early calls
+and RazKolbas diagnostics, and select the one exact game return site
+`0xE4CC87` only after the reduced surface, NGX plan/fallback and UI route are
+prepared. The game render lock owner changed between threads 27760 and 16948
+in this run, so a permanent first-thread restriction in the rectangle/UI
+adapters would be invalid. Frame-scoped ownership must follow the verified
+render lock or equivalent boundary before those adapters are enabled.

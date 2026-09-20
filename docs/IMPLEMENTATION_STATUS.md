@@ -475,3 +475,18 @@ did not start or close Skyrim. The exact next runtime action is one normal
 user-started game session; inspect `Nested factory CreateSwapChain` and
 `Nested GetBuffer` log entries to establish the early consumer path. Reduced
 Skyrim scene rendering and DLSS SR remain NOT RUN.
+
+0.1.35 user-started runtime result: the verified ReShade factory slot-10 hook
+observed its native 2560x1440 swap returned to ENB and installed a pass-through
+slot-9 trace before ENB continued. The first two ReShade `GetBuffer(0)` calls
+came from ENB `d3d11.dll` and received native buffers. The third was Skyrim's
+exact game return RVA `0xE4CC87`, confirming that its early view-cache setup
+traverses the same hook after ENB initialization. Read-only live memory matched
+the game's indexed renderer record-zero swap with the ENB outer swap and found
+non-null cached view fields. A world-like depth frame and over 2,400 native
+DLAA display submissions followed without reported skips. The user authorized
+closure after collection; the assistant sent a normal window-close request
+and verified process exit. No reduced alias was enabled and **DLSS SR is not
+on**. The game render lock moved between two threads, so the current fixed
+thread guard in the dormant UI/rectangle adapters must become frame-scoped
+before activation. See `re/OWNED_SCENE_LIVE_CHAIN_1170.md`.
