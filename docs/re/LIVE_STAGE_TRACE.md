@@ -59,3 +59,28 @@ before ENB Present. This distinguishes input encoding and post-world callback
 changes without writing display pixels. The new producer enforces matching
 extent, format, backbuffer identity, world-frame ID and a 64 MiB total CPU
 budget; it writes only a completed manifest under `RazKolbasCaptures`.
+
+## User-launched 0.1.18 paired stage (2026-09-20)
+
+The user-launched SkyrimSE.exe PID 23872 started at 12:18:09 with the installed
+0.1.18 plugin. After a save reached world-like depth, world frame 6613 produced
+a complete same-frame capture under ignored local `RazKolbasCaptures/` at
+12:20:30. The manifest's three SHA-256 digests matched independent rehashes:
+HDR scene `303e0b8dee7e5559ba01880113bbb0801c9e20cf5ce95ae3e47ffa2e86c71820`,
+post-world RGBA8 backbuffer `96441c5b90bc32d7dbaaf2664990e57430cd7ef189bf49b5cd0d369fbcd8979e`,
+and pre-ENB-Present RGBA8 backbuffer `328d07c70ba3c095969979356f8fc8cd1332a92cfe1bd9a981551cc91d795317`.
+All are 2560x1440; scene is format 10 RGBA16F and both backbuffer stages
+are format 28 RGBA8. The plugin made no display write. NGX's one-shot DLAA
+evaluation produced a separate fenced, finite nonuniform offscreen result,
+SHA-256 `10791db599dae89c0a31a5e8c3ac0d8c156fd3172021c4cff964f70135b93a87`.
+
+Exactly 173,413 of 3,686,400 backbuffer pixels (4.704%) changed between
+the two stages; alpha did not change. Differences are concentrated in the
+upper corners/edge and lower centre, with no changes in the middle two
+240-pixel rows. This distribution is consistent with UI composition, but
+the capture alone does not identify the draw calls. HDR RGB exceeds 1 in
+3.266% of pixels and is finite throughout. A direct HDR sample to RGBA8
+would clip those highlights, while replacing the pre-Present image would
+also overwrite the observed intervening work. The owned output path still
+needs a verified pre-conversion attachment or measured HDR-to-display
+conversion with preserved UI/ENB/ReShade order; visible SR remains NOT RUN.
