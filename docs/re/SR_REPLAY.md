@@ -413,8 +413,9 @@ least 16 distinct and 16 non-far values. It logs hashes of the three owned
 inputs before one NGX evaluation and splits output failure into finite,
 varying, zero, NaN-sentinel counts and SHA-256. A depth readback is a bounded
 diagnostic frame stall. Debug/Release CTest results and game deployment are
-recorded separately in `../IMPLEMENTATION_STATUS.md`. **0.1.15 in-game
-evaluation is NOT RUN** until the user launches it.
+recorded separately in `../IMPLEMENTATION_STATUS.md`. At this source
+checkpoint, 0.1.15 in-game evaluation was **NOT RUN**; the subsequent
+user-run result is recorded below.
 
 The user-run 0.1.15 launch at 10:36:57 on 2026-09-20 passed the complete
 offscreen game-device probe. Depth remained menu-like (one distinct sample,
