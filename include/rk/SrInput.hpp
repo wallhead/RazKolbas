@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 namespace rk {
 // Owns one source frame's NGX-compatible resources. The caller must keep this
@@ -22,6 +23,7 @@ public:
     ID3D11Texture2D* motion() const noexcept { return motion_.Get(); }
     ID3D11Texture2D* depth() const noexcept { return depth_.Get(); }
     ID3D11Texture2D* output() const noexcept { return output_.Get(); }
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> takeOutput() noexcept { return std::move(output_); }
     UINT width() const noexcept { return width_; }
     UINT height() const noexcept { return height_; }
 private:

@@ -45,6 +45,15 @@ TEST_CASE("Owned D3D11 SR inputs copy Skyrim colour, motion and native typeless 
     REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(readback));
     const auto& result=std::get<std::vector<rk::ProbeImage>>(readback);
     for(std::size_t i=0;i<3;++i)REQUIRE(result[i].pixels==pixels[i]);
+    auto* originalOutput=owned.output();
+    auto retainedOutput=owned.takeOutput();
+    REQUIRE(retainedOutput.Get()==originalOutput);
+    REQUIRE(owned.output()==nullptr);
+    prepared=rk::Error{rk::ErrorCode::Unavailable,"retire source frame"};
+    D3D11_TEXTURE2D_DESC retainedDescription{};
+    retainedOutput->GetDesc(&retainedDescription);
+    REQUIRE(retainedDescription.Width==width);
+    REQUIRE(retainedDescription.Height==height);
     raw[1]=nullptr;
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSrInputs(context.Get(),raw)));
     raw[1]=sources[1].Get();

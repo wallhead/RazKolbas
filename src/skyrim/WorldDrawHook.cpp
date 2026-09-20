@@ -15,6 +15,7 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <string>
 #include <wrl/client.h>
 
 namespace rk {
@@ -35,6 +36,12 @@ struct WorldState {
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
 #ifdef RK_WITH_NGX
+    struct CompletedOutput {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
+        UINT width{},height{};
+        std::string sha256;
+    };
+    std::optional<CompletedOutput> completedOutput;
     OffscreenDlssProbe dlssProbe;
     bool probeFailed{};
 #endif
@@ -298,9 +305,18 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                     state->probeFailed=true;
                     spdlog::warn("Offscreen DLSS probe failed: {}; owned resources retained",error->message);
                 } else if(!std::get<std::string>(polled).empty()) {
-                    spdlog::info("Offscreen DLAA output validated: {}x{} finite nonuniform RGB; SHA256={}; no display write",
-                        state->dlssProbe.width(),state->dlssProbe.height(),std::get<std::string>(polled));
-                    state->copiedFrame.reset();
+                    if(!state->copiedFrame||!state->copiedFrame->output()) {
+                        state->probeFailed=true;
+                        spdlog::warn("Offscreen DLAA completed without an owned output frame");
+                    } else {
+                        state->completedOutput.emplace(WorldState::CompletedOutput{
+                            state->copiedFrame->takeOutput(),state->dlssProbe.width(),
+                            state->dlssProbe.height(),std::get<std::string>(polled)});
+                        state->copiedFrame.reset();
+                        spdlog::info("Offscreen DLAA output retained: {}x{} finite nonuniform RGB; SHA256={}; no display write",
+                            state->completedOutput->width,state->completedOutput->height,
+                            state->completedOutput->sha256);
+                    }
                 }
             } catch(const std::exception& error) {
                 state->probeFailed=true;
