@@ -850,3 +850,19 @@ The first Release build and all 35 CTest groups passed. After explicitly
 pre-creating the feature, the exact-size owned-R32 standalone replay passed
 30 frames with zero fallback. MO2 deployment and game runtime for this
 diagnostic are **NOT RUN** at this checkpoint.
+
+The staged diagnostic is source commit `348f16e` and package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.42-ngx-stages-348f16e.zip`
+(SHA-256 `54d8318438e84a905c416d44d43334517d03aeb80784e7350f631a514c5e1995`).
+The ZIP contains the four manifest-listed payloads plus manifest. With
+Skyrim stopped, the restored 0.1.35 mod passed hash verification and was
+backed up under ignored `artifacts/local/mo2-install-backup-0.1.42-348f16e`.
+Only the MO2 DLL and manifest were replaced; all four installed hashes match
+the new manifest. The diagnostic DLL SHA-256 is
+`32b7b4773b596d95e79a91e61674e035f728aab2ad3c462744899f41a48f4c50`.
+The user INI and signed NVIDIA runtime remain unchanged. The assistant did
+not start Skyrim. Game behavior is **NOT RUN**. The next required step is one
+user-started menu/save-load run; inspect whether the last stage log is before
+creation, after creation during the 120-frame delay, before evaluation, or
+after evaluation. This build can still crash and must be rolled back after
+data collection if it does.
