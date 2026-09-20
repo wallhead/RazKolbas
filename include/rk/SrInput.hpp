@@ -7,6 +7,10 @@
 #include <utility>
 
 namespace rk {
+struct SrSourceRegion {
+    UINT left{},top{},width{},height{};
+    bool operator==(const SrSourceRegion&) const noexcept=default;
+};
 // Owns one source frame's NGX-compatible resources. The caller must keep this
 // object alive until all queued GPU work that reads or writes it has retired.
 class PreparedSrInputs {
@@ -15,7 +19,7 @@ public:
         Microsoft::WRL::ComPtr<ID3D11Texture2D> motion,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> depth,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> output,UINT width,UINT height,
-        UINT outputWidth,UINT outputHeight) noexcept;
+        UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion) noexcept;
     PreparedSrInputs(const PreparedSrInputs&)=delete;
     PreparedSrInputs& operator=(const PreparedSrInputs&)=delete;
     PreparedSrInputs(PreparedSrInputs&&) noexcept=default;
@@ -29,9 +33,11 @@ public:
     UINT height() const noexcept { return height_; }
     UINT outputWidth() const noexcept { return outputWidth_; }
     UINT outputHeight() const noexcept { return outputHeight_; }
+    SrSourceRegion sourceRegion() const noexcept { return sourceRegion_; }
 private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> color_,motion_,depth_,output_;
     UINT width_{},height_{},outputWidth_{},outputHeight_{};
+    SrSourceRegion sourceRegion_{};
 };
 
 struct DepthSampleStats {
@@ -60,12 +66,17 @@ Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
 Result<PreparedSrInputs> prepareSdrSrInputsForDisplay(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
-// Extracts a verified top-left active world rectangle from matching full-size
+// Extracts a caller-verified active world rectangle from matching full-size
 // SDR colour, motion and depth textures. Depth is converted to normalized
 // R32_FLOAT because D3D11 forbids partial depth-stencil copies. This does not
 // establish that Skyrim rendered only that rectangle or that NGX accepts this
 // converted depth; both must be verified before SR submission.
 Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,UINT renderWidth,UINT renderHeight,
+    UINT outputWidth,UINT outputHeight);
+// Retains the original rectangle's origin in PreparedSrInputs metadata while
+// the owned cropped textures use (0,0) as their NGX input origin.
+Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,SrSourceRegion region,
     UINT outputWidth,UINT outputHeight);
 }

@@ -10,10 +10,10 @@ using Microsoft::WRL::ComPtr;
 PreparedSrInputs::PreparedSrInputs(ComPtr<ID3D11Texture2D> color,
     ComPtr<ID3D11Texture2D> motion,ComPtr<ID3D11Texture2D> depth,
     ComPtr<ID3D11Texture2D> output,UINT width,UINT height,
-    UINT outputWidth,UINT outputHeight) noexcept:
+    UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion) noexcept:
     color_(std::move(color)),motion_(std::move(motion)),depth_(std::move(depth)),
     output_(std::move(output)),width_(width),height_(height),
-    outputWidth_(outputWidth),outputHeight_(outputHeight) {}
+    outputWidth_(outputWidth),outputHeight_(outputHeight),sourceRegion_(sourceRegion) {}
 
 Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
     UINT width,UINT height,std::size_t rowBytes) {
@@ -40,17 +40,39 @@ namespace {
 constexpr char depthCropShader[]=R"(
 Texture2D<float> SourceDepth : register(t0);
 RWTexture2D<float> CroppedDepth : register(u0);
+cbuffer CropOrigin : register(b0) { uint2 Origin; uint2 Padding; };
 [numthreads(8,8,1)]
 void main(uint3 pixel : SV_DispatchThreadID) {
     uint width,height;
     CroppedDepth.GetDimensions(width,height);
     if(pixel.x<width&&pixel.y<height)
-        CroppedDepth[pixel.xy]=SourceDepth.Load(int3(pixel.xy,0));
+        CroppedDepth[pixel.xy]=SourceDepth.Load(int3(pixel.xy+Origin,0));
 }
 )";
+ComPtr<ID3D11ComputeShader> cachedDepthCropShader(ID3D11Device* device) {
+    static const ComPtr<ID3DBlob> code=[] {
+        ComPtr<ID3DBlob> compiled,diagnostics;
+        if(FAILED(D3DCompile(depthCropShader,sizeof(depthCropShader)-1,nullptr,
+            nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,
+            &compiled,&diagnostics)))compiled.Reset();
+        return compiled;
+    }();
+    if(!device||!code)return {};
+    struct DeviceShader {
+        ComPtr<ID3D11Device> device;
+        ComPtr<ID3D11ComputeShader> shader;
+    };
+    thread_local DeviceShader cached;
+    if(cached.device.Get()!=device) {
+        cached.shader.Reset();cached.device=device;
+    }
+    if(!cached.shader&&FAILED(device->CreateComputeShader(code->GetBufferPointer(),
+        code->GetBufferSize(),nullptr,&cached.shader)))return {};
+    return cached.shader;
+}
 Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,DXGI_FORMAT colorFormat,
-    UINT outputWidth,UINT outputHeight,UINT regionWidth=0,UINT regionHeight=0) {
+    UINT outputWidth,UINT outputHeight,SrSourceRegion region={}) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
         return Error{ErrorCode::InvalidInput,"SR preparation requires an immediate context and three textures"};
     ComPtr<ID3D11Device> device;
@@ -80,16 +102,18 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     }
     if(!outputWidth)outputWidth=descriptions[0].Width;
     if(!outputHeight)outputHeight=descriptions[0].Height;
-    if((regionWidth==0)!=(regionHeight==0))
+    if((region.width==0)!=(region.height==0)||
+       (!region.width&&(region.left||region.top)))
         return Error{ErrorCode::InvalidInput,"SR source region is incomplete"};
-    const bool cropped=regionWidth!=0;
-    if(cropped&&(regionWidth>descriptions[0].Width||
-                 regionHeight>descriptions[0].Height||
-                 outputWidth!=descriptions[0].Width||
-                 outputHeight!=descriptions[0].Height))
-        return Error{ErrorCode::InvalidInput,"SR source region exceeds the display-sized guides"};
-    const UINT renderWidth=cropped?regionWidth:descriptions[0].Width;
-    const UINT renderHeight=cropped?regionHeight:descriptions[0].Height;
+    const bool cropped=region.width!=0;
+    if(cropped&&(region.left>=descriptions[0].Width||
+                 region.top>=descriptions[0].Height||
+                 region.width>descriptions[0].Width-region.left||
+                 region.height>descriptions[0].Height-region.top))
+        return Error{ErrorCode::InvalidInput,"SR source region exceeds its guide allocations"};
+    const UINT renderWidth=cropped?region.width:descriptions[0].Width;
+    const UINT renderHeight=cropped?region.height:descriptions[0].Height;
+    if(!cropped)region={0,0,renderWidth,renderHeight};
     if(outputWidth<renderWidth||outputHeight<renderHeight||
        outputWidth>8192||outputHeight>8192)
         return Error{ErrorCode::InvalidInput,"SR display extent must cover render extent"};
@@ -117,14 +141,11 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     ComPtr<ID3D11ComputeShader> depthShader;
     ComPtr<ID3D11ShaderResourceView> depthView;
     ComPtr<ID3D11UnorderedAccessView> depthTarget;
+    ComPtr<ID3D11Buffer> cropConstants;
     std::unique_ptr<D3D11StateScope> isolated;
     if(cropped) {
-        ComPtr<ID3DBlob> code,diagnostics;
-        if(FAILED(D3DCompile(depthCropShader,sizeof(depthCropShader)-1,nullptr,
-            nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,
-            &code,&diagnostics))||!code||
-           FAILED(device->CreateComputeShader(code->GetBufferPointer(),
-               code->GetBufferSize(),nullptr,&depthShader)))
+        depthShader=cachedDepthCropShader(device.Get());
+        if(!depthShader)
             return Error{ErrorCode::Unavailable,"Cannot prepare depth crop shader"};
         D3D11_SHADER_RESOURCE_VIEW_DESC sourceView{};
         sourceView.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
@@ -133,6 +154,14 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         if(FAILED(device->CreateShaderResourceView(sources[2],&sourceView,&depthView))||
            FAILED(device->CreateUnorderedAccessView(copies[2].Get(),nullptr,&depthTarget)))
             return Error{ErrorCode::Unavailable,"Cannot create depth crop views"};
+        D3D11_BUFFER_DESC constantsDesc{};
+        constantsDesc.ByteWidth=16;
+        constantsDesc.Usage=D3D11_USAGE_DEFAULT;
+        constantsDesc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+        const std::array<UINT,4> origin{region.left,region.top,0,0};
+        const D3D11_SUBRESOURCE_DATA constantsData{origin.data(),0,0};
+        if(FAILED(device->CreateBuffer(&constantsDesc,&constantsData,&cropConstants)))
+            return Error{ErrorCode::Unavailable,"Cannot create depth crop origin buffer"};
         auto scope=D3D11StateScope::begin(context);
         if(const auto error=std::get_if<Error>(&scope))return *error;
         isolated=std::move(std::get<std::unique_ptr<D3D11StateScope>>(scope));
@@ -140,7 +169,8 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     for(std::size_t i=0;i<copies.size();++i) {
         if(cropped) {
             if(i==2)continue;
-            const D3D11_BOX box{0,0,0,renderWidth,renderHeight,1};
+            const D3D11_BOX box{region.left,region.top,0,
+                region.left+renderWidth,region.top+renderHeight,1};
             context->CopySubresourceRegion(copies[i].Get(),0,0,0,0,sources[i],0,&box);
         } else context->CopyResource(copies[i].Get(),sources[i]);
     }
@@ -148,10 +178,11 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         context->CSSetShader(depthShader.Get(),nullptr,0);
         context->CSSetShaderResources(0,1,depthView.GetAddressOf());
         context->CSSetUnorderedAccessViews(0,1,depthTarget.GetAddressOf(),nullptr);
+        context->CSSetConstantBuffers(0,1,cropConstants.GetAddressOf());
         context->Dispatch((renderWidth+7)/8,(renderHeight+7)/8,1);
     }
     return PreparedSrInputs{std::move(copies[0]),std::move(copies[1]),std::move(copies[2]),
-        std::move(output),renderWidth,renderHeight,d.Width,d.Height};
+        std::move(output),renderWidth,renderHeight,d.Width,d.Height,region};
 }
 }
 Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
@@ -182,6 +213,14 @@ Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* conte
     if(!renderWidth||!renderHeight||!outputWidth||!outputHeight)
         return Error{ErrorCode::InvalidInput,"SR source or display region is zero"};
     return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,
-        outputWidth,outputHeight,renderWidth,renderHeight);
+        outputWidth,outputHeight,{0,0,renderWidth,renderHeight});
+}
+Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,SrSourceRegion region,
+    UINT outputWidth,UINT outputHeight) {
+    if(!region.width||!region.height||!outputWidth||!outputHeight)
+        return Error{ErrorCode::InvalidInput,"SR source or display region is zero"};
+    return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,
+        outputWidth,outputHeight,region);
 }
 }

@@ -26,9 +26,14 @@ void checked(HRESULT result,const char* step) { if(FAILED(result))stop(step); }
 }
 int wmain(int argc,wchar_t** argv) {
     const bool injectFailure=argc==3&&std::wstring_view(argv[1])==L"--sr-fallback";
-    const bool sr=injectFailure||(argc==3&&std::wstring_view(argv[1])==L"--sr");
+    const bool preparedFailure=argc==3&&
+        std::wstring_view(argv[1])==L"--prepared-r32-fallback";
+    const bool preparedR32=preparedFailure||
+        (argc==3&&std::wstring_view(argv[1])==L"--prepared-r32");
+    const bool sr=injectFailure||preparedR32||
+        (argc==3&&std::wstring_view(argv[1])==L"--sr");
     if(argc!=2&&!sr) {
-        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback] <stage-pair directory>\n";
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback] <stage-pair directory>\n";
         return 2;
     }
     try {
@@ -118,9 +123,27 @@ int wmain(int argc,wchar_t** argv) {
                             injected=true;
                             return rk::Error{rk::ErrorCode::Unavailable,"Injected SR failure"};
                         }
-                        return presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),
-                            motion.Get(),depth.Get(),backbuffer.Get(),
-                            observedGameCycle[rendered%observedGameCycle.size()]);
+                        const auto jitter=observedGameCycle[rendered%observedGameCycle.size()];
+                        if(!preparedR32)
+                            return presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),
+                                motion.Get(),depth.Get(),backbuffer.Get(),jitter);
+                        const std::array<ID3D11Texture2D*,3> sources{
+                            sceneInput.Get(),motion.Get(),depth.Get()};
+                        auto inputs=rk::prepareSdrSrInputsFromRegion(context.Get(),sources,
+                            rk::SrSourceRegion{0,0,inputWidth,inputHeight},width,height);
+                        if(const auto error=std::get_if<rk::Error>(&inputs))return *error;
+                        const auto evaluated=presenter.evaluatePrepared(device.Get(),context.Get(),
+                            std::move(std::get<rk::PreparedSrInputs>(inputs)),
+                            {rendered+1,1,rendered==0},jitter);
+                        if(const auto error=std::get_if<rk::Error>(&evaluated))return *error;
+                        const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
+                        if(!token)return false;
+                        if(preparedFailure&&rendered==10&&!injected) {
+                            injected=true;
+                            return rk::Error{rk::ErrorCode::Unavailable,
+                                "Injected after prepared NGX evaluation"};
+                        }
+                        return presenter.publishEvaluated(context.Get(),*token,backbuffer.Get());
                     });
                 if(const auto error=std::get_if<rk::Error>(&presented))stop(error->message);
                 auto frame=std::move(std::get<rk::SdrSrFrameResult>(presented));
@@ -169,9 +192,13 @@ int wmain(int argc,wchar_t** argv) {
             if(GetTickCount64()>deadline)stop("SHUTDOWN_TIMEOUT");
             Sleep(1);
         }
-        if(injectFailure&&(!injected||!fallbackFrames||fallbackHash.empty()))
+        if((injectFailure||preparedFailure)&&
+           (!injected||!fallbackFrames||fallbackHash.empty()))
             stop("FALLBACK_NOT_OBSERVED");
-        std::cout<<"SDR_PRESENT_MODE="<<(sr?(injectFailure?"SR_WITH_FALLBACK":"SR"):"DLAA")
+        if(preparedR32&&presenter.submittedFrames()==0)stop("PREPARED_R32_NGX_NO_SUCCESS");
+        std::cout<<"SDR_PRESENT_MODE="<<(sr?(injectFailure?"SR_WITH_FALLBACK":
+            preparedFailure?"PREPARED_R32_WITH_FALLBACK":
+            preparedR32?"PREPARED_R32_SR":"SR"):"DLAA")
             <<"\nSDR_PRESENT_RENDER="<<inputWidth<<"x"<<inputHeight
             <<"\nSDR_PRESENT_DISPLAY="<<width<<"x"<<height
             <<"\nSDR_PRESENT_DLSS_FRAMES="<<presenter.submittedFrames()
