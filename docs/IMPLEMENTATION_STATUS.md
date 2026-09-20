@@ -866,3 +866,28 @@ user-started menu/save-load run; inspect whether the last stage log is before
 creation, after creation during the 120-frame delay, before evaluation, or
 after evaluation. This build can still crash and must be rolled back after
 data collection if it does.
+
+## 0.1.42 evaluation crash and prepared-input capture candidate
+
+The user started Skyrim with 0.1.42 and loaded a save. The feature was
+created at frame 6451 after world-like depth (`distinct=97`, `nonFar=96`),
+then spatial output ran through the 120-frame observation interval. At frame
+6571, input preparation and the first NGX evaluation both returned. Before
+the frame could be logged as published, CrashLogger recorded the same
+`nvwgf2umx.dll+0x1B61A4` null-read on an NVIDIA worker thread. This rules
+out feature creation by itself as the immediate trigger in this run, and
+localizes the live failure to evaluation-triggered GPU work or its immediate
+publication path. The log does not prove which asynchronous command failed.
+Skyrim had exited when checked. The assistant restored the 0.1.35 MO2 DLL
+and manifest from the verified backup; all four payload hashes match. The
+assistant did not start Skyrim.
+
+The next candidate retains the previously stable spatial-only publication
+and does **not** submit NGX. On the first world-like frame it prepares the
+same reduced colour, motion and R32 depth textures that NGX would receive,
+reads them back once and writes a manifest-hashed bundle under the user's
+`SKSE/RazKolbasCaptures` directory. This enables a standalone replay of the
+actual game inputs before another live NGX attempt. The bundle writer has a
+targeted positive/duplicate-destination test. Release build and all 35 CTest
+groups passed. Game capture and subsequent replay are **NOT RUN** for this
+source candidate. Captures remain outside Git.

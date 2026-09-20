@@ -82,6 +82,8 @@ struct WorldState {
     bool srRequested{};
     bool srDisabled{};
     WorldDepthGate ownedDepthGate;
+    bool ownedInputCaptureOnly{true};
+    bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
     bool nativePresenterStoppedForSr{};
@@ -405,6 +407,39 @@ Result<DepthSampleStats> probeOwnedDepth(ID3D11DeviceContext* context,ID3D11Text
     return sampleWorldDepth(image.pixels,render.width,render.height,
         image.rowBytes);
 }
+Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
+    ID3D11Texture2D* scene,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
+    Extent display,std::uint64_t sequence) {
+    const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
+    auto prepared=prepareSdrSrInputsFromOwnedScene(context,sources,
+        display.width,display.height);
+    if(const auto error=std::get_if<Error>(&prepared))return *error;
+    const auto& frame=std::get<PreparedSrInputs>(prepared);
+    const std::array<ID3D11Texture2D*,3> copied{
+        frame.color(),frame.motion(),frame.depth()};
+    auto readback=readbackCandidates(context,copied,24*1024*1024);
+    if(const auto error=std::get_if<Error>(&readback))return *error;
+    PWSTR documents=nullptr;
+    const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+        KF_FLAG_DEFAULT,nullptr,&documents);
+    struct FreeDocuments { PWSTR value;~FreeDocuments(){CoTaskMemFree(value);} } free{documents};
+    if(FAILED(found)||!documents)
+        return Error{ErrorCode::Unavailable,"Owned SR input capture Documents directory unavailable"};
+    try {
+        const auto directory=std::filesystem::path(documents)/"My Games"/
+            "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+            ("owned-sr-inputs-"+std::to_string(GetCurrentProcessId())+"-"+
+            std::to_string(sequence)+"-"+std::to_string(GetTickCount64()));
+        const std::array<std::string_view,3> names{
+            "color.raw","motion.raw","depth-r32.raw"};
+        const auto saved=saveProbeBundle(directory,
+            std::get<std::vector<ProbeImage>>(readback),names);
+        if(const auto error=std::get_if<Error>(&saved))return *error;
+        return directory;
+    } catch(const std::exception& error) {
+        return Error{ErrorCode::Io,std::string("Cannot locate owned SR capture directory: ")+error.what()};
+    }
+}
 bool processOwnedWorldFrame(WorldState* state,void* world,
     std::uint64_t sequence) noexcept {
     auto* domain=activeOwnedSceneDomain();
@@ -478,6 +513,22 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             [&]()->Result<bool> {
                 if(!state->ownedDepthGate.ready())
                     return Error{ErrorCode::Unavailable,"World depth has not passed the owned NGX admission gate"};
+                if(state->ownedInputCaptureOnly) {
+                    if(!state->ownedInputCaptureAttempted) {
+                        state->ownedInputCaptureAttempted=true;
+                        const auto capture=captureOwnedSrInputs(context,scene,
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
+                            domain->plan().display,sequence);
+                        if(const auto error=std::get_if<Error>(&capture))
+                            spdlog::warn("Owned SR input capture frame {} failed: {}",
+                                sequence,error->message);
+                        else
+                            spdlog::info("Owned SR input capture frame {} saved to {}; no NGX evaluation",
+                                sequence,std::get<std::filesystem::path>(capture).string());
+                    }
+                    return Error{ErrorCode::Unavailable,"Owned SR input capture only; NGX not submitted"};
+                }
                 if(state->ownedNgxInitFailed)
                     return Error{ErrorCode::Unavailable,"Owned NGX feature creation previously failed"};
                 if(!state->ownedNgxCreatedAt) {

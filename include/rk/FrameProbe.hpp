@@ -1,6 +1,7 @@
 #pragma once
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
+#include <filesystem>
 #include <vector>
 namespace rk {
 // Exact 1.6.1170 read-only layout, independently correlated with live renderer
@@ -20,4 +21,9 @@ struct ProbeImage {
 // only tightly packed CPU bytes leave the function.
 Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> textures,std::size_t budget=64*1024*1024);
+// Writes a bounded, already-read-back bundle to a new absolute directory.
+// Existing captures are never replaced; the manifest appears only when all
+// raw files have been written successfully.
+Result<bool> saveProbeBundle(const std::filesystem::path& directory,
+    std::span<const ProbeImage> images,std::span<const std::string_view> names);
 }

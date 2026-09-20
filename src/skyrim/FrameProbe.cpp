@@ -1,6 +1,8 @@
 #include "rk/FrameProbe.hpp"
+#include "rk/PatchDescriptor.hpp"
 #include <wrl/client.h>
 #include <cstring>
+#include <fstream>
 namespace rk {
 bool frameProbeBoundary(std::string_view profile,SwapCall call) noexcept {
     return profile==enbSwapObserverPatchId&&call==SwapCall::Present;
@@ -65,5 +67,52 @@ Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
             static_cast<const std::uint8_t*>(mapped.pData)+static_cast<std::size_t>(y)*mapped.RowPitch,image.rowBytes);
     }
     return result;
+}
+Result<bool> saveProbeBundle(const std::filesystem::path& directory,
+    std::span<const ProbeImage> images,std::span<const std::string_view> names) {
+    namespace fs=std::filesystem;
+    if(directory.empty()||!directory.is_absolute()||images.empty()||
+       images.size()>3||images.size()!=names.size())
+        return Error{ErrorCode::InvalidInput,"Probe bundle path or image count is invalid"};
+    for(std::size_t i=0;i<images.size();++i) {
+        const auto& image=images[i];
+        if(!image.descriptor.Width||!image.descriptor.Height||!image.rowBytes||
+           image.rowBytes>image.pixels.size()/image.descriptor.Height||
+           image.pixels.size()!=image.rowBytes*image.descriptor.Height||
+           names[i].empty()||names[i]=="."||names[i]==".."||
+           names[i].find_first_of("/\\:")!=std::string_view::npos)
+            return Error{ErrorCode::InvalidInput,"Probe bundle image or file name is invalid"};
+        for(std::size_t j=0;j<i;++j)if(names[j]==names[i])
+            return Error{ErrorCode::Conflict,"Probe bundle file names repeat"};
+    }
+    try {
+        if(fs::exists(directory))
+            return Error{ErrorCode::Conflict,"Probe bundle directory already exists"};
+        fs::create_directories(directory);
+        for(std::size_t i=0;i<images.size();++i) {
+            std::ofstream output(directory/std::string(names[i]),std::ios::binary);
+            output.exceptions(std::ios::failbit|std::ios::badbit);
+            output.write(reinterpret_cast<const char*>(images[i].pixels.data()),
+                static_cast<std::streamsize>(images[i].pixels.size()));
+            output.close();
+        }
+        std::ofstream manifest(directory/"manifest.pending");
+        manifest.exceptions(std::ios::failbit|std::ios::badbit);
+        manifest<<"RazKolbas prepared SR input capture; no NGX submission\n";
+        for(std::size_t i=0;i<images.size();++i) {
+            const auto& image=images[i];
+            manifest<<names[i]<<" width="<<image.descriptor.Width
+                <<" height="<<image.descriptor.Height
+                <<" format="<<static_cast<unsigned>(image.descriptor.Format)
+                <<" rowBytes="<<image.rowBytes<<" bytes="<<image.pixels.size()
+                <<" sha256="<<sha256(image.pixels)<<"\n";
+        }
+        manifest<<"complete=true\n";
+        manifest.close();
+        fs::rename(directory/"manifest.pending",directory/"manifest.txt");
+        return true;
+    } catch(const std::exception& error) {
+        return Error{ErrorCode::Io,std::string("Cannot save probe bundle: ")+error.what()};
+    }
 }
 }

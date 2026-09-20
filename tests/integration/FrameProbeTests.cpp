@@ -1,8 +1,43 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FrameProbe.hpp"
+#include "rk/PatchDescriptor.hpp"
 #include <wrl/client.h>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 using Microsoft::WRL::ComPtr;
+TEST_CASE("Prepared input capture writes verified raw bytes and refuses a repeated destination", "[frame_probe]") {
+    namespace fs=std::filesystem;
+    rk::ProbeImage image;
+    image.descriptor.Width=2;
+    image.descriptor.Height=1;
+    image.descriptor.Format=DXGI_FORMAT_R32_FLOAT;
+    image.rowBytes=8;
+    image.pixels={1,2,3,4,5,6,7,8};
+    const auto directory=fs::temp_directory_path()/
+        ("rk-probe-bundle-"+std::to_string(GetCurrentProcessId())+"-"+
+        std::to_string(GetTickCount64()));
+    const std::array images{image};
+    const std::array<std::string_view,1> names{"depth.raw"};
+    const auto saved=rk::saveProbeBundle(directory,images,names);
+    REQUIRE(std::holds_alternative<bool>(saved));
+    REQUIRE(std::get<bool>(saved));
+    std::ifstream raw(directory/"depth.raw",std::ios::binary);
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>{raw},
+        std::istreambuf_iterator<char>{}};
+    raw.close();
+    REQUIRE(bytes==image.pixels);
+    std::ifstream manifest(directory/"manifest.txt");
+    const std::string contents{std::istreambuf_iterator<char>{manifest},
+        std::istreambuf_iterator<char>{}};
+    manifest.close();
+    REQUIRE(contents.find(rk::sha256(image.pixels))!=std::string::npos);
+    REQUIRE(contents.find("complete=true")!=std::string::npos);
+    REQUIRE(std::holds_alternative<rk::Error>(rk::saveProbeBundle(directory,images,names)));
+    REQUIRE(fs::remove(directory/"depth.raw"));
+    REQUIRE(fs::remove(directory/"manifest.txt"));
+    REQUIRE(fs::remove(directory));
+}
 TEST_CASE("Frame probe is limited to the verified ENB base Present boundary", "[frame_probe]") {
     REQUIRE(rk::frameProbeBoundary("enb20260508.swapchain-observe-v1",rk::SwapCall::Present));
     REQUIRE_FALSE(rk::frameProbeBoundary("reshade673.swapchain-observe-v1",rk::SwapCall::Present));
