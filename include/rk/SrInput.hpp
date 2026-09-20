@@ -3,6 +3,7 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 
@@ -43,6 +44,29 @@ private:
 struct DepthSampleStats {
     unsigned distinct{},nonFar{};
     bool worldLike() const noexcept { return distinct>=16&&nonFar>=16; }
+};
+// A conservative admission gate for the owned reduced-scene route. Depth
+// readiness is sampled periodically and reset on a new resource generation.
+class WorldDepthGate {
+public:
+    bool needsSample(std::uint64_t frame,std::uint64_t generation) noexcept {
+        if(generation_!=generation||frame<=lastSample_) {
+            generation_=generation;
+            lastSample_=0;
+            consecutiveWorldSamples_=0;
+        }
+        return !lastSample_||frame-lastSample_>=30;
+    }
+    void record(std::uint64_t frame,std::optional<DepthSampleStats> sample) noexcept {
+        lastSample_=frame;
+        if(sample&&sample->worldLike()) {
+            if(consecutiveWorldSamples_<2)++consecutiveWorldSamples_;
+        } else consecutiveWorldSamples_=0;
+    }
+    bool ready() const noexcept { return consecutiveWorldSamples_>=2; }
+private:
+    std::uint64_t generation_{},lastSample_{};
+    unsigned consecutiveWorldSamples_{};
 };
 // Samples a fixed 10x10 grid of raw Skyrim R24G8 depth words. This is only a
 // bounded scene-readiness gate: it does not infer linearization or guide units.

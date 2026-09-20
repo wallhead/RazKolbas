@@ -93,6 +93,36 @@ TEST_CASE("Raw depth sample gate distinguishes a menu clear from world geometry"
     REQUIRE(std::holds_alternative<rk::Error>(rk::sampleWorldDepth(bytes,width,height,width*4-1)));
 }
 
+TEST_CASE("Owned SR waits for two recent world depth samples and falls back when depth clears", "[sr_input]") {
+    rk::WorldDepthGate gate;
+    const rk::DepthSampleStats menu{1,0};
+    const rk::DepthSampleStats world{95,94};
+    REQUIRE(gate.needsSample(1,7));
+    gate.record(1,menu);
+    REQUIRE_FALSE(gate.ready());
+    REQUIRE_FALSE(gate.needsSample(30,7));
+    REQUIRE(gate.needsSample(31,7));
+    gate.record(31,world);
+    REQUIRE_FALSE(gate.ready());
+    REQUIRE(gate.needsSample(61,7));
+    gate.record(61,world);
+    REQUIRE(gate.ready());
+    REQUIRE_FALSE(gate.needsSample(62,7));
+    REQUIRE(gate.needsSample(91,7));
+    gate.record(91,menu);
+    REQUIRE_FALSE(gate.ready());
+    REQUIRE(gate.needsSample(121,7));
+    gate.record(121,world);
+    REQUIRE_FALSE(gate.ready());
+    gate.record(151,std::nullopt);
+    REQUIRE_FALSE(gate.ready());
+    gate.record(181,world);
+    gate.record(211,world);
+    REQUIRE(gate.ready());
+    REQUIRE(gate.needsSample(212,8));
+    REQUIRE_FALSE(gate.ready());
+}
+
 TEST_CASE("SDR scene preparation accepts an RTV-only backbuffer and preserves its pixels", "[sr_input]") {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;

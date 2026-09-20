@@ -774,3 +774,29 @@ runtime remain unchanged. The assistant did not start Skyrim. Runtime
 stability/visibility and depth readiness: **NOT RUN**. If the user runs it,
 look for non-black native output, `providerSubmissions=0`, depth statistics
 and any crash before drawing further conclusions.
+
+## 0.1.40 loaded-save result and guarded NGX candidate
+
+The user started Skyrim and loaded a save with the 0.1.40 spatial-only build.
+The log reached frame 13800 with successful Presents, `providerSubmissions=0`,
+one spatial fallback in flight, and no new CrashLogger log. Sampled depth was
+clear/menu-like through frame 6000 (`distinct=1`, `nonFar=0`); from frame
+6600 through frame 13800 it was consistently world-like (`distinct=95–97`,
+`nonFar=94–96`). This isolates the previous crash from the pre-Present
+fallback publication in this run, but does not prove that invalid menu guides
+alone caused the NVIDIA worker crash. The user did not confirm visible quality.
+The assistant closed the user-started game via its main window and verified
+exit, then restored the 0.1.35 MO2 DLL and manifest from the verified backup;
+all four installed payload hashes match the 0.1.35 manifest. The user INI and
+signed NVIDIA runtime remain unchanged. The assistant did not start Skyrim.
+
+The next bounded candidate replaces the forced spatial diagnostic with an
+owned-world depth admission gate. It samples the actual reduced render
+rectangle every 30 frames, requires two consecutive world-like samples before
+submitting NGX, and falls back to spatial output when a sample is menu-like
+or unavailable. A new resource generation resets readiness. This is a
+hypothesis test for the 0.1.39 crash, not a demonstrated fix; motion guide
+semantics and NGX in-flight lifetime remain open suspects. The focused gate
+test passed, the Release build passed, and all 35 CTest groups passed. Actual
+Skyrim DLSS stability, appearance and native UI separation are **NOT RUN** for
+this candidate.
