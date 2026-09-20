@@ -1,6 +1,6 @@
 {
   "id": "skyrim1170.world-draw.sr-v1",
-  "status": "PREPARED_OFFLINE_ONLY",
+  "status": "EXPERIMENTAL_PASS_THROUGH_PENDING_GAME_RUN",
   "shipping_enabled": false,
   "purpose": "Prepare a pass-through observation point after Skyrim's original world-draw call",
   "target": {
@@ -19,11 +19,11 @@
     "original_target_address_library_id": 77247
   },
   "original_live_bytes": "e8d1f7e9ff",
-  "replacement": "encodeCallSiteReplacement to a prepared near relay; no game replacement currently installed",
-  "abi": "Reference callback preserves RCX pointer and EDX 32-bit value before invoking original; RAX is overwritten by live call-site continuation. Semantics require runtime verification.",
-  "activation": "DISABLED: requires proven thread quiescence, exact live-byte recheck, owner and callback lifetime, and pass-through runtime verification",
-  "lifetime": "Near relay may be freed only after the game CALL is restored and every callback has quiesced; callback DLL must remain pinned while reachable",
-  "recovery": "No game instruction is written by the current implementation; an eventual transaction must restore only its own exact five bytes while quiescent",
+  "replacement": "encodeCallSiteReplacement to a prepared near relay ending in FF 25 00000000 plus the pinned RazKolbas worldDrawProxy address; original-first forwarding with no SR work",
+  "abi": "0.1.10 decoded live caller sets EDX=0 and RCX=&game object at RVA 0x32887c0 before the CALL. Original target saves RCX in RBP and zero-extends DL to R15D. Caller overwrites RAX immediately. Reference callback also forwards RCX and EDX. Pointer type and complete effects remain unverified.",
+  "activation": "0.1.11 experimental opt-in at SKSEPlugin_Load before renderer/world execution; exact executable hash, decoded caller/target ABI, original CALL, relay bytes, and executable page ownership rechecked before the bounded write",
+  "lifetime": "Callback DLL pinned and relay plus forwarding state retained for process lifetime; no hot unpatch, no relay free while CALL is installed",
+  "recovery": "On validation/write preparation failure no game instruction is written. A post-write protection/flush/readback failure terminates rather than resuming half-patched code. Disable this patch ID or SafeMode for the next game launch; restore only when exact installed bytes and execution quiescence are proven",
   "evidence": ["docs/re/SR_REPLAY.md", "tests/unit/CallSiteTests.cpp", "tests/unit/WorldDrawTests.cpp"],
-  "game_runtime": "NOT RUN for relay or world-draw forwarding; prior read-only live byte contract PASS in 0.1.9"
+  "game_runtime": "0.1.10 user-run read-only caller/target snapshots PASS; relay or world-draw forwarding NOT RUN"
 }

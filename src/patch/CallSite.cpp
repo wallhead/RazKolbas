@@ -4,6 +4,25 @@
 #include <limits>
 
 namespace rk {
+Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget) {
+    // Caller starts at RVA fa5071: xor edx,edx; lea rcx,[rip+22e3746];
+    // CALL e44850; mov rax,[rip+...] (return is discarded).
+    constexpr std::array<std::uint8_t,17> expectedCaller{
+        0x33,0xd2,0x48,0x8d,0x0d,0x46,0x37,0x2e,0x02,
+        0xe8,0xd1,0xf7,0xe9,0xff,0x48,0x8b,0x05};
+    // Target starts at RVA e44850: RCX saved in RBP; DL zero-extended into
+    // R15D before branch-dependent renderer work.
+    constexpr std::array<std::uint8_t,33> expectedTarget{
+        0x4c,0x8b,0xdc,0x53,0x48,0x81,0xec,0x80,0,0,0,
+        0x44,0x8b,0x05,0x0e,0x63,0x1e,0x01,0x49,0x89,0x6b,0x08,
+        0x48,0x8b,0xe9,0x4d,0x89,0x7b,0xe8,0x44,0x0f,0xb6,0xfa};
+    if(caller.size()<expectedCaller.size()||originalTarget.size()<expectedTarget.size()||
+       !std::equal(expectedCaller.begin(),expectedCaller.end(),caller.begin())||
+       !std::equal(expectedTarget.begin(),expectedTarget.end(),originalTarget.begin()))
+        return Error{ErrorCode::Conflict,"Decoded world-call argument or target prologue differs"};
+    return true;
+}
 Result<CallSitePlan> prepareCallSite(std::span<const std::uint8_t> live,
     std::string_view verifiedGameHash,std::size_t imageSize,const CallSiteDescriptor& d) {
     const auto reject=[](const char* message)->Result<CallSitePlan> {

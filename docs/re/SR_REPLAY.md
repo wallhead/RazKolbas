@@ -219,4 +219,43 @@ AE ID 82084 base RVA `0xfa4f00` and 0x100 bytes from original target RVA
 passed validation. These two bounded log entries permit offline disassembly
 of the real caller and target, which the encoded on-disk executable cannot
 provide. It does not invoke, modify, or redirect either function. Debug and
-Release passed all 15 CTest groups; the game-run outcome is pending.
+Release passed all 15 CTest groups. The user launched Skyrim through MO2 on
+2026-09-20; the 0.1.10 log at 09:16:38 verified the exact world CALL and
+captured both decoded live-code ranges. Renderer creation through the ENB
+wrapper succeeded at 09:16:54 on an RTX 4080 SUPER, and menu Present
+observation continued without failures. No game patch or SR feature was
+activated. The assistant did not start or control the game.
+
+The 512-byte caller snapshot has SHA-256
+`d0fd5a13877dbf1b79ca1822c6bf5119b87e1127c72d97eb146e52172c08a3f2`;
+the 256-byte original-target snapshot has SHA-256
+`24082619f4ccf5d4a7ddf280ce35718e891c73a57a61e20210db9cc9e22ec54d`.
+Raw bytes and offline Capstone disassembly remain ignored under
+`artifacts/local/sr-live-code-2026-09-20-091638/`. The caller at RVA
+`0xfa5071` zeros EDX, at `0xfa5073` loads RCX with the address at RVA
+`0x32887c0`, and at `0xfa507a` invokes the verified original target.
+The next instruction at `0xfa507f` overwrites RAX. The original target at
+`0xe44866` saves RCX in RBP and at `0xe4486d` copies DL into R15D with
+zero extension. Thus this exact call passes a game-owned pointer and a
+zero-valued low-byte flag, with no consumed return value. The pointer's
+semantic type and the target's complete effects are still unknown. This
+live evidence strengthens the two-argument forwarding ABI inferred from
+the reference callback; it does not verify the future in-game detour.
+
+## 0.1.11 experimental world-call pass-through
+
+The next build uses that decoded evidence as an activation gate at
+`SKSEPlugin_Load`, before observed renderer creation. It requires the exact
+Skyrim executable hash, exact CALL, matching caller argument instructions,
+matching original-target prologue, explicit experimental patch opt-in, and an
+unchanged executable write region. A nearby execute/read relay preserves the
+two incoming arguments and calls the pinned RazKolbas callback. The callback
+invokes Skyrim's original target exactly once before incrementing a counter;
+the normal Present observer reports `worldForwarded`. It does no DLSS work and
+does not change render targets. An executable fixture passed install,
+forwarding, idempotence, changed-owner refusal, exact restoration, and relay
+retirement. Debug and Release passed all 15 CTest groups. The in-game
+pass-through outcome remains **NOT RUN** until the user launches the newly
+installed build. The callback DLL, relay and forwarding state intentionally
+stay alive for the process lifetime; disabling this experimental patch takes
+effect on the next launch.

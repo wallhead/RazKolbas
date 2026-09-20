@@ -4,6 +4,7 @@
 #include "rk/SwapObserver.hpp"
 #include "rk/FrameProbeRuntime.hpp"
 #include "rk/FrameProbe.hpp"
+#include "rk/WorldDrawHook.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -95,9 +96,10 @@ void swapObserved(const SwapEvent& event) {
     if(event.result==DXGI_STATUS_OCCLUDED)state->occluded.fetch_add(1);
     if(FAILED(event.result))state->failed.fetch_add(1);
     if(count<=3||count%600==0)
-        spdlog::info("Swap {} observation #{}: object=0x{:x}; interval={}; flags=0x{:x}; HRESULT=0x{:08x}; testCalls={}; occluded={}; failed={}; thread={}; observation only",
+        spdlog::info("Swap {} observation #{}: object=0x{:x}; interval={}; flags=0x{:x}; HRESULT=0x{:08x}; testCalls={}; occluded={}; failed={}; worldForwarded={}; thread={}; observation only",
             event.call==SwapCall::Present?"Present":"Present1",count,event.object,event.interval,event.flags,
-            static_cast<std::uint32_t>(event.result),state->tests.load(),state->occluded.load(),state->failed.load(),GetCurrentThreadId());
+            static_cast<std::uint32_t>(event.result),state->tests.load(),state->occluded.load(),state->failed.load(),
+            worldDrawForwardedCalls(),GetCurrentThreadId());
 }
 ULONG WINAPI swapRelease(IUnknown* s) noexcept {
     const auto* state=swapLease.load(std::memory_order_acquire);
@@ -273,6 +275,9 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto applied=published->patch.apply(slot,original,reinterpret_cast<void*>(&createProxy));
         if (const auto error=std::get_if<Error>(&applied)) return *error;
         published->armed.store(true);
+        const auto world=installWorldDrawPassThrough(game,identity.hash,settings);
+        if(const auto error=std::get_if<Error>(&world))
+            spdlog::warn("World-draw pass-through not installed: {}",error->message);
         try { spdlog::info("Renderer observation IAT installed; original chain preserved; SR/FG/NR inactive"); } catch (...) {}
         return true;
     } catch (const std::exception& error) {

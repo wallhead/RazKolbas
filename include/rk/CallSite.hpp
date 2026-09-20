@@ -24,6 +24,11 @@ struct CallSitePlan {
 // executable file identity. No write, hook installation, or ownership claim.
 Result<CallSitePlan> prepareCallSite(std::span<const std::uint8_t> live,
     std::string_view verifiedGameHash,std::size_t imageSize,const CallSiteDescriptor& descriptor);
+// Exact decoded instructions observed in the user-run Skyrim 1.6.1170 build.
+// Must be checked alongside prepareCallSite before claiming the two-argument
+// forwarding ABI. Does not infer the semantic type of the game pointer.
+Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget);
 // Builds the complete direct-CALL instruction for a verified plan. This is
 // preparation only: the caller must separately establish exclusive execution
 // quiescence, recheck the live bytes, and own the target's lifetime before write.
@@ -46,15 +51,25 @@ public:
     NearCallRelay& operator=(NearCallRelay&&)=delete;
     void* entry() const noexcept { return memory_; }
     const std::array<std::uint8_t,5>& callBytes() const noexcept { return callBytes_; }
+    std::uintptr_t target() const noexcept { return target_; }
 private:
     friend Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan&,std::uintptr_t,std::uintptr_t);
-    NearCallRelay(void* memory,std::array<std::uint8_t,5> callBytes) noexcept:
-        memory_(memory),callBytes_(callBytes) {}
+    NearCallRelay(void* memory,std::array<std::uint8_t,5> callBytes,std::uintptr_t target) noexcept:
+        memory_(memory),callBytes_(callBytes),target_(target) {}
     void* memory_{};
     std::array<std::uint8_t,5> callBytes_{};
+    std::uintptr_t target_{};
 };
 // Allocates and seals a relay within CALL rel32 reach. It never changes the
 // game instruction; activation requires a separate safe patch transaction.
 Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan& plan,
     std::uintptr_t imageBase,std::uintptr_t target);
+
+// The caller must prove exclusive execution at the write site. The enum
+// records that proof's boundary; it does not suspend unrelated game threads.
+enum class CallWriteBoundary { None, OwnedFixtureExclusive, SkyrimStartupBeforeWorldThreads };
+Result<bool> applyCallInstruction(const CallSitePlan& plan,std::uintptr_t imageBase,
+    const NearCallRelay& relay,CallWriteBoundary boundary);
+Result<bool> restoreCallInstruction(const CallSitePlan& plan,std::uintptr_t imageBase,
+    const NearCallRelay& relay,CallWriteBoundary boundary);
 }

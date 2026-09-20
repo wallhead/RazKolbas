@@ -70,6 +70,17 @@ void logReferenceSites(std::uintptr_t base,std::string_view verifiedGameHash) {
             if(const auto* plan=std::get_if<CallSitePlan>(&prepared)) {
                 spdlog::info("Reference world-draw CALL contract verified: site RVA=0x{:x}; original target RVA=0x{:x}; no patch installed",
                     plan->siteRva,plan->originalTargetRva);
+                std::array<std::uint8_t,17> callerAbi{};
+                std::array<std::uint8_t,33> targetAbi{};
+                if(read(base+0xfa5071,callerAbi.data(),callerAbi.size())&&
+                   read(base+plan->originalTargetRva,targetAbi.data(),targetAbi.size())) {
+                    const auto abi=verifySkyrim1170WorldCallAbi(callerAbi,targetAbi);
+                    if(std::holds_alternative<bool>(abi))
+                        spdlog::info("Decoded world-call ABI verified: RCX=game object, EDX=0, target reads DL, return unused; read-only");
+                    else
+                        spdlog::warn("Decoded world-call ABI differs: {}; no patch installed",std::get<Error>(abi).message);
+                } else
+                    spdlog::warn("Decoded world-call ABI unavailable; no patch installed");
                 // The exact file's text is encoded on disk. Capture bounded
                 // decoded live bytes to recover the caller/callee ABI offline.
                 logLiveCode<0x200>(base,0xfa4f00,"Main_DrawWorld caller (AE ID 82084)");
@@ -169,7 +180,7 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.10 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.11 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"trigger=CtrlShiftF10 request="<<trigger.requests()<<" captureTickMs="<<now<<" attempt="<<attempts<<"\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);

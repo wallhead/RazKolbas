@@ -30,6 +30,28 @@ TEST_CASE("Verified Skyrim world call resolves to the original engine target", "
     REQUIRE(plan.originalTargetRva==0xe44850);
 }
 
+TEST_CASE("Decoded Skyrim world-call ABI requires exact caller and callee context", "[patch][call_site]") {
+    constexpr std::array<std::uint8_t,17> caller{
+        0x33,0xd2,0x48,0x8d,0x0d,0x46,0x37,0x2e,0x02,
+        0xe8,0xd1,0xf7,0xe9,0xff,0x48,0x8b,0x05};
+    constexpr std::array<std::uint8_t,33> callee{
+        0x4c,0x8b,0xdc,0x53,0x48,0x81,0xec,0x80,0,0,0,
+        0x44,0x8b,0x05,0x0e,0x63,0x1e,0x01,0x49,0x89,0x6b,0x08,
+        0x48,0x8b,0xe9,0x4d,0x89,0x7b,0xe8,0x44,0x0f,0xb6,0xfa};
+    REQUIRE(std::get<bool>(rk::verifySkyrim1170WorldCallAbi(caller,callee)));
+    auto changedCaller=caller;
+    changedCaller[0]=0x90;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170WorldCallAbi(changedCaller,callee)));
+    changedCaller=caller;
+    changedCaller[9]=0xe9;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170WorldCallAbi(changedCaller,callee)));
+    auto changedCallee=callee;
+    changedCallee[32]=0xd1;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170WorldCallAbi(caller,changedCallee)));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170WorldCallAbi(
+        std::span(caller).first(16),callee)));
+}
+
 TEST_CASE("Changed world call, identity, and expected target all reject before a code write", "[patch][call_site]") {
     auto d=worldDescriptor();
     auto changed=worldCall;
@@ -196,4 +218,67 @@ TEST_CASE("Near relay rejects invalid ownership before allocation", "[patch][cal
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareNearCallRelay(plan,0,
         reinterpret_cast<std::uintptr_t>(&relayTarget))));
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareNearCallRelay(plan,0x100000000ULL,0)));
+}
+
+TEST_CASE("Quiescent CALL write installs, refuses another owner, and restores exact bytes", "[patch][call_site][patch_execution]") {
+    const std::array<std::uint8_t,18> code{
+        0x48,0x83,0xec,0x28, 0xe8,5,0,0,0,
+        0x48,0x83,0xc4,0x28, 0xc3, 0x8d,0x04,0x11,0xc3};
+    struct Page {
+        void* address=VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+        ~Page() { if(address)VirtualFree(address,0,MEM_RELEASE); }
+    } page;
+    REQUIRE(page.address);
+    std::memcpy(page.address,code.data(),code.size());
+    DWORD prior{};
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&prior));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),page.address,code.size()));
+    const rk::CallSiteDescriptor descriptor{"fixture.quiescent-call",rk::sha256(code),code.size(),4,14,
+        {0xe8,5,0,0,0}};
+    const auto prepared=rk::prepareCallSite(std::span(code).subspan(4),descriptor.gameSha256,code.size(),descriptor);
+    REQUIRE(std::holds_alternative<rk::CallSitePlan>(prepared));
+    const auto plan=std::get<rk::CallSitePlan>(prepared);
+    const auto imageBase=reinterpret_cast<std::uintptr_t>(page.address);
+    auto relayResult=rk::prepareNearCallRelay(plan,imageBase,reinterpret_cast<std::uintptr_t>(&relayTarget));
+    REQUIRE(std::holds_alternative<rk::NearCallRelay>(relayResult));
+    auto& relay=std::get<rk::NearCallRelay>(relayResult);
+    using Boundary=rk::CallWriteBoundary;
+    const auto call=reinterpret_cast<int(*)(int,int)>(page.address);
+    relayVisits=0;
+    REQUIRE(call(7,11)==18);
+    REQUIRE(std::get<bool>(rk::applyCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(call(7,11)==32);
+    REQUIRE(relayVisits==1);
+    REQUIRE(std::get<bool>(rk::applyCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::restoreCallInstruction(
+        plan,imageBase,relay,Boundary::None)));
+    REQUIRE(std::get<bool>(rk::restoreCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(call(7,11)==18);
+    REQUIRE(std::get<bool>(rk::restoreCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(relayVisits==1);
+    REQUIRE(std::get<bool>(rk::applyCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&prior));
+    static_cast<std::uint8_t*>(page.address)[4]=0x90;
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&prior));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::restoreCallInstruction(
+        plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(static_cast<const std::uint8_t*>(page.address)[4]==0x90);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&prior));
+    static_cast<std::uint8_t*>(page.address)[4]=relay.callBytes()[0];
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&prior));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),page.address,code.size()));
+    REQUIRE(std::get<bool>(rk::restoreCallInstruction(plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    // A changed opcode is another owner. Both installation and rollback refuse it.
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&prior));
+    static_cast<std::uint8_t*>(page.address)[4]=0x90;
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&prior));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::applyCallInstruction(
+        plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::restoreCallInstruction(
+        plan,imageBase,relay,Boundary::OwnedFixtureExclusive)));
+    REQUIRE(static_cast<const std::uint8_t*>(page.address)[4]==0x90);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&prior));
+    static_cast<std::uint8_t*>(page.address)[4]=0xe8;
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&prior));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),page.address,code.size()));
 }

@@ -8,7 +8,7 @@
 namespace rk {
 NearCallRelay::~NearCallRelay() { if(memory_)VirtualFree(memory_,0,MEM_RELEASE); }
 NearCallRelay::NearCallRelay(NearCallRelay&& other) noexcept:
-    memory_(std::exchange(other.memory_,nullptr)),callBytes_(other.callBytes_) {}
+    memory_(std::exchange(other.memory_,nullptr)),callBytes_(other.callBytes_),target_(other.target_) {}
 
 Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan& plan,
     std::uintptr_t imageBase,std::uintptr_t target) {
@@ -68,7 +68,7 @@ Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan& plan,
                             VirtualFree(memory,0,MEM_RELEASE);
                             return Error{ErrorCode::Io,"Cannot seal and verify near relay"};
                         }
-                        return NearCallRelay(memory,std::get<std::array<std::uint8_t,5>>(call));
+                        return NearCallRelay(memory,std::get<std::array<std::uint8_t,5>>(call),target);
                     }
                     if(candidate>maximum-granularity)break;
                     candidate+=granularity;
