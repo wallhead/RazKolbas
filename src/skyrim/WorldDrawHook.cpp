@@ -361,6 +361,34 @@ void afterOriginal(void*,std::uint32_t) noexcept {
     active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
 }
 #ifdef RK_WITH_NGX
+void probeOwnedFirstFrame(ID3D11DeviceContext* context,ID3D11Texture2D* scene,
+    ID3D11Texture2D* display) {
+    const std::array<ID3D11Texture2D*,2> textures{scene,display};
+    const auto readback=readbackCandidates(context,textures,24*1024*1024);
+    if(const auto error=std::get_if<Error>(&readback)) {
+        spdlog::warn("Owned first-frame pixel probe unavailable: {}",error->message);
+        return;
+    }
+    const auto& images=std::get<std::vector<ProbeImage>>(readback);
+    for(std::size_t i=0;i<images.size();++i) {
+        const auto& image=images[i];
+        if(image.descriptor.Format!=DXGI_FORMAT_R8G8B8A8_UNORM)continue;
+        unsigned nonBlack=0,distinct=0;
+        std::array<std::uint32_t,256> colours{};
+        for(unsigned y=0;y<16;++y)for(unsigned x=0;x<16;++x) {
+            const auto sx=static_cast<UINT>((2*x+1)*static_cast<std::uint64_t>(image.descriptor.Width)/32);
+            const auto sy=static_cast<UINT>((2*y+1)*static_cast<std::uint64_t>(image.descriptor.Height)/32);
+            const auto* pixel=image.pixels.data()+sy*image.rowBytes+4*sx;
+            nonBlack+=pixel[0]>4||pixel[1]>4||pixel[2]>4;
+            std::uint32_t colour{};std::memcpy(&colour,pixel,sizeof(colour));
+            bool known=false;for(unsigned j=0;j<distinct;++j)known|=colours[j]==colour;
+            if(!known)colours[distinct++]=colour;
+        }
+        spdlog::info("Owned first-frame {} pixels: extent={}x{} nonBlack={}/256 distinct={}/256",
+            i==0?"reduced scene":"native after SR/fallback",
+            image.descriptor.Width,image.descriptor.Height,nonBlack,distinct);
+    }
+}
 bool processOwnedWorldFrame(WorldState* state,void* world,
     std::uint64_t sequence) noexcept {
     auto* domain=activeOwnedSceneDomain();
@@ -433,6 +461,9 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         if(const auto error=std::get_if<Error>(&presented))
             throw std::runtime_error(error->message);
         auto outcome=std::move(std::get<SdrSrFrameResult>(presented));
+        if(sequence<=3&&outcome.providerFailure())
+            spdlog::warn("Owned world DLSS frame {} unavailable: {}",
+                sequence,outcome.providerFailure()->message);
         if(outcome.mode()==SdrSrFrameMode::Provider) {
             state->displayedMode.store(DisplayMode::DlssSr,std::memory_order_release);
             state->statusDlssFrames.store(state->srPresenter.submittedFrames(),
@@ -442,6 +473,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->ownedFallbacks.emplace_back(std::move(outcome));
             ++state->srSkipped;
         }
+        if(sequence==1)probeOwnedFirstFrame(context,scene,display);
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native UI publication or context compatibility failed");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);

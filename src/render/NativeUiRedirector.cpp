@@ -47,7 +47,7 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     context_=context;thread_=renderThread;next_=next;
     scene_=reducedScene;sceneId_=canonical(reducedScene);
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
-    generation_=route_.plan().generation;compatibilityFault_=false;
+    generation_=route_.plan().generation;compatibilityFault_=false;faultInfo_={};
     return S_OK;
 }
 HRESULT NativeUiRedirector::replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept {
@@ -108,14 +108,27 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
     UINT count,ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
     if(eligible(context)&&views&&count) {
         bool sceneIncoming=false;
+        UINT sceneSlot=0;
         for(UINT i=0;i<count&&i<D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;++i) {
             auto value=resource(views[i]);auto id=canonical(value.Get());
-            sceneIncoming|=id&&id.Get()==sceneId_.Get();
+            if(id&&id.Get()==sceneId_.Get()) {sceneIncoming=true;sceneSlot=i;}
         }
         if(sceneIncoming) {
             if(count==1&&!depth) {
                 auto* replacement=nativeRtv_.Get();
                 next_.om(context,1,&replacement,nullptr);return;
+            }
+            if(!compatibilityFault_) {
+                faultInfo_={count,sceneSlot,depth!=nullptr,0,0};
+                if(depth) {
+                    auto value=resource(depth);
+                    ComPtr<ID3D11Texture2D> texture;
+                    if(value&&SUCCEEDED(value.As(&texture))) {
+                        D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+                        faultInfo_.depthWidth=desc.Width;
+                        faultInfo_.depthHeight=desc.Height;
+                    }
+                }
             }
             compatibilityFault_=true; // Unknown MRT/depth semantics.
         }
@@ -138,6 +151,6 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     if(unbindNative&&context_&&nativeRtv_&&next_.om&&nativeBound())
         next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
-    thread_=0;generation_=0;next_={};compatibilityFault_=false;
+    thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
 }
 }

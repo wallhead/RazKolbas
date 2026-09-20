@@ -586,3 +586,34 @@ The assistant did not start Skyrim. The installed candidate's actual alias,
 DLSS SR, fallback, UI and resize results are **NOT RUN**; the next action is
 one normal user-started Skyrim session through MO2, then inspect
 `RazKolbas.log` for `Owned scene route armed` and `Owned world frame` evidence.
+
+## 0.1.36 live failure and rollback (September 20)
+
+The user started Skyrim with the 0.1.36 MO2 candidate and reported that the
+End diagnostics menu opened over a black screen. The menu's 0.6 scale figure
+was a reported value, **not** a visible reduced scene. `RazKolbas.log` proves
+the exact Skyrim view-cache `GetBuffer` received the 1707x960 owned scene
+instead of the 2560x1440 native buffer. The first post-world frame published
+the spatial fallback (`mode=3`) with zero DLSS provider submissions. On frame
+two the native-UI redirector recorded an unsupported render-target/depth
+layout and the owned route suspended. Present continued successfully through
+at least 24,000 calls; this is a black-image failure, not a verified crash.
+The log did not record why the DLSS submission failed, the exact incompatible
+UI bind, or whether the owned scene and native output contained non-black
+pixels. DLSS SR visible operation remains **FAILED/NOT PROVEN**.
+
+After collecting the log, the assistant sent WM_CLOSE to the user-started
+Skyrim process and verified it exited. The MO2 `RazKolbas.dll` and manifest
+were restored from the pre-0.1.36 backup. All four installed payloads match
+the restored 0.1.35 manifest; DLL SHA-256 is
+`320d3493f21e352587d29d0e053baf822aba2642e478d2a6849953c78e9e1274`.
+The user's INI and signed NVIDIA SR runtime were not changed. The assistant
+did not start Skyrim.
+
+The next source candidate records the first provider rejection, the first
+incompatible UI bind (phase, frame count, thread, target count/slot and depth
+extent), and a bounded first-frame 16x16 pixel sample of both the reduced
+scene and native output. No raw capture is saved by this probe. Release build
+and 35 CTest groups pass. These diagnostics are **SOURCE-ONLY/NOT RUN** in
+Skyrim; no UI translation or image fix is claimed until the bind and pixels
+are observed.

@@ -12,6 +12,12 @@ struct UiContextNext {
     OM om{};
     VP viewport{};
 };
+struct UiCompatibilityFault {
+    UINT targetCount{};
+    UINT sceneSlot{};
+    bool hasDepth{};
+    UINT depthWidth{},depthHeight{};
+};
 // Scoped translations for a single verified immediate-context chain. The
 // installer must save the current downstream methods; this class never jumps
 // around ENB/ReShade or installs a vtable hook on its own.
@@ -34,6 +40,7 @@ public:
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
         const D3D11_VIEWPORT* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
+    UiCompatibilityFault compatibilityFaultInfo() const noexcept { return faultInfo_; }
     void releaseAfterRetirement(bool unbindNative=false) noexcept;
 private:
     bool eligible(ID3D11DeviceContext* context) const noexcept;
@@ -44,6 +51,7 @@ private:
     DWORD thread_{};
     std::uint64_t generation_{};
     bool compatibilityFault_{};
+    UiCompatibilityFault faultInfo_{};
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
     Microsoft::WRL::ComPtr<IUnknown> sceneId_,nativeId_;

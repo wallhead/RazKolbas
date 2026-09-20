@@ -100,9 +100,19 @@ void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
     std::scoped_lock lock(uiDispatchMutex);
     auto* state=uiHook.load(std::memory_order_acquire);
     if(!state)return;
-    if(state->armed.load(std::memory_order_acquire))
+    if(state->armed.load(std::memory_order_acquire)) {
+        const bool faultBefore=state->redirect.compatibilityFault();
+        const auto phaseBefore=ownedDomain.phase();
+        const auto worldBefore=worldDrawForwardedCalls();
         state->redirect.onOMSetRenderTargets(context,count,views,depth);
-    else state->next.om(context,count,views,depth);
+        if(!faultBefore&&state->redirect.compatibilityFault()) {
+            const auto fault=state->redirect.compatibilityFaultInfo();
+            try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{}",
+                static_cast<unsigned>(phaseBefore),worldBefore,GetCurrentThreadId(),
+                fault.targetCount,fault.sceneSlot,fault.hasDepth,
+                fault.depthWidth,fault.depthHeight);} catch(...) {}
+        }
+    } else state->next.om(context,count,views,depth);
 }
 void STDMETHODCALLTYPE uiViewportProxy(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) noexcept {
