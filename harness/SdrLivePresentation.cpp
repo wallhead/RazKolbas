@@ -30,10 +30,11 @@ int wmain(int argc,wchar_t** argv) {
         std::wstring_view(argv[1])==L"--prepared-r32-fallback";
     const bool preparedR32=preparedFailure||
         (argc==3&&std::wstring_view(argv[1])==L"--prepared-r32");
-    const bool sr=injectFailure||preparedR32||
+    const bool ngxPlan=argc==3&&std::wstring_view(argv[1])==L"--ngx-plan";
+    const bool sr=injectFailure||preparedR32||ngxPlan||
         (argc==3&&std::wstring_view(argv[1])==L"--sr");
     if(argc!=2&&!sr) {
-        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback] <stage-pair directory>\n";
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback|--ngx-plan] <stage-pair directory>\n";
         return 2;
     }
     try {
@@ -43,14 +44,7 @@ int wmain(int argc,wchar_t** argv) {
         std::vector<std::uint8_t> scene(width*height*4);
         std::ifstream input(source,std::ios::binary);
         if(!input.read(reinterpret_cast<char*>(scene.data()),scene.size()))stop("SOURCE_READ");
-        const UINT inputWidth=sr?width/2:width,inputHeight=sr?height/2:height;
-        std::vector<std::uint8_t> reduced;
-        if(sr) {
-            reduced.resize(static_cast<std::size_t>(inputWidth)*inputHeight*4);
-            for(UINT y=0;y<inputHeight;++y)for(UINT x=0;x<inputWidth;++x)
-                std::memcpy(reduced.data()+(static_cast<std::size_t>(y)*inputWidth+x)*4,
-                    scene.data()+(static_cast<std::size_t>(y*2)*width+x*2)*4,4);
-        }
+        UINT inputWidth=sr?width/2:width,inputHeight=sr?height/2:height;
         ComPtr<IDXGIFactory6> factory;
         checked(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)),"FACTORY");
         ComPtr<IDXGIAdapter1> adapter;
@@ -69,6 +63,23 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
         checked(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,
             nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context),"DEVICE");
+        rk::SdrDlssPresenter presenter;
+        if(ngxPlan) {
+            const auto planned=presenter.prepareReducedPlan(device.Get(),context.Get(),{width,height});
+            if(const auto error=std::get_if<rk::Error>(&planned))stop(error->message);
+            inputWidth=std::get<rk::Extent>(planned).width;
+            inputHeight=std::get<rk::Extent>(planned).height;
+        }
+        std::vector<std::uint8_t> reduced;
+        if(sr) {
+            reduced.resize(static_cast<std::size_t>(inputWidth)*inputHeight*4);
+            for(UINT y=0;y<inputHeight;++y)for(UINT x=0;x<inputWidth;++x) {
+                const auto fromY=static_cast<UINT>(static_cast<std::uint64_t>(y)*height/inputHeight);
+                const auto fromX=static_cast<UINT>(static_cast<std::uint64_t>(x)*width/inputWidth);
+                std::memcpy(reduced.data()+(static_cast<std::size_t>(y)*inputWidth+x)*4,
+                    scene.data()+(static_cast<std::size_t>(fromY)*width+fromX)*4,4);
+            }
+        }
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width=width;desc.Height=height;desc.MipLevels=desc.ArraySize=1;
         desc.SampleDesc.Count=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -102,7 +113,6 @@ int wmain(int argc,wchar_t** argv) {
         }
         ComPtr<ID3D11Texture2D> depth;
         checked(device->CreateTexture2D(&depthDesc,&zeros,&depth),"DEPTH");
-        rk::SdrDlssPresenter presenter;
         constexpr std::array<rk::NgxJitter,8> observedGameCycle{{
             {-0.25f,-1.0f/6.0f},{0.25f,7.0f/18.0f},
             {-0.375f,1.0f/18.0f},{0.125f,-5.0f/18.0f},
@@ -198,7 +208,7 @@ int wmain(int argc,wchar_t** argv) {
         if(preparedR32&&presenter.submittedFrames()==0)stop("PREPARED_R32_NGX_NO_SUCCESS");
         std::cout<<"SDR_PRESENT_MODE="<<(sr?(injectFailure?"SR_WITH_FALLBACK":
             preparedFailure?"PREPARED_R32_WITH_FALLBACK":
-            preparedR32?"PREPARED_R32_SR":"SR"):"DLAA")
+            preparedR32?"PREPARED_R32_SR":ngxPlan?"NGX_PLAN_SR":"SR"):"DLAA")
             <<"\nSDR_PRESENT_RENDER="<<inputWidth<<"x"<<inputHeight
             <<"\nSDR_PRESENT_DISPLAY="<<width<<"x"<<height
             <<"\nSDR_PRESENT_DLSS_FRAMES="<<presenter.submittedFrames()

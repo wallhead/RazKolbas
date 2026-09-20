@@ -430,3 +430,33 @@ installed DLL SHA-256 is
 The user's INI and signed NVIDIA SR runtime retain their prior hashes. No game
 run of 0.1.34 is claimed. It logs the factory identity for the owned route but
 does not activate that route or change the renderer client rectangle.
+
+0.1.34 user-started result: the adapter-parent factory is the installed
+ReShade `dxgi.dll` (SHA-256
+`059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc`),
+table RVA `0x3D79D0`, `CreateSwapChain` slot 10 at RVA `0x13A5B0`.
+Read-only process inspection found the ENB outer swap delegating through a
+ReShade swap with table RVA `0x3D7F90`, `GetBuffer` slot 9 at RVA `0x13B460`.
+The ENB immediate context's wrapper table and PS resources/OM targets/viewport
+slots were also identified. The log reached at least 25,800 world/Present calls
+without a reported Present failure in the captured slice. It did not submit
+NGX in that slice; reduced Skyrim SR remains NOT RUN. See
+`re/OWNED_SCENE_LIVE_CHAIN_1170.md`. The assistant did not start, control or
+close Skyrim.
+
+0.1.35 source candidate: exact ReShade factory and swap/GetBuffer method
+profiles validate SHA-256, file size, mapped image size, table RVA, slot pointer
+and method prologue. A process-lifetime, owner-checked factory slot-10 callback
+is installed before forwarding the existing ENB device-creation call. It
+preserves native creation and records the returned nested swap. If that swap
+matches the verified ReShade slot-9 profile, a second pass-through callback
+records GetBuffer caller module/RVA and returned texture extent. These hooks
+are diagnostic; the stable reduced surface route and renderer rectangle/UI
+adapters remain dormant. A WARP test validated the stable reduced texture
+alias versus native forwarding; a separate WARP test exercised the actual
+IDXGIFactory CreateSwapChain ABI and preserved result. The refactored NGX
+session returned a 1707x960 Quality plan for 2560x1440 and evaluated 30
+synthetic-guide frames on the RTX 4080 SUPER with zero fallback. This is a
+GPU replay, not Skyrim's scene. Release build and all 33 CTest groups passed.
+Skyrim 0.1.35
+runtime is NOT RUN; DLSS SR is still not on in Skyrim.

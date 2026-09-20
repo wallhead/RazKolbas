@@ -35,6 +35,11 @@ public:
     explicit SdrDlssPresenter(PreparedEvaluator evaluator={}):
         preparedEvaluator_(std::move(evaluator)) {}
     Result<bool> configureQuality(UpscaleQuality quality) noexcept;
+    // Query from the same NGX capability session that later creates/evaluates
+    // the feature. Intended for the early factory boundary before a reduced
+    // scene buffer is exposed to ENB/Skyrim.
+    Result<Extent> prepareReducedPlan(ID3D11Device* device,
+        ID3D11DeviceContext* context,Extent display);
     Result<bool> render(ID3D11Device* device,ID3D11DeviceContext* context,
         ID3D11Texture2D* backbuffer,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
         NgxJitter jitter);
@@ -78,6 +83,7 @@ private:
         ID3D11Texture2D* backbuffer,NgxJitter jitter,bool reduced);
     Result<bool> initialize(ID3D11Device* device,ID3D11DeviceContext* context,
         UINT width,UINT height,UINT displayWidth,UINT displayHeight,bool reduced);
+    Result<bool> beginSession(ID3D11Device* device,ID3D11DeviceContext* context,bool reduced);
     Result<bool> submitPreparedNgx(ID3D11DeviceContext* context,
         const PreparedSrInputs& prepared,NgxJitter jitter,bool reset);
     void retainUnsubmitted(ID3D11DeviceContext* context,PreparedSrInputs frame);
@@ -101,5 +107,6 @@ private:
     bool reduced_{};
     bool resetPending_{};
     UpscaleQuality quality_{UpscaleQuality::Quality};
+    std::optional<RenderSizePlan> preparedPlan_;
 };
 }

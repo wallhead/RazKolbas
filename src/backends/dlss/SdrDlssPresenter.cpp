@@ -3,6 +3,7 @@
 #include "rk/PatchDescriptor.hpp"
 #include "rk/SdrDisplayCopy.hpp"
 #include <nvsdk_ngx_helpers_d3d.h>
+#include <nvsdk_ngx_helpers.h>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -15,6 +16,16 @@ namespace fs=std::filesystem;
 using Microsoft::WRL::ComPtr;
 constexpr std::string_view runtimeHash="c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e";
 bool success(NVSDK_NGX_Result result) { return result==NVSDK_NGX_Result_Success; }
+std::optional<NVSDK_NGX_PerfQuality_Value> ngxQuality(UpscaleQuality quality) noexcept {
+    switch(quality) {
+    case UpscaleQuality::NativeAA:return NVSDK_NGX_PerfQuality_Value_DLAA;
+    case UpscaleQuality::Quality:return NVSDK_NGX_PerfQuality_Value_MaxQuality;
+    case UpscaleQuality::Balanced:return NVSDK_NGX_PerfQuality_Value_Balanced;
+    case UpscaleQuality::Performance:return NVSDK_NGX_PerfQuality_Value_MaxPerf;
+    case UpscaleQuality::UltraPerformance:return NVSDK_NGX_PerfQuality_Value_UltraPerformance;
+    }
+    return std::nullopt;
+}
 fs::path moduleDirectory() {
     HMODULE self{};
     if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
@@ -124,11 +135,13 @@ Result<bool> SdrDlssPresenter::configureQuality(UpscaleQuality quality) noexcept
     return true;
 }
 
-Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
-    ID3D11DeviceContext* context,UINT width,UINT height,
-    UINT displayWidth,UINT displayHeight,bool reduced) {
-    if(reduced&&quality_==UpscaleQuality::NativeAA)
-        return Error{ErrorCode::InvalidInput,"NativeAA cannot create a reduced DLSS feature"};
+Result<bool> SdrDlssPresenter::beginSession(ID3D11Device* device,
+    ID3D11DeviceContext* context,bool reduced) {
+    if(!device||!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::InvalidInput,"NVIDIA session needs a D3D11 device and immediate context"};
+    ComPtr<ID3D11Device> owner;context->GetDevice(&owner);
+    if(!owner||identity(owner.Get()).Get()!=identity(device).Get())
+        return Error{ErrorCode::Conflict,"NVIDIA session context device differs"};
     if(ngxStartAttempted_)
         return Error{ErrorCode::Conflict,"NVIDIA SR initialization already attempted; retire before retry"};
     ngxStartAttempted_=true;
@@ -167,24 +180,57 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     int available{};
     if(!success(parameters_->Get(NVSDK_NGX_Parameter_SuperSampling_Available,&available))||!available)
         return Error{ErrorCode::Unsupported,"NVIDIA DLSS unavailable for SDR session"};
+    return true;
+}
+Result<Extent> SdrDlssPresenter::prepareReducedPlan(ID3D11Device* device,
+    ID3D11DeviceContext* context,Extent display) {
+    if(!display.valid()||display.width>8192||display.height>8192||
+       quality_==UpscaleQuality::NativeAA||initialized_||preparedPlan_)
+        return Error{ErrorCode::InvalidInput,"Invalid reduced NGX plan request"};
+    if(const auto begun=beginSession(device,context,true);
+       const auto error=std::get_if<Error>(&begun))return *error;
+    const auto quality=ngxQuality(quality_);
+    if(!quality)return Error{ErrorCode::InvalidInput,"Unknown NVIDIA quality"};
+    UINT width{},height{},maximumWidth{},maximumHeight{},minimumWidth{},minimumHeight{};
+    float sharpness{};
+    if(!success(NGX_DLSS_GET_OPTIMAL_SETTINGS(parameters_,display.width,display.height,
+        *quality,&width,&height,&maximumWidth,&maximumHeight,
+        &minimumWidth,&minimumHeight,&sharpness)))
+        return Error{ErrorCode::Unavailable,"NVIDIA optimal render size query failed"};
+    if(!width||!height||width>display.width||height>display.height||
+       (width==display.width&&height==display.height)||
+       !minimumWidth||!minimumHeight||minimumWidth>width||minimumHeight>height||
+       width>maximumWidth||height>maximumHeight)
+        return Error{ErrorCode::Unsupported,"NVIDIA optimal render size is invalid"};
+    preparedPlan_=RenderSizePlan{display,{width,height},true};
+    return Extent{width,height};
+}
+Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
+    ID3D11DeviceContext* context,UINT width,UINT height,
+    UINT displayWidth,UINT displayHeight,bool reduced) {
+    if(reduced&&quality_==UpscaleQuality::NativeAA)
+        return Error{ErrorCode::InvalidInput,"NativeAA cannot create a reduced DLSS feature"};
+    if(preparedPlan_&&(!reduced||width!=preparedPlan_->render.width||
+       height!=preparedPlan_->render.height||
+       displayWidth!=preparedPlan_->display.width||
+       displayHeight!=preparedPlan_->display.height))
+        return Error{ErrorCode::Conflict,"NVIDIA feature extents differ from prepared render plan"};
+    if(!ngxStartAttempted_) {
+        if(const auto begun=beginSession(device,context,reduced);
+           const auto error=std::get_if<Error>(&begun))return *error;
+    } else if(!ngxInitSucceeded_||!parameters_||!device_||
+              identity(device_.Get()).Get()!=identity(device).Get())
+        return Error{ErrorCode::Conflict,"Prepared NVIDIA session device differs or is unavailable"};
+    auto isolated=D3D11StateScope::begin(context);
+    if(const auto error=std::get_if<Error>(&isolated))return *error;
+    auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
     NVSDK_NGX_DLSS_Create_Params create{};
     create.Feature.InWidth=width;create.Feature.InHeight=height;
     create.Feature.InTargetWidth=displayWidth;
     create.Feature.InTargetHeight=displayHeight;
-    if(reduced) {
-        switch(quality_) {
-        case UpscaleQuality::Quality:
-            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_MaxQuality;break;
-        case UpscaleQuality::Balanced:
-            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_Balanced;break;
-        case UpscaleQuality::Performance:
-            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_MaxPerf;break;
-        case UpscaleQuality::UltraPerformance:
-            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_UltraPerformance;break;
-        case UpscaleQuality::NativeAA:
-            return Error{ErrorCode::InvalidInput,"NativeAA cannot create a reduced DLSS feature"};
-        }
-    } else create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_DLAA;
+    const auto quality=ngxQuality(reduced?quality_:UpscaleQuality::NativeAA);
+    if(!quality)return Error{ErrorCode::InvalidInput,"Unknown NVIDIA quality"};
+    create.Feature.InPerfQualityValue=*quality;
     create.InFeatureCreateFlags=NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     if(!success(NGX_D3D11_CREATE_DLSS_EXT(context,&feature_,parameters_,&create))||!feature_)
@@ -531,6 +577,7 @@ Result<bool> SdrDlssPresenter::stop(ID3D11DeviceContext* context) {
     width_=height_=displayWidth_=displayHeight_=0;
     preparedGeneration_=lastPreparedFrameId_=0;
     reduced_=false;initialized_=false;ngxStartAttempted_=false;
+    preparedPlan_.reset();
     return true;
 }
 }

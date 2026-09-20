@@ -7,6 +7,9 @@
 #include "rk/FrameProbe.hpp"
 #include "rk/WorldDrawHook.hpp"
 #include "rk/DrsHook.hpp"
+#include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
+#include "rk/OwnedSwapBufferRoute.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -15,6 +18,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <intrin.h>
 #include <wrl/client.h>
 
 namespace rk {
@@ -31,6 +35,21 @@ struct ObserverLease {
 // SKSE can FreeLibrary during shutdown; reachable callback code must remain valid.
 std::atomic<ObserverLease*> lease{nullptr};
 std::atomic_flag factoryProvenanceLogged=ATOMIC_FLAG_INIT;
+struct FactoryTraceLease {
+    PointerPatch patch;
+    FactoryCreateFn next{};
+    IDXGIFactory* target{}; // identity only; do not retain the factory object
+    std::atomic<unsigned> calls{0};
+};
+std::atomic<FactoryTraceLease*> factoryTrace{nullptr};
+std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
+struct BufferTraceLease {
+    PointerPatch patch;
+    SwapGetBufferFn next{};
+    std::atomic<unsigned> calls{0};
+};
+std::atomic<BufferTraceLease*> bufferTrace{nullptr};
+std::atomic_flag bufferTraceAttempted=ATOMIC_FLAG_INIT;
 struct FileIdentity { std::string hash; std::size_t size; };
 FileIdentity identify(HMODULE module) {
     wchar_t name[32768];
@@ -102,6 +121,161 @@ std::vector<std::uint8_t> snapshotModule(HMODULE module,std::size_t size) {
         offset+=count;
     }
     return result;
+}
+HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
+    REFIID iid,void** output) noexcept {
+    auto* state=bufferTrace.load(std::memory_order_acquire);
+    if(!state||!state->next)return E_UNEXPECTED;
+    const auto caller=_ReturnAddress();
+    const auto result=state->next(swap,index,iid,output);
+    const auto sequence=state->calls.fetch_add(1,std::memory_order_relaxed)+1;
+    if(sequence<=64) {
+        try {
+            HMODULE owner=nullptr;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                reinterpret_cast<LPCWSTR>(caller),&owner);
+            struct ModuleReference {HMODULE value;~ModuleReference(){if(value)FreeLibrary(value);}} reference{owner};
+            wchar_t name[32768]{};
+            if(owner)GetModuleFileNameW(owner,name,32768);
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+            if(SUCCEEDED(result)&&output&&*output)
+                reinterpret_cast<IUnknown*>(*output)->QueryInterface(IID_PPV_ARGS(&texture));
+            D3D11_TEXTURE2D_DESC desc{};
+            if(texture)texture->GetDesc(&desc);
+            spdlog::info("Nested GetBuffer #{}: swap=0x{:x}; index={}; IID.Data1=0x{:08x}; callerModule={}; callerRVA=0x{:x}; HRESULT=0x{:08x}; texture={}x{}; pass-through",
+                sequence,reinterpret_cast<std::uintptr_t>(swap),index,
+                iid.Data1,
+                std::filesystem::path(name).filename().string(),
+                owner?reinterpret_cast<std::uintptr_t>(caller)-reinterpret_cast<std::uintptr_t>(owner):0,
+                static_cast<std::uint32_t>(result),desc.Width,desc.Height);
+        } catch(...) {
+            try {spdlog::warn("Nested GetBuffer trace #{} unavailable",sequence);} catch(...) {}
+        }
+    }
+    return result;
+}
+Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
+    if(!swap||bufferTraceAttempted.test(std::memory_order_acquire))return false;
+    auto** table=*reinterpret_cast<void***>(swap);
+    HMODULE owner=nullptr;
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(table),&owner))
+        return Error{ErrorCode::Unsupported,"Returned swap table has no loaded-module owner"};
+    struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
+    const auto& site=reshade673SwapGetBufferSite();
+    const auto id=identify(owner);
+    const auto base=reinterpret_cast<std::uintptr_t>(owner);
+    const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
+    if(tableAddress<base||tableAddress-base!=site.tableRva)
+        return Error{ErrorCode::Unsupported,"Returned swap is not the verified ReShade table"};
+    const auto mapped=snapshotModule(owner,site.imageSize);
+    const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+        static_cast<std::uint32_t>(tableAddress-base),site);
+    if(const auto error=std::get_if<Error>(&validated))return *error;
+    if(bufferTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
+    auto pending=std::make_unique<BufferTraceLease>();
+    pending->next=reinterpret_cast<SwapGetBufferFn>(base+site.methodRva);
+    HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
+    constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&swapGetBufferTrace),&pinnedSelf)||
+       !GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))
+        return Error{ErrorCode::Unavailable,"Cannot pin GetBuffer trace lifetimes"};
+    auto* published=pending.release();
+    bufferTrace.store(published,std::memory_order_release);
+    const auto applied=published->patch.apply(table+site.slot,
+        reinterpret_cast<void*>(published->next),reinterpret_cast<void*>(&swapGetBufferTrace));
+    if(const auto error=std::get_if<Error>(&applied))return *error;
+    spdlog::info("Installed {}: tableRVA=0x{:x}; slot={}; pass-through caller/texture trace",
+        site.id,site.tableRva,site.slot);
+    return true;
+}
+void factoryCreated(IDXGIFactory* factory,IUnknown* device,
+    const DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain* swap,HRESULT result,
+    void* context) noexcept {
+    auto* state=static_cast<FactoryTraceLease*>(context);
+    const auto sequence=state->calls.fetch_add(1,std::memory_order_relaxed)+1;
+    if(sequence>4)return;
+    try {
+        spdlog::info("Nested factory CreateSwapChain #{}: factory=0x{:x}; adapterParentMatch={}; device=0x{:x}; requested={}x{}; result=0x{:08x}; returnedSwap=0x{:x}; thread={}; pass-through",
+            sequence,reinterpret_cast<std::uintptr_t>(factory),
+            factory==state->target,
+            reinterpret_cast<std::uintptr_t>(device),
+            requested?requested->BufferDesc.Width:0,requested?requested->BufferDesc.Height:0,
+            static_cast<std::uint32_t>(result),reinterpret_cast<std::uintptr_t>(swap),
+            GetCurrentThreadId());
+        if(FAILED(result)||!swap)return;
+        auto** table=*reinterpret_cast<void***>(swap);
+        const auto method=std::atomic_ref<void*>(table[9]).load(std::memory_order_acquire);
+        HMODULE owner=nullptr,methodOwner=nullptr;
+        constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+        GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(table),&owner);
+        GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(method),&methodOwner);
+        struct ModuleRefs {HMODULE a,b;~ModuleRefs(){if(a)FreeLibrary(a);if(b)FreeLibrary(b);}} refs{owner,methodOwner};
+        const auto tableId=owner?identify(owner):FileIdentity{"unowned",0};
+        const auto methodId=methodOwner==owner?tableId:
+            methodOwner?identify(methodOwner):FileIdentity{"unowned",0};
+        DXGI_SWAP_CHAIN_DESC desc{};
+        const auto got=swap->GetDesc(&desc);
+        spdlog::info("Nested swap #{}: tableSHA256={}; tableSize={}; tableRVA=0x{:x}; GetBufferOwnerSHA256={}; methodRVA=0x{:x}; GetDesc=0x{:08x} {}x{}; read-only",
+            sequence,tableId.hash,tableId.size,
+            owner?reinterpret_cast<std::uintptr_t>(table)-reinterpret_cast<std::uintptr_t>(owner):0,
+            methodId.hash,methodOwner?reinterpret_cast<std::uintptr_t>(method)-
+                reinterpret_cast<std::uintptr_t>(methodOwner):0,
+            static_cast<std::uint32_t>(got),desc.BufferDesc.Width,desc.BufferDesc.Height);
+        const auto traced=installSwapGetBufferTrace(swap);
+        if(const auto error=std::get_if<Error>(&traced))
+            spdlog::warn("Nested GetBuffer trace not installed: {}",error->message);
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Nested factory trace unavailable: {}",error.what());} catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("Nested factory trace unavailable");} catch(...) {}
+    }
+}
+HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
+    DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain** swap) noexcept {
+    auto* state=factoryTrace.load(std::memory_order_acquire);
+    if(!state||!state->next)return E_UNEXPECTED;
+    return observeFactoryCreate(state->next,factory,device,requested,swap,
+        &factoryCreated,state);
+}
+Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
+    if(factoryTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
+    if(!adapter)return Error{ErrorCode::Unavailable,"No adapter for early factory trace"};
+    Microsoft::WRL::ComPtr<IDXGIFactory> factory;
+    if(FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))||!factory)
+        return Error{ErrorCode::Unavailable,"Adapter parent factory unavailable"};
+    auto** table=*reinterpret_cast<void***>(factory.Get());
+    HMODULE owner=nullptr;
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(table),&owner))
+        return Error{ErrorCode::Unsupported,"Factory table has no loaded-module owner"};
+    struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
+    const auto& site=reshade673FactoryCreateSite();
+    const auto id=identify(owner);
+    const auto base=reinterpret_cast<std::uintptr_t>(owner);
+    const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
+    if(tableAddress<base||tableAddress-base!=site.tableRva)
+        return Error{ErrorCode::Unsupported,"Factory table is not the verified ReShade site"};
+    const auto mapped=snapshotModule(owner,site.imageSize);
+    const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+        static_cast<std::uint32_t>(tableAddress-base),site);
+    if(const auto error=std::get_if<Error>(&validated))return *error;
+    auto pending=std::make_unique<FactoryTraceLease>();
+    pending->next=reinterpret_cast<FactoryCreateFn>(base+site.methodRva);
+    pending->target=factory.Get();
+    HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
+    constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&factoryCreateProxy),&pinnedSelf)||
+       !GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))
+        return Error{ErrorCode::Unavailable,"Cannot pin factory callback lifetimes"};
+    auto* published=pending.release();
+    factoryTrace.store(published,std::memory_order_release);
+    const auto applied=published->patch.apply(table+site.slot,
+        reinterpret_cast<void*>(published->next),reinterpret_cast<void*>(&factoryCreateProxy));
+    if(const auto error=std::get_if<Error>(&applied))return *error;
+    spdlog::info("Installed {}: tableRVA=0x{:x}; slot={}; downstreamRVA=0x{:x}; pass-through nested creation trace",
+        site.id,site.tableRva,site.slot,site.methodRva);
+    return true;
 }
 struct SwapLease {
     std::string_view profileId;
@@ -266,6 +440,15 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
     auto* state=lease.load(std::memory_order_acquire);
     if (!state || !state->original) return E_UNEXPECTED;
     logFactoryBeforeCreation(adapter);
+    try {
+        const auto traced=installFactoryCreationTrace(adapter);
+        if(const auto error=std::get_if<Error>(&traced))
+            spdlog::warn("Early factory trace not installed: {}",error->message);
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Early factory trace unavailable: {}",error.what());} catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("Early factory trace unavailable");} catch(...) {}
+    }
     const DeviceCreationArgs args{adapter,driverType,software,flags,levels,levelCount,sdkVersion,
         swapDesc,swapChain,device,featureLevel,context};
     return observeDeviceCreation(state->original,args,&observed);
