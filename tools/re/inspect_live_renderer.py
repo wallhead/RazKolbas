@@ -25,7 +25,7 @@ try:
  if read(a.base,2)!=b'MZ':raise ValueError('Base is not PE')
  a.output.mkdir(parents=True,exist_ok=True)
  report={'process_path':name.value,'sha256':sha,'base':hex(a.base),'pid':a.pid,'regions':{}}
- for label,rva,size in [('renderer_lock',0xe44550,32),('renderer_unlock',0xe44570,32),('renderer_begin',0xe44590,480),('renderer_end',0xe44770,512),('jitter_update',0xe58a10,0x840),('camera_state_build',0xe58b80,0x240),('pre_ui_candidate',0xfa4f00,0x1000),('ui_entry_claim_candidate',0xfa3dc0,0x400),('post_world_call',0xfc32e0,0x1000),('renderer',0x32887c0,0x2840),('renderer_data_ptr',0x3286a08,8)]:
+ for label,rva,size in [('renderer_lock',0xe44550,32),('renderer_unlock',0xe44570,32),('renderer_begin',0xe44590,480),('renderer_end',0xe44770,512),('jitter_pair_first',0xe01ac0,0x100),('camera_source_pair_first',0xe01c90,0x240),('jitter_pair_second',0xe58a10,0x840),('camera_source_pair_second',0xe58b80,0x240),('pre_ui_candidate',0xfa4f00,0x1000),('ui_entry_claim_candidate',0xfa3dc0,0x400),('post_world_call',0xfc32e0,0x1000),('renderer',0x32887c0,0x2840),('renderer_data_ptr',0x3286a08,8)]:
   data=read(a.base+rva,size);(a.output/(label+'.bin')).write_bytes(data);report['regions'][label]={'rva':hex(rva),'size':size}
  (a.output/'manifest.json').write_text(json.dumps(report,indent=2))
  print(json.dumps(report))

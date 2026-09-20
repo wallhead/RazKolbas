@@ -12,10 +12,12 @@ import struct
 
 EXPECTED = 'c4093c569a3c83b26587f4b9ea4c55de9ae6e73b84a2af9fb3fbd30e2fe0d452'
 TARGETS = {
-    77245: {'reference': 'BSGraphics_Renderer_Begin_UpdateJitter reference hook sites', 'addends': [0xe5, 0x133]},
+    77245: {'reference': 'Renderer Begin: first-branch CALL +0xe2; alternate branch +0xe5 and +0x133 require separate byte validation', 'addends': [0xe2, 0xe5, 0x133]},
     77247: {'reference': 'Live world-draw CALL target observed on 2026-09-20; engine routine semantics still unverified', 'addends': []},
-    77518: {'reference': 'updateJitterHook relocation operand; patched site requires further tracing', 'addends': []},
-    77520: {'reference': 'buildCameraStateDataHook relocation operand; patched site requires further tracing', 'addends': []},
+    75709: {'reference': 'first version-pair member: update hook +0xe; camera hook +0x1d5; sites require byte validation', 'addends': [0xe, 0x1d5]},
+    75711: {'reference': 'first version-pair member: 10-byte camera source +0x1d5', 'addends': [0x1d5]},
+    77518: {'reference': 'second version-pair member: update hook +0x11; camera hook +0x1d5; sites require byte validation', 'addends': [0x11, 0x1d5]},
+    77520: {'reference': 'second version-pair member: 10-byte camera source +0x1d5', 'addends': [0x1d5]},
     82084: {'reference': 'Main_DrawWorld_MainDraw call-site hook; pre-UI semantics unverified', 'addends': [0x17a]},
 }
 

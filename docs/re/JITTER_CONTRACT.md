@@ -1,6 +1,7 @@
 # Reference jitter and motion-scale contract
 
-Status: **STATIC_OBSERVED**, 2026-09-20. The supplied files were read only:
+Status: **STATIC_OBSERVED** for the reference and **LIVE_READ_ONLY** for game
+bytes, 2026-09-20. The supplied files were read only:
 `SkyrimUpscalerAIOBuild16-Hotfix1/SKSE/Plugins/SkyrimUpscaler.dll`
 SHA-256 `94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb`
 and `UpscalerBasePlugin/PDPerfPlugin.dll` SHA-256
@@ -10,17 +11,42 @@ to their named DLL unless explicitly called game RVAs.
 
 ## Reference data flow
 
-The Skyrim reference installer at `0x157b60` resolves game AE ID 77245 and
-selects renderer Begin jitter CALL sites at addends `0xe5` or `0x133` on its
-version branches. For the user's 1.6.1170 Address Library these map to game
-RVAs `0xe44675` and `0xe446c3`; only their unpatched startup bytes have
-previously been observed live. The hook helper at `0x159270` points to
-reference callback `0x157190`. A separate helper at `0x1592c0` points to
-`0x157ac0` and the installer derives a site from game AE ID 77518 at addend
-`0x7a1` or `0x7a4`. It also derives game AE ID 77520 +`0x1d5`. The exact
-decoded game bytes, existing owners and ABIs at those latter sites have not
-been captured. These reference patch addresses are not RazKolbas patch
-descriptors.
+The Skyrim reference installer at `0x157b60` resolves a version-dependent
+pair that includes game AE ID 77245 for Renderer Begin. One branch passes
+base `+0xe2` to its five-byte CALL helper `0x159270`; the alternative branch
+passes `+0xe5`. Another branch passes `+0x133` or `+0xe5`. The reference
+installer uses helper `0x1592c0` for a separate `GetClientRect`-area hook;
+it does **not** use that helper for the camera hook. Earlier notes incorrectly
+assigned this helper and addends `+0x7a1/+0x7a4` to jitter. Those addends
+belong to the adjacent screen-size hook, not camera jitter.
+
+For the later `updateJitterHook` and `buildCameraStateDataHook` descriptors,
+the reference selects the second of two relocation IDs when its internal
+version byte is 1, and the first when it is 2. The first pair is 75709/75711;
+the second is 77518/77520. It copies six original bytes from the selected
+first ID `+0x11` (version 1) or `+0xe` (version 2), and ten from the selected
+second ID `+0x1d5`. It then supplies patch descriptors for the selected
+first ID at that `+0x11/+0xe` site and again at `+0x1d5`. The latter is a
+distinct patch target; the selected second ID `+0x1d5` is a **source** of
+camera bytes, not the target. The descriptor writer's full patch semantics
+and the game's matching version branch remain unverified.
+
+The user-started exact game `D:/TESV_EX/SkyrimSE.exe` (SHA-256
+`c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9`,
+PID 28592, image base `0x7ff6f59a0000`) was read without modifying it. The
+hash-verified 1.6.1170 Address Library maps ID 77245 to `0xe44590`, 75709
+to `0xe01ac0`, 75711 to `0xe01c90`, 77518 to `0xe58a10`, and 77520 to
+`0xe58b80`. At `0xe44672` (77245 `+0xe2`) the live bytes
+`e8 99 43 01 00` are an aligned CALL to `0xe58a10`. At `0xe446c3` (77245
+`+0x133`) the bytes begin `48 8b 01`, an aligned MOV rather than a CALL.
+At `0xe58a21` (77518 `+0x11`) the first six bytes are
+`80 7a 18 00 74 68`, an aligned TAA-gated compare/branch followed by the
+game's eight-phase jitter counter. At `0xe58d55` (77520 `+0x1d5`) the ten
+source bytes `80 79 18 00 0f 84 c0 00 00 00` are aligned. But the other
+candidate target, `0xe58be5` (77518 `+0x1d5`), lands **inside** the live
+three-byte `mov r9,r14` at `0xe58be3`. This blocks transplanting the
+reference's patch sites into this executable. No camera/jitter patch was
+installed; exact runtime ownership and ABIs remain to be established.
 
 At `0x157190`, the reference callback first calls its retained original
 target, then `PDPerfPlugin!GetJitterPhaseCount` and `GetJitterOffset`. It
@@ -74,14 +100,15 @@ jitter supplied to NGX must correspond to the **same frame's** camera
 projection, with an explicit sign conversion; independently advancing an
 NGX-only Halton counter would break that pairing.
 
-Before enabling a RazKolbas jitter/TAA replacement: verify the decoded
-1.6.1170 patch-site bytes and forwarding ABIs under the existing exact-hash
-and ownership policy; define one frame counter and a safe reset on scene or
+Before enabling a RazKolbas jitter/TAA replacement: identify compatible,
+aligned hook sites and verify their forwarding ABIs under the existing
+exact-hash and ownership policy; define one frame counter and a safe reset on scene or
 render-size transitions; bind camera and NGX offsets to that frame; validate
 motion direction, units and jitter inclusion; and retain native rendering if
 the transaction cannot fully activate. Reduced-resolution SR also needs a
 separate, validated world-render extent from the native UI/display extent.
-No such hook or new game test is claimed here.
+No such hook or visual game test is claimed here. The live inspection was
+read-only while the user-started game was at its main menu.
 
 Reproduce the read-only disassembly with `tools/re/trace_sr.py --package
 SkyrimUpscalerAIOBuild16-Hotfix1 --host skyrim --output
