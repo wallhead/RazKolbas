@@ -50,6 +50,24 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     generation_=route_.plan().generation;compatibilityFault_=false;
     return S_OK;
 }
+HRESULT NativeUiRedirector::replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||!nativeRtv||generation_!=route_.plan().generation||
+       route_.phase()!=ScenePhase::Processing||GetCurrentThreadId()!=owner)
+        return E_UNEXPECTED;
+    auto nativeColor=resource(nativeRtv);
+    if(!extent(nativeColor.Get(),route_.plan().display)||
+       sameObject(scene_.Get(),nativeColor.Get()))return E_INVALIDARG;
+    D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};nativeRtv->GetDesc(&viewDesc);
+    if(viewDesc.ViewDimension!=D3D11_RTV_DIMENSION_TEXTURE2D||
+       viewDesc.Texture2D.MipSlice!=0)return E_INVALIDARG;
+    ComPtr<ID3D11Device> device,nativeOwner;
+    context_->GetDevice(device.GetAddressOf());
+    nativeColor->GetDevice(nativeOwner.GetAddressOf());
+    if(!sameObject(device.Get(),nativeOwner.Get()))return E_INVALIDARG;
+    nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
+    return S_OK;
+}
 HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||

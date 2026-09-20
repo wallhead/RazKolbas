@@ -21,6 +21,8 @@ public:
     HRESULT configure(ID3D11DeviceContext* context,DWORD renderThread,
         UiContextNext next,ID3D11Texture2D* reducedScene,
         ID3D11RenderTargetView* nativeRtv) noexcept;
+    // Select the native flip buffer for this frame before UI publication.
+    HRESULT replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept;
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;

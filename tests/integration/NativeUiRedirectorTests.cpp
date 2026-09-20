@@ -90,6 +90,18 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     bound.Reset();context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
     boundResource=viewResource(bound.Get());
     REQUIRE(identity(boundResource.Get()).Get()==identity(scene.texture()).Get());
+    REQUIRE(route.startProcessing(2,1));
+    native->GetDesc(&desc);
+    ComPtr<ID3D11Texture2D> nextNative;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&nextNative)));
+    ComPtr<ID3D11RenderTargetView> nextNativeView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(nextNative.Get(),nullptr,&nextNativeView)));
+    REQUIRE(SUCCEEDED(redirect.replaceNativeTarget(nextNativeView.Get())));
+    REQUIRE(SUCCEEDED(redirect.commitPublishedUi(2)));
+    bound.Reset();boundResource.Reset();
+    context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
+    boundResource=viewResource(bound.Get());
+    REQUIRE(identity(boundResource.Get()).Get()==identity(nextNative.Get()).Get());
     context->OMSetRenderTargets(0,nullptr,nullptr);
     bound.Reset();boundResource.Reset();
     route.suspend();redirect.releaseAfterRetirement();

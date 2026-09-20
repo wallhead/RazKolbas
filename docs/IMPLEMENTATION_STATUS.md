@@ -502,3 +502,10 @@ Release build and all 33 CTest groups passed. These components are **not
 activated or installed in the game**. Native UI context hooking, per-buffer
 destination selection, coherent scene/guide production and same-frame NGX
 publication remain required before enabling the alias.
+
+The dormant native-UI adapter can now replace its verified display-sized RTV
+for each flip-buffer frame during Processing. A WARP two-frame test published
+UI to a different native target on frame two while the world returned to the
+reduced scene before that publication. This is source-only preparation for
+the observed three-buffer flip chain; it has not been hooked into ENB's live
+context or run in Skyrim.
