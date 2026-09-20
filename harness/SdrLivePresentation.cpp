@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <array>
@@ -23,8 +25,145 @@ constexpr UINT width=2560,height=1440;
     ExitProcess(10);
 }
 void checked(HRESULT result,const char* step) { if(FAILED(result))stop(step); }
+std::vector<std::uint8_t> rawCapture(const fs::path& file,
+    std::string_view manifest,UINT renderWidth,UINT renderHeight,DXGI_FORMAT format) {
+    const auto expected=static_cast<std::uint64_t>(renderWidth)*renderHeight*4;
+    if(fs::file_size(file)!=expected)stop("CAPTURE_SIZE");
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(expected));
+    std::ifstream stream(file,std::ios::binary);
+    if(!stream.read(reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size())))stop("CAPTURE_READ");
+    const auto record=file.filename().string()+" width="+std::to_string(renderWidth)+
+        " height="+std::to_string(renderHeight)+" format="+
+        std::to_string(static_cast<unsigned>(format))+" rowBytes="+
+        std::to_string(renderWidth*4)+" bytes="+std::to_string(expected)+
+        " sha256="+rk::sha256(bytes);
+    if(manifest.find(record)==std::string_view::npos)stop("CAPTURE_MANIFEST_MISMATCH");
+    return bytes;
+}
+int replayCapturedInputs(const fs::path& capture,bool publish) {
+    constexpr UINT renderWidth=1707,renderHeight=960;
+    std::ifstream manifestStream(capture/L"manifest.txt");
+    if(!manifestStream)stop("CAPTURE_MANIFEST_MISSING");
+    const std::string manifest{std::istreambuf_iterator<char>{manifestStream},
+        std::istreambuf_iterator<char>{}};
+    if(manifest.find("complete=true")==std::string::npos)
+        stop("CAPTURE_MANIFEST_INCOMPLETE");
+    const auto colorBytes=rawCapture(capture/L"color.raw",manifest,
+        renderWidth,renderHeight,DXGI_FORMAT_R8G8B8A8_UNORM);
+    const auto motionBytes=rawCapture(capture/L"motion.raw",manifest,
+        renderWidth,renderHeight,DXGI_FORMAT_R16G16_FLOAT);
+    const auto depthBytes=rawCapture(capture/L"depth-r32.raw",manifest,
+        renderWidth,renderHeight,DXGI_FORMAT_R32_FLOAT);
+    ComPtr<IDXGIFactory6> factory;
+    checked(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)),"FACTORY");
+    ComPtr<IDXGIAdapter1> adapter;
+    for(UINT i=0;;++i) {
+        ComPtr<IDXGIAdapter1> candidate;
+        const auto result=factory->EnumAdapterByGpuPreference(i,
+            DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&candidate));
+        if(result==DXGI_ERROR_NOT_FOUND)break;
+        checked(result,"ADAPTER_ENUM");
+        DXGI_ADAPTER_DESC1 desc{};checked(candidate->GetDesc1(&desc),"ADAPTER_DESC");
+        if(desc.VendorId==0x10de&&!(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            adapter=candidate;break;
+        }
+    }
+    if(!adapter)stop("NVIDIA_MISSING");
+    ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
+    checked(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context),"DEVICE");
+    rk::SdrDlssPresenter presenter;
+    const auto planned=presenter.prepareReducedPlan(device.Get(),context.Get(),{width,height});
+    if(const auto error=std::get_if<rk::Error>(&planned))stop(error->message);
+    if(const auto extent=std::get<rk::Extent>(planned);
+       extent.width!=renderWidth||extent.height!=renderHeight)
+        stop("CAPTURE_PLAN_EXTENT");
+    const auto created=presenter.createReducedFeature(device.Get(),context.Get());
+    if(const auto error=std::get_if<rk::Error>(&created))stop(error->message);
+    if(!std::get<bool>(created))stop("CAPTURE_FEATURE_NOT_CREATED");
+    const auto makeTexture=[&](DXGI_FORMAT format,UINT bind,
+        UINT textureWidth,UINT textureHeight,const std::vector<std::uint8_t>* bytes,
+        const char* step) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width=textureWidth;desc.Height=textureHeight;
+        desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
+        desc.Format=format;desc.BindFlags=bind;
+        const D3D11_SUBRESOURCE_DATA data{
+            bytes?bytes->data():nullptr,textureWidth*4,0};
+        ComPtr<ID3D11Texture2D> texture;
+        checked(device->CreateTexture2D(&desc,bytes?&data:nullptr,&texture),step);
+        return texture;
+    };
+    auto color=makeTexture(DXGI_FORMAT_R8G8B8A8_UNORM,
+        D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE,
+        renderWidth,renderHeight,&colorBytes,"CAPTURE_COLOR");
+    auto motion=makeTexture(DXGI_FORMAT_R16G16_FLOAT,
+        D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE,
+        renderWidth,renderHeight,&motionBytes,"CAPTURE_MOTION");
+    auto depth=makeTexture(DXGI_FORMAT_R32_FLOAT,
+        D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_UNORDERED_ACCESS,
+        renderWidth,renderHeight,&depthBytes,"CAPTURE_DEPTH");
+    auto output=makeTexture(DXGI_FORMAT_R8G8B8A8_UNORM,
+        D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_UNORDERED_ACCESS,
+        width,height,nullptr,"CAPTURE_OUTPUT");
+    auto display=makeTexture(DXGI_FORMAT_R8G8B8A8_UNORM,
+        D3D11_BIND_RENDER_TARGET,width,height,nullptr,"CAPTURE_DISPLAY");
+    ComPtr<ID3D11RenderTargetView> displayView;
+    checked(device->CreateRenderTargetView(display.Get(),nullptr,&displayView),
+        "CAPTURE_DISPLAY_RTV");
+    context->OMSetRenderTargets(1,displayView.GetAddressOf(),nullptr);
+    rk::PreparedSrInputs prepared{std::move(color),std::move(motion),
+        std::move(depth),output,renderWidth,renderHeight,width,height,
+        {0,0,renderWidth,renderHeight}};
+    const auto evaluated=presenter.evaluatePrepared(device.Get(),context.Get(),
+        std::move(prepared),{1,1,true},{-0.25f,-1.0f/6.0f});
+    if(const auto error=std::get_if<rk::Error>(&evaluated))stop(error->message);
+    const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
+    if(!token)stop("CAPTURE_EVALUATION_SKIPPED");
+    std::cout<<"CAPTURE_EVALUATION_RETURNED=1"<<std::endl;
+    const std::array<ID3D11Texture2D*,1> evaluatedTarget{output.Get()};
+    const auto evaluatedImage=rk::readbackCandidates(context.Get(),evaluatedTarget);
+    if(const auto error=std::get_if<rk::Error>(&evaluatedImage))stop(error->message);
+    const auto outputHash=rk::sha256(
+        std::get<std::vector<rk::ProbeImage>>(evaluatedImage)[0].pixels);
+    std::string displayHash;
+    if(publish) {
+        const auto published=presenter.publishEvaluated(context.Get(),*token,display.Get());
+        if(const auto error=std::get_if<rk::Error>(&published))stop(error->message);
+        if(!std::get<bool>(published))stop("CAPTURE_PUBLICATION_SKIPPED");
+        const std::array<ID3D11Texture2D*,1> target{display.Get()};
+        const auto image=rk::readbackCandidates(context.Get(),target);
+        if(const auto error=std::get_if<rk::Error>(&image))stop(error->message);
+        displayHash=rk::sha256(std::get<std::vector<rk::ProbeImage>>(image)[0].pixels);
+        if(displayHash!=outputHash)stop("CAPTURE_PUBLICATION_DIFFERS");
+    }
+    context->Flush();
+    const auto deadline=GetTickCount64()+20000;
+    for(;;) {
+        const auto stopped=presenter.stop(context.Get());
+        if(const auto error=std::get_if<rk::Error>(&stopped))stop(error->message);
+        if(std::get<bool>(stopped))break;
+        if(GetTickCount64()>deadline)stop("CAPTURE_RETIRE_TIMEOUT");
+        Sleep(1);
+    }
+    std::cout<<"CAPTURE_MODE="<<(publish?"EVAL_AND_PUBLISH":"EVAL_ONLY")
+        <<"\nCAPTURE_RENDER="<<renderWidth<<"x"<<renderHeight
+        <<"\nCAPTURE_DISPLAY="<<width<<"x"<<height
+        <<"\nCAPTURE_NGX_FRAMES="<<presenter.submittedFrames()
+        <<"\nCAPTURE_OUTPUT_SHA256="<<outputHash
+        <<"\nCAPTURE_DISPLAY_SHA256="<<displayHash
+        <<"\nCAPTURE_REPLAY=PASS"<<std::endl;
+    return 0;
+}
 }
 int wmain(int argc,wchar_t** argv) {
+    if(argc==3&&(std::wstring_view(argv[1])==L"--captured-eval-only"||
+       std::wstring_view(argv[1])==L"--captured-eval-publish")) {
+        try { return replayCapturedInputs(fs::absolute(argv[2]),
+            std::wstring_view(argv[1])==L"--captured-eval-publish"); }
+        catch(const std::exception& error) { stop(error.what()); }
+    }
     const bool injectFailure=argc==3&&std::wstring_view(argv[1])==L"--sr-fallback";
     const bool preparedFailure=argc==3&&
         std::wstring_view(argv[1])==L"--prepared-r32-fallback";
@@ -38,7 +177,7 @@ int wmain(int argc,wchar_t** argv) {
     const bool sr=injectFailure||usePreparedR32||ngxPlan||
         (argc==3&&std::wstring_view(argv[1])==L"--sr");
     if(argc!=2&&!sr) {
-        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback|--ngx-plan|--ngx-plan-owned-r32] <stage-pair directory>\n";
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback|--ngx-plan|--ngx-plan-owned-r32|--captured-eval-only|--captured-eval-publish] <capture directory>\n";
         return 2;
     }
     try {

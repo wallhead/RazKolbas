@@ -906,3 +906,50 @@ The user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim. Actual-game capture result is **NOT RUN** until the user starts
 the game and loads a save; inspect the one-shot capture path and manifest,
 then close the game and replay the exact input bundle outside Skyrim.
+
+## 0.1.43 capture-only crash, rollback and exact-input replay
+
+The user started the 0.1.43 capture-only build, loaded a save and reported a
+crash. The one-shot bundle at
+`SKSE/RazKolbasCaptures/owned-sr-inputs-7484-6271-219164875` completed at
+frame 6271, after two world-like depth samples (`distinct=97`, `nonFar=96`).
+The last RazKolbas log entry says the bundle was saved with **no NGX
+evaluation**. All three 1707x960, four-byte-per-pixel raw files have the
+manifest's byte count and SHA-256. CrashLogger then recorded a null read in
+`nvwgf2umx.dll+0x1B59E0` on a driver worker thread, a different driver RVA
+from the 0.1.39/0.1.41/0.1.42 `+0x1B61A4` crashes. The stack has no
+RazKolbas frame and does not identify the D3D11 command that faulted. This
+run demonstrates that NGX evaluation is **not necessary** for a live-driver
+crash in the current owned path; it does not prove the new input preparation
+or readback caused it. Skyrim had exited when checked. The assistant did not
+start it. The verified 0.1.35 DLL and manifest were restored from the
+pre-0.1.43 backup; all four installed payloads match its manifest, including
+DLL SHA-256 `320d3493f21e352587d29d0e053baf822aba2642e478d2a6849953c78e9e1274`.
+The user's INI and signed NVIDIA runtime were unchanged.
+
+The captured R32 depth has 1,638,720 finite values in `[0.07157,1]`, and
+the two-channel half-float motion texture has 3,277,440 finite values in
+approximately `[-0.000587,0.003514]`. Only 318 of 1,638,720 captured colour
+pixels are nonblack. Since this was the first admitted world-like frame after
+a loading transition, a black fade is possible; this single frame cannot
+establish whether later scene colour would be visible. Earlier first-frame
+probes found the reduced scene filled after the world callback, and the
+0.1.39 pre-Present path did produce nonblack native output.
+
+`RazKolbasSdrLivePresentation` now accepts `--captured-eval-only` and
+`--captured-eval-publish` for this exact 1707x960-to-2560x1440 bundle. It
+checks the complete manifest, dimensions, formats, sizes and hashes, uploads
+the captured prepared RGBA8/RG16F/R32F textures on a separate NVIDIA D3D11
+device, pre-creates the planned feature, evaluates one frame, forces GPU
+completion by readback, optionally publishes to an active native-size RTV,
+and retires the feature. Both modes passed with one NGX submission; the
+evaluation and published output hashes matched
+`3c26a7f8ad6f3c35e270700e7ef53dd4eb3b9690529977e2a08e88f71c354e42`.
+This shows that the captured bytes are accepted in an isolated session, not
+that the live Skyrim/ENB/ReShade context or frame lifetime is safe. The
+Release build and all 35 CTest groups passed. Captured bytes, game logs,
+binaries and crash logs remain outside Git. The next engineering step is to
+isolate the capture-only live operations (preparation, readback and ensuing
+spatial publication) and examine command/resource lifetime at the driver
+boundary before deploying another game diagnostic. No new game launch is
+needed to review the present evidence.
