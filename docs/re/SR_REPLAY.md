@@ -454,3 +454,23 @@ references are released in the callback. No renderer pointer is dereferenced
 at Present, no game texture is written, and the DLAA output remains offscreen.
 This can establish resource aliasing at the two observed boundaries; it cannot
 by itself prove every intervening UI/ENB pass or visual quality.
+
+The user-run 0.1.16 launch at 10:51:27 on 2026-09-20 loaded the new plugin
+at 10:51:36. All 24 depth-gated attempts sampled one distinct far-plane
+value; the last was at 10:54:13 and the probe logged exhaustion at 10:54:17.
+Consequently it never attempted NGX and never armed the dependent target map.
+Present/worldForwarded counts remained equal past #28,200 with `failed=0`;
+Skyrim was responsive when observed. The trace does not establish whether a
+loaded world was visible during those attempts, and the single-value sample
+alone does not establish a depth-format defect. The 0.1.16 **target map is NOT
+RUN**, not a negative resource-alias result.
+
+## 0.1.17 target map decoupled from depth readiness
+
+The first target-identity snapshot now runs once after at least 600 forwarded
+world calls whenever the verified renderer lock and creation anchors match,
+regardless of the depth gate. It logs `post-world-initial` and schedules the
+following eligible `pre-ENB-Present` snapshot. A later accepted world-like
+depth frame can still produce a second target map and offscreen DLAA result.
+The initial map may be a menu frame, so its alias evidence must be labeled
+accordingly. It remains read-only and makes no display write.

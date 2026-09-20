@@ -31,6 +31,7 @@ struct WorldState {
     unsigned copyAttempts{};
     Microsoft::WRL::ComPtr<ID3D11Query> copyEvent;
     std::optional<PreparedSrInputs> copiedFrame;
+    std::atomic<bool> initialTargetMapDone{false};
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
 #ifdef RK_WITH_NGX
@@ -263,6 +264,26 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     if(const auto status=state->copyStatus.load(std::memory_order_acquire);
        status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
         copyWorldInputsOnce(state,readWorldNumbers(world,state->expectedRenderer));
+    if(sequence>=600&&!state->initialTargetMapDone.load(std::memory_order_acquire)) {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+           numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+           numbers.context==state->createdContext.load(std::memory_order_relaxed)&&
+           numbers.swap==state->createdSwap.load(std::memory_order_relaxed)&&
+           numbers.colour&&!state->initialTargetMapDone.exchange(true,std::memory_order_acq_rel)) {
+            try {
+                const auto colourIdentity=identity(reinterpret_cast<IUnknown*>(numbers.colour));
+                logTargetBoundary("post-world-initial",reinterpret_cast<ID3D11DeviceContext*>(numbers.context),
+                    reinterpret_cast<IDXGISwapChain*>(numbers.swap),colourIdentity);
+                state->worldColourIdentity.store(colourIdentity,std::memory_order_relaxed);
+                state->presentTargetProbeDue.store(true,std::memory_order_release);
+            } catch(const std::exception& error) {
+                try { spdlog::warn("Initial target map unavailable: {}",error.what()); } catch(...) {}
+            } catch(...) {
+                try { spdlog::warn("Initial target map unavailable"); } catch(...) {}
+            }
+        }
+    }
 #ifdef RK_WITH_NGX
     if(state->dlssProbe.pending()&&!state->probeFailed) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
