@@ -81,7 +81,19 @@ post-world SDR capture, synthetic guides and the measured eight-sample jitter
 cycle for 30 DLAA submissions; its changed output SHA-256 was
 `863ef90ba5686d8d464baed17a2a5985c50f90653c9b174f644c6f035cadf322`,
 and teardown completed. This does not validate game motion vectors or
-in-game 0.1.22 behavior, which are not yet tested.
+in-game 0.1.22 behavior.
+
+The user-started 0.1.22 game run loaded the installed DLL (SHA-256
+`ee337006f7ea10988f6a26222299046737eac46ad659bf8f1042ae7efa05975b`)
+and signed NVIDIA runtime. Continuous DLAA began at world frame 8417 with
+logged NGX jitter `(-0.25,-0.16666669)`, matching the decoded game-camera
+sample for that phase. At inspection, the run had reached 5,400 submitted
+DLAA frames with skipped=0; no jitter-read rejection, busy-slot message or
+continuous-path disable appeared. World and Present counters matched through
+at least 13,800 with Present failures zero. The user reported that the moving
+scene looked good. That is a positive visual report, not a measured comparison
+of final ReShade pixels or proof of motion-vector convention. Skyrim TAA
+remains active, and reduced-resolution SR, FG and NR are still unimplemented.
 Skyrim TAA remains active; motion-vector jitter convention and visual quality
 remain open.
 
