@@ -34,4 +34,15 @@ bool drsStateMayRetryAfterNativeLock(const RenderSizePlan& plan,
         state.displayHeight==plan.display.height&&
         state.lock==1&&state.currentWidth==1.0f&&state.currentHeight==1.0f;
 }
+bool drsNativeRecoveryReady(const RenderSizePlan& plan,DrsStateSnapshot state,
+    Extent colour,Extent motion,Extent depth) noexcept {
+    const auto native=[&](Extent extent) {
+        return extent.width==plan.display.width&&extent.height==plan.display.height;
+    };
+    return plan.valid()&&plan.reduced&&
+        state.displayWidth==plan.display.width&&
+        state.displayHeight==plan.display.height&&
+        state.lock==0&&state.currentWidth==1.0f&&state.currentHeight==1.0f&&
+        native(colour)&&native(motion)&&native(depth);
+}
 }

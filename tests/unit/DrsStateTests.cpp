@@ -52,3 +52,16 @@ TEST_CASE("An initial native-ratio lock can clear before a later world frame", "
     REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock({{2560,1440},{2560,1440},false},
         {2560,1440,1.0f,1.0f,1}));
 }
+
+TEST_CASE("A rejected ratio probe resumes native output only after state and guides recover", "[drs_state]") {
+    const rk::RenderSizePlan plan{{2560,1440},{1706,960},true};
+    const rk::DrsStateSnapshot native{2560,1440,1.0f,1.0f,0};
+    const rk::Extent full{2560,1440},small{1706,960};
+    REQUIRE(rk::drsNativeRecoveryReady(plan,native,full,full,full));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,{2560,1440,0.666f,0.667f,0},full,full,full));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,{2560,1440,1,1,3},full,full,full));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,native,small,full,full));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,native,full,small,full));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,native,full,full,small));
+    REQUIRE_FALSE(rk::drsNativeRecoveryReady(plan,{1920,1080,1,1,0},full,full,full));
+}

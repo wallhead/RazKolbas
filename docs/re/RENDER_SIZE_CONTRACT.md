@@ -353,3 +353,37 @@ changed ratios, extents or other lock values still reject. The 0.1.25 DLL
 was not modified during the running game. This retry is build-tested only;
 in-game DRS activation, guide extents, scissor/UI behavior and DLSS SR remain
 NOT RUN for the revised build.
+
+## 0.1.26 user-run result: ratio write did not reduce scene targets
+
+The user started exact-hash SkyrimSE.exe PID 6196 with the guarded retry.
+Renderer Begin saw a native-sized lock on 5,078 callbacks, then one callback
+accepted lock 0 and set a 1706x960 ratio at 16:30:43. The next callback saw
+lock 3 with ratio (0.6664063,0.6666667), so the ownership guard rejected
+further writes. Later read-only game state reported the reduced ratio in the
+**previous** fields, current ratios (1,1), and lock 0. Measured kMAIN colour,
+motion, depth and display textures remained 2560x1440 at repeated sampled
+world frames. No reduced scene or DLSS SR submission occurred. The process
+continued past 19,200 world/Present calls without reported Present failure;
+there was no new crash log, and the user exited the game.
+
+The earlier `drsProbeHasRun` gate intentionally withheld continuous DLAA
+after the tentative ratio write. That proved too conservative once the game
+state and all scene inputs returned to native dimensions. Source now has an
+exact native-recovery policy: after the rejected probe, read current game
+ratios/lock and actual colour, motion, depth and backbuffer descriptors under
+the verified renderer lock; resume DLAA only when current ratios are (1,1),
+lock 0 and all three scene inputs match the display. This path is
+build-tested only. The installed opt-in DRS probe should be disabled while
+the genuine reduced-buffer integration is developed.
+
+Static `SkyrimSE.exe` bytes at `0xe587f0` are encrypted, while the live
+process exposed decoded DRS code. `tools/re/capture_decoded_text.py` is a
+hash-gated, read-only capture of the full executable `.text` sections for
+offline xrefs to render-target allocation and DRS lock writers. It requires
+a user-started game; output stays ignored under `artifacts/local/`. The
+reference SkyrimUpscaler proxy creates and returns a render-sized SDR buffer
+at swap-chain `GetBuffer`, which explains why adapting only the DRS ratio was
+insufficient here. That proxy behavior is an RE reference, not a RazKolbas
+implementation or a safe instruction to replace the existing ENB/ReShade
+swap-chain owner without an owned presentation transaction.

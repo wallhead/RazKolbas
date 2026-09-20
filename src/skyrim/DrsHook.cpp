@@ -20,7 +20,8 @@ struct ProbeState {
     float scale{};
     std::atomic<std::uint32_t> displayWidth{0},displayHeight{0};
     std::atomic<std::uint32_t> nativeLockWaits{0};
-    std::atomic<bool> ownsLock{false},active{false},everActivated{false},rejected{false};
+    std::atomic<bool> ownsLock{false},active{false},everActivated{false},rejected{false},
+        nativeRecovered{false};
 };
 std::atomic<ProbeState*> probe{nullptr};
 bool read(std::uintptr_t address,void* destination,std::size_t size) noexcept {
@@ -180,7 +181,34 @@ bool drsProbeActive() noexcept {
 }
 bool drsProbeHasRun() noexcept {
     const auto* state=probe.load(std::memory_order_acquire);
-    return state&&state->everActivated.load(std::memory_order_acquire);
+    return state&&state->everActivated.load(std::memory_order_acquire)&&
+        !state->nativeRecovered.load(std::memory_order_acquire);
+}
+bool drsProbeConfirmNativeRecovery(Extent colour,Extent motion,Extent depth,
+    Extent display) noexcept {
+    auto* state=probe.load(std::memory_order_acquire);
+    if(!state||!state->rejected.load(std::memory_order_acquire)||
+       !state->everActivated.load(std::memory_order_acquire)||
+       state->active.load(std::memory_order_acquire)||
+       state->nativeRecovered.load(std::memory_order_acquire))return false;
+    const Extent expected{state->displayWidth.load(std::memory_order_acquire),
+        state->displayHeight.load(std::memory_order_relaxed)};
+    if(display.width!=expected.width||display.height!=expected.height)return false;
+    std::array<std::uint8_t,0x120> bytes{};
+    if(!read(state->expectedState,bytes.data(),bytes.size()))return false;
+    DrsStateSnapshot snapshot{};
+    std::memcpy(&snapshot.displayWidth,bytes.data()+0x24,sizeof(snapshot.displayWidth));
+    std::memcpy(&snapshot.displayHeight,bytes.data()+0x28,sizeof(snapshot.displayHeight));
+    std::memcpy(&snapshot.currentWidth,bytes.data()+0x104,sizeof(snapshot.currentWidth));
+    std::memcpy(&snapshot.currentHeight,bytes.data()+0x108,sizeof(snapshot.currentHeight));
+    std::memcpy(&snapshot.lock,bytes.data()+0x118,sizeof(snapshot.lock));
+    const Extent requested{static_cast<std::uint32_t>(std::floor(expected.width*state->scale)),
+        static_cast<std::uint32_t>(std::floor(expected.height*state->scale))};
+    if(!drsNativeRecoveryReady({expected,requested,true},snapshot,colour,motion,depth))
+        return false;
+    state->nativeRecovered.store(true,std::memory_order_release);
+    try { spdlog::info("Experimental DRS probe reverted to native ratio and full-size scene inputs; continuous DLAA may resume"); } catch(...) {}
+    return true;
 }
 std::optional<Extent> drsProbeRenderExtent() noexcept {
     const auto* state=probe.load(std::memory_order_acquire);

@@ -26,4 +26,8 @@ std::optional<DrsTransition> planDrsRelease(const RenderSizePlan& plan,
 // this never grants permission to overwrite that locked state.
 bool drsStateMayRetryAfterNativeLock(const RenderSizePlan& plan,
     DrsStateSnapshot state) noexcept;
+// A failed ratio-only probe can safely resume the native DLAA path only once
+// both engine ratios and every required world input are native sized again.
+bool drsNativeRecoveryReady(const RenderSizePlan& plan,DrsStateSnapshot state,
+    Extent colour,Extent motion,Extent depth) noexcept;
 }

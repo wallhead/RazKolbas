@@ -16,5 +16,9 @@ Result<bool> installDrsProbe(HMODULE game,std::string_view verifiedGameHash,
 void bindDrsDisplay(std::uint32_t width,std::uint32_t height) noexcept;
 bool drsProbeActive() noexcept;
 bool drsProbeHasRun() noexcept;
+// After a rejected probe, restores the native DLAA gate only when the game
+// state and all measured scene inputs are back at display resolution.
+bool drsProbeConfirmNativeRecovery(Extent colour,Extent motion,Extent depth,
+    Extent display) noexcept;
 std::optional<Extent> drsProbeRenderExtent() noexcept;
 }

@@ -385,6 +385,27 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             }
         }
     }
+    if(drsProbeHasRun()&&!drsProbeActive()) {
+        const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+        if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+           numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+           numbers.context==state->createdContext.load(std::memory_order_relaxed)&&
+           numbers.swap==state->createdSwap.load(std::memory_order_relaxed)&&
+           numbers.colour&&numbers.motion&&numbers.depth) {
+            D3D11_TEXTURE2D_DESC colour{},motion{},depth{},display{};
+            reinterpret_cast<ID3D11Texture2D*>(numbers.colour)->GetDesc(&colour);
+            reinterpret_cast<ID3D11Texture2D*>(numbers.motion)->GetDesc(&motion);
+            reinterpret_cast<ID3D11Texture2D*>(numbers.depth)->GetDesc(&depth);
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+            if(SUCCEEDED(reinterpret_cast<IDXGISwapChain*>(numbers.swap)->GetBuffer(0,
+                IID_PPV_ARGS(&backbuffer)))&&backbuffer) {
+                backbuffer->GetDesc(&display);
+                drsProbeConfirmNativeRecovery({colour.Width,colour.Height},
+                    {motion.Width,motion.Height},{depth.Width,depth.Height},
+                    {display.Width,display.Height});
+            }
+        }
+    }
 #ifdef RK_WITH_NGX
     if(state->dlssProbe.pending()&&!state->probeFailed) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
