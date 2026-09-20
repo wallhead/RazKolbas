@@ -404,7 +404,8 @@ producer is not yet connected to Skyrim**: factory interception before nested
 swap creation, a correct swap-chain alias/proxy, actual game guide identities,
 NGX sizing, context-hook installation, resize retirement and game UI behavior
 remain open. The new rectangle patch and UI adapter are not installed in the
-game. The user's MO2 mod remains 0.1.32 and DLSS SR is **not on** in Skyrim.
+game. Before the deployment below, the user's MO2 mod was 0.1.32. DLSS SR is
+**not on** in Skyrim.
 The 0.1.34 candidate adds a read-only pre-creation adapter-parent factory
 provenance log to the existing verified device-creation chain. It records the
 actual live factory vtable and CreateSwapChain method owner without changing
@@ -414,3 +415,18 @@ by the assistant. The next runtime action is one user-started normal Skyrim
 session to collect this log; the next implementation action is the controlled
 factory/GetBuffer proxy route with a WARP fixture where an inner consumer
 caches GetBuffer before the outer creation returns.
+
+0.1.34 MO2 diagnostic deployment: source commit `b9df212`. Release build and
+all 30 CTest groups passed. Package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.34-owned-scene-prep-b9df212.zip`
+SHA-256 `f449b48636b0823f67226e57acc5f84a3fbc05947297eac8cd960530a2359567`
+contains exactly four manifest-listed payloads plus its manifest, independently
+ZIP hash-verified. SkyrimSE.exe was absent. The previous installed four files
+matched the old manifest before the full mod folder was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.34-b9df212`. Only the new DLL and
+manifest were replaced. All four installed files match the new manifest;
+installed DLL SHA-256 is
+`1c531a0a4f470552715933fd537e5ae19cc486f2c20940a6026078fa413d69ab`.
+The user's INI and signed NVIDIA SR runtime retain their prior hashes. No game
+run of 0.1.34 is claimed. It logs the factory identity for the owned route but
+does not activate that route or change the renderer client rectangle.
