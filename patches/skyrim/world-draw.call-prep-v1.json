@@ -1,6 +1,6 @@
 {
   "id": "skyrim1170.world-draw.sr-v1",
-  "status": "EXPERIMENTAL_PASS_THROUGH_PENDING_GAME_RUN",
+  "status": "EXPERIMENTAL_PASS_THROUGH_MENU_VALIDATED",
   "shipping_enabled": false,
   "purpose": "Prepare a pass-through observation point after Skyrim's original world-draw call",
   "target": {
@@ -20,10 +20,10 @@
   },
   "original_live_bytes": "e8d1f7e9ff",
   "replacement": "encodeCallSiteReplacement to a prepared near relay ending in FF 25 00000000 plus the pinned RazKolbas worldDrawProxy address; original-first forwarding with no SR work",
-  "abi": "0.1.10 decoded live caller sets EDX=0 and RCX=&game object at RVA 0x32887c0 before the CALL. Original target saves RCX in RBP and zero-extends DL to R15D. Caller overwrites RAX immediately. Reference callback also forwards RCX and EDX. Pointer type and complete effects remain unverified.",
+  "abi": "0.1.10 decoded live caller sets EDX=0 and RCX=&renderer object at RVA 0x32887c0 (Address Library ID 411393) before the CALL. Original target saves RCX in RBP and zero-extends DL to R15D. Caller overwrites RAX immediately. Reference callback also forwards RCX and EDX. Target's complete effects remain unverified.",
   "activation": "0.1.11 experimental opt-in at SKSEPlugin_Load before renderer/world execution; exact executable hash, decoded caller/target ABI, original CALL, relay bytes, and executable page ownership rechecked before the bounded write",
   "lifetime": "Callback DLL pinned and relay plus forwarding state retained for process lifetime; no hot unpatch, no relay free while CALL is installed",
   "recovery": "On validation/write preparation failure no game instruction is written. A post-write protection/flush/readback failure terminates rather than resuming half-patched code. Disable this patch ID or SafeMode for the next game launch; restore only when exact installed bytes and execution quiescence are proven",
   "evidence": ["docs/re/SR_REPLAY.md", "tests/unit/CallSiteTests.cpp", "tests/unit/WorldDrawTests.cpp"],
-  "game_runtime": "0.1.10 user-run read-only caller/target snapshots PASS; relay or world-draw forwarding NOT RUN"
+  "game_runtime": "0.1.11 user-run menu pass-through PASS: installed at 09:36:16, first 1200 worldForwarded counts matched Present 1:1, more than 31800 Presents with failed=0; loaded-world and DLSS processing NOT RUN"
 }

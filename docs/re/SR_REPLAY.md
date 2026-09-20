@@ -259,3 +259,29 @@ pass-through outcome remains **NOT RUN** until the user launches the newly
 installed build. The callback DLL, relay and forwarding state intentionally
 stay alive for the process lifetime; disabling this experimental patch takes
 effect on the next launch.
+
+The user-run 0.1.11 launch at 09:36:08 on 2026-09-20 verified the decoded
+ABI and installed the exact CALL relay at 09:36:16. Original renderer
+creation through ENB succeeded at 09:36:33. Present observations #1, #2,
+#3, #600 and #1200 each reported an equal `worldForwarded` count; the log
+continued past 31,800 successful Presents with zero reported failures.
+This is a **PASS for the game pass-through path at the main menu**. It does
+not establish loaded-world resource timing, input guide semantics, or DLSS
+output. The assistant did not control the game. A separate bounded read-only
+process snapshot confirmed the renderer object is at the same RVA
+`0x32887c0` passed as RCX at the CALL; that RVA independently maps to
+Address Library ID 411393. The snapshot is ignored under
+`artifacts/local/world-pass-through-live-2026-09-20-0938/`.
+
+## 0.1.12 sparse world-boundary resource telemetry
+
+The pass-through now takes bounded numeric snapshots of the verified renderer
+object immediately before and after the original target on the first three
+calls and every 600th call. It records the incoming flags, callback thread,
+renderer pointer match, lock owner/recursion, creation device/context/swap
+pointers, and the candidate colour/motion/depth pointers. It never follows
+those candidate pointers, acquires the renderer lock, calls a D3D method,
+copies GPU data, or changes rendering. This is needed to determine whether
+the original target leaves the candidate resources and lock in a state where
+owned SR preparation can safely run. Debug and Release passed all 15 CTest
+groups; in-game telemetry is **NOT RUN** until the next user launch.

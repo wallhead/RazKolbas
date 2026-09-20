@@ -180,7 +180,7 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.11 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.12 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"trigger=CtrlShiftF10 request="<<trigger.requests()<<" captureTickMs="<<now<<" attempt="<<attempts<<"\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);

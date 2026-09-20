@@ -1,5 +1,6 @@
 #include "rk/WorldDrawHook.hpp"
 #include "rk/CallSite.hpp"
+#include "rk/FrameProbe.hpp"
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
 #include "rk/WorldDraw.hpp"
@@ -14,13 +15,52 @@ namespace {
 struct WorldState {
     WorldDrawForwarder forwarder;
     std::atomic<std::uint64_t> forwarded{0};
+    std::uintptr_t expectedRenderer{};
 };
 std::atomic<WorldState*> active{nullptr};
+struct WorldNumbers {
+    std::uintptr_t device{},context{},swap{},colour{},motion{},depth{},lockOwner{};
+    std::int32_t lockRecursion{};
+    bool valid{};
+};
+WorldNumbers readWorldNumbers(void* world,std::uintptr_t expected) noexcept {
+    WorldNumbers result{};
+    if(!world||reinterpret_cast<std::uintptr_t>(world)!=expected)return result;
+    std::array<std::uint8_t,renderer1170Size> bytes{};
+    SIZE_T copied{};
+    if(!ReadProcessMemory(GetCurrentProcess(),world,bytes.data(),bytes.size(),&copied)||copied!=bytes.size())
+        return result;
+    const auto pointer=[&](std::size_t offset) {
+        std::uintptr_t value{};std::memcpy(&value,bytes.data()+offset,sizeof(value));return value;
+    };
+    result.device=pointer(0x48);result.context=pointer(0x50);result.swap=pointer(0x70);
+    result.colour=pointer(0xa58+0x30);result.motion=pointer(0xa58+7*0x30);
+    result.depth=pointer(0x2018);result.lockOwner=pointer(0x27f0+16);
+    std::memcpy(&result.lockRecursion,bytes.data()+0x27f0+12,sizeof(result.lockRecursion));
+    result.valid=true;
+    return result;
+}
 void afterOriginal(void*,std::uint32_t) noexcept {
     active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
 }
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
-    active.load(std::memory_order_acquire)->forwarder.dispatch(world,flags);
+    auto* state=active.load(std::memory_order_acquire);
+    const auto sequence=state->forwarded.load(std::memory_order_relaxed)+1;
+    const bool sample=sequence<=3||sequence%600==0;
+    const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
+    state->forwarder.dispatch(world,flags);
+    if(!sample)return;
+    const auto after=readWorldNumbers(world,state->expectedRenderer);
+    try {
+        spdlog::info("World stage #{}: thread={}; flags=0x{:x}; rendererMatch={}; beforeRead={}; afterRead={}; "
+            "beforeLock={}/{}; afterLock={}/{}; device=0x{:x}; context=0x{:x}; swap=0x{:x}; "
+            "colour=0x{:x}->0x{:x}; motion=0x{:x}->0x{:x}; depth=0x{:x}->0x{:x}; read-only",
+            sequence,GetCurrentThreadId(),flags,
+            reinterpret_cast<std::uintptr_t>(world)==state->expectedRenderer,before.valid,after.valid,
+            before.lockOwner,before.lockRecursion,after.lockOwner,after.lockRecursion,
+            after.device,after.context,after.swap,
+            before.colour,after.colour,before.motion,after.motion,before.depth,after.depth);
+    } catch (...) {}
 }
 bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied{};
@@ -60,6 +100,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(const auto error=std::get_if<Error>(&planned))return *error;
     const auto& plan=std::get<CallSitePlan>(planned);
     auto pending=std::make_unique<WorldState>();
+    pending->expectedRenderer=base+renderer1170Rva;
     const auto configured=pending->forwarder.configure(
         reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);
     if(const auto error=std::get_if<Error>(&configured))return *error;
