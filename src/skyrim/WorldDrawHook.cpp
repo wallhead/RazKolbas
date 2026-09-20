@@ -55,6 +55,7 @@ struct WorldState {
     std::optional<PreparedSrInputs> copiedFrame;
     std::atomic<bool> initialTargetMapDone{false};
     std::atomic<bool> presentTargetProbeDue{false};
+    std::atomic<unsigned> ownedPrePresentProbes{0};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
     std::atomic<bool> drsSuppressed{false};
     std::mutex drsTupleMutex;
@@ -361,12 +362,12 @@ void afterOriginal(void*,std::uint32_t) noexcept {
     active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
 }
 #ifdef RK_WITH_NGX
-void probeOwnedFirstFrame(ID3D11DeviceContext* context,ID3D11Texture2D* scene,
-    ID3D11Texture2D* display) {
+void probeOwnedPixels(const char* stage,ID3D11DeviceContext* context,
+    ID3D11Texture2D* scene,ID3D11Texture2D* display) {
     const std::array<ID3D11Texture2D*,2> textures{scene,display};
     const auto readback=readbackCandidates(context,textures,24*1024*1024);
     if(const auto error=std::get_if<Error>(&readback)) {
-        spdlog::warn("Owned first-frame pixel probe unavailable: {}",error->message);
+        spdlog::warn("Owned {} pixel probe unavailable: {}",stage,error->message);
         return;
     }
     const auto& images=std::get<std::vector<ProbeImage>>(readback);
@@ -384,8 +385,9 @@ void probeOwnedFirstFrame(ID3D11DeviceContext* context,ID3D11Texture2D* scene,
             bool known=false;for(unsigned j=0;j<distinct;++j)known|=colours[j]==colour;
             if(!known)colours[distinct++]=colour;
         }
-        spdlog::info("Owned first-frame {} pixels: extent={}x{} nonBlack={}/256 distinct={}/256",
-            i==0?"reduced scene":"native after SR/fallback",
+        spdlog::info("Owned {} {} pixels: extent={}x{} nonBlack={}/256 distinct={}/256",
+            stage,
+            i==0?"reduced scene":"native buffer",
             image.descriptor.Width,image.descriptor.Height,nonBlack,distinct);
     }
 }
@@ -429,6 +431,17 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         if(FAILED(ui->bindNativeForProcessing(sequence)))
             throw std::runtime_error("Owned native output could not be bound for processing");
         auto* display=std::get<NativeFlipTarget>(native).texture.Get();
+        if(sequence==1&&state->jitterCamera) {
+            std::array<std::uint8_t,0x2c> camera{};
+            if(read(state->jitterCamera,camera.data(),camera.size())) {
+                std::uint32_t width{},height{};
+                std::memcpy(&width,camera.data()+0x24,sizeof(width));
+                std::memcpy(&height,camera.data()+0x28,sizeof(height));
+                spdlog::info("Owned game camera extent: {}x{}; planned render={}x{} display={}x{}",
+                    width,height,domain->plan().render.width,domain->plan().render.height,
+                    domain->plan().display.width,domain->plan().display.height);
+            }
+        }
         const auto presented=presentSdrSrFrame(context,scene,display,
             [&]()->Result<bool> {
                 const std::array<ID3D11Texture2D*,3> sources{
@@ -439,17 +452,14 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 if(const auto error=std::get_if<Error>(&prepared))
                     return Error{ErrorCode::Unavailable,error->message};
                 state->srSourceVerified.store(true,std::memory_order_release);
-                const auto displayJitter=readNgxJitter(state->jitterCamera,
-                    domain->plan().display.width,domain->plan().display.height);
-                if(const auto error=std::get_if<Error>(&displayJitter))
+                const auto renderJitter=readNgxJitter(state->jitterCamera,
+                    domain->plan().render.width,domain->plan().render.height);
+                if(const auto error=std::get_if<Error>(&renderJitter))
                     return Error{ErrorCode::Unavailable,error->message};
-                const auto jitter=std::get<NgxJitter>(displayJitter);
-                const NgxJitter renderJitter{
-                    jitter.x*domain->plan().render.width/domain->plan().display.width,
-                    jitter.y*domain->plan().render.height/domain->plan().display.height};
                 auto evaluated=state->srPresenter.evaluatePrepared(device,context,
                     std::move(std::get<PreparedSrInputs>(prepared)),
-                    SrFrameMetadata{sequence,domain->plan().generation,false},renderJitter);
+                    SrFrameMetadata{sequence,domain->plan().generation,false},
+                    std::get<NgxJitter>(renderJitter));
                 if(const auto error=std::get_if<Error>(&evaluated)) {
                     if(error->code==ErrorCode::DeviceRemoved)return *error;
                     return Error{ErrorCode::Unavailable,error->message};
@@ -473,7 +483,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->ownedFallbacks.emplace_back(std::move(outcome));
             ++state->srSkipped;
         }
-        if(sequence==1)probeOwnedFirstFrame(context,scene,display);
+        if(sequence==1) {
+            probeOwnedPixels("post-world",context,scene,display);
+            state->ownedPrePresentProbes.store(2,std::memory_order_release);
+        }
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native UI publication or context compatibility failed");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
@@ -1043,11 +1056,34 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
 void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
-       reinterpret_cast<std::uintptr_t>(swap)||
-       !state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel))return;
+       reinterpret_cast<std::uintptr_t>(swap))return;
+    const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
+    const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
+    const bool ownedProbe=ownedRemaining!=0;
+    if(!usualProbe&&!ownedProbe)return;
+    if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
         if(!context)return;
+        if(ownedProbe) {
+#ifdef RK_WITH_NGX
+            const auto numbers=readWorldNumbers(reinterpret_cast<void*>(state->expectedRenderer),
+                state->expectedRenderer);
+            if(!numbers.valid||numbers.lockOwner!=GetCurrentThreadId())
+                spdlog::warn("Owned pre-Present pixel probe skipped: renderer lock is not held");
+            else if(auto* scene=activeOwnedSceneTexture()) {
+                auto* domain=activeOwnedSceneDomain();
+                const auto native=domain?acquireNativeFlipTarget(swap,
+                    reinterpret_cast<ID3D11Device*>(numbers.device),domain->plan().display):
+                    Result<NativeFlipTarget>{Error{ErrorCode::Unavailable,"Owned route absent"}};
+                if(const auto error=std::get_if<Error>(&native))
+                    spdlog::warn("Owned pre-Present pixel probe unavailable: {}",error->message);
+                else probeOwnedPixels(ownedRemaining==2?"pre-Present frame 1":"pre-Present frame 2",
+                    reinterpret_cast<ID3D11DeviceContext*>(context),scene,
+                    std::get<NativeFlipTarget>(native).texture.Get());
+            }
+#endif
+        }
         logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
             state->worldColourIdentity.load(std::memory_order_relaxed));
         std::scoped_lock lock(state->stagePairMutex);

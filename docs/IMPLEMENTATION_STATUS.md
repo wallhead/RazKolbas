@@ -634,3 +634,36 @@ not start Skyrim. The diagnostic build is **NOT RUN** in Skyrim; next action
 is one user-started menu run, read the new bounded log records, close
 the game and restore 0.1.35 if the screen remains black. No save load is
 needed for that diagnostic.
+
+## 0.1.37 live diagnosis and rollback (September 20)
+
+The user started Skyrim with the 0.1.37 diagnostic build. The first owned
+post-world frame again selected spatial fallback, with zero DLSS submissions.
+The precise provider failure was `Game camera and DLAA target extents differ`:
+the owned path validated camera jitter against the **display** extent even
+though the renderer rectangle had been reduced. A 16x16 stratified sample
+of both the 1707x960 owned scene and 2560x1440 native output had zero
+non-black RGB pixels and one distinct RGBA value at this callback. This
+measures the sampled post-world surfaces only, not all pixels or the later
+pre-Present image. The next bind after this callback was the owned scene in
+RTV slot zero with **two render targets and a 1707x960 depth target**;
+it occurred while the route was still in NativeUi phase, after one world
+callback and before Present. The UI redirector correctly treated this
+layout as unknown and suspended the route on frame two. This is evidence
+that the candidate's publication boundary is too early or its phase
+assumption is wrong; it does not yet identify the final colour-production
+boundary. Present remained successful. After collecting the evidence, the
+assistant closed the user-started game and verified exit, then restored the
+0.1.35 MO2 DLL and manifest from the verified backup. All four installed
+payload hashes again match the 0.1.35 manifest. The assistant did not start
+Skyrim.
+
+The next source candidate validates owned camera jitter against the render
+extent and uses the resulting render-pixel offsets directly. It also records
+the first camera extent and samples the owned scene/native buffer before
+the first two Presents, after the callback, to locate when image pixels
+appear. The pre-Present probe requires the renderer lock and is bounded to
+two frames. It does not write captures or change pixels. Release build and
+35 CTest groups pass; actual DLSS evaluation and visible output are
+**NOT RUN** for this source candidate. No timing or UI remapping fix is
+claimed until the additional boundary evidence is observed.
