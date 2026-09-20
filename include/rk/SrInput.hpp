@@ -79,4 +79,9 @@ Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* conte
 Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,SrSourceRegion region,
     UINT outputWidth,UINT outputHeight);
+// The scene is already a genuinely reduced owned texture. Motion and depth
+// may retain display-sized allocations with valid data in the top-left render
+// rectangle, or both may share the reduced extent.
+Result<PreparedSrInputs> prepareSdrSrInputsFromOwnedScene(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
 }

@@ -295,3 +295,65 @@ TEST_CASE("Reduced SR crop preserves a nonzero source origin", "[sr_input]") {
         REQUIRE(std::abs(actual-static_cast<float>(packed&0xffffffU)/16777215.0f)<0.000001f);
     }
 }
+
+TEST_CASE("Reduced owned SDR scene accepts native-sized motion and depth guides", "[sr_input]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    constexpr UINT renderWidth=4,renderHeight=3,displayWidth=8,displayHeight=6;
+    const std::array formats{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R24G8_TYPELESS};
+    std::array<ComPtr<ID3D11Texture2D>,3> sources;
+    std::array<std::vector<std::uint8_t>,3> pixels;
+    for(std::size_t i=0;i<sources.size();++i) {
+        const UINT width=i?displayWidth:renderWidth;
+        const UINT height=i?displayHeight:renderHeight;
+        pixels[i].resize(width*height*4);
+        for(UINT y=0;y<height;++y)for(UINT x=0;x<width;++x) {
+            const auto value=static_cast<std::uint32_t>(i*0x12345+y*101+x*7);
+            std::memcpy(pixels[i].data()+(y*width+x)*4,&value,4);
+        }
+        D3D11_TEXTURE2D_DESC d{};d.Width=width;d.Height=height;
+        d.MipLevels=d.ArraySize=d.SampleDesc.Count=1;d.Format=formats[i];
+        d.BindFlags=i==2?D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE:
+            D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+        const D3D11_SUBRESOURCE_DATA initial{pixels[i].data(),width*4,0};
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&d,&initial,&sources[i])));
+    }
+    const std::array<ID3D11Texture2D*,3> raw{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    auto prepared=rk::prepareSdrSrInputsFromOwnedScene(context.Get(),raw,
+        displayWidth,displayHeight);
+    REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(prepared));
+    auto& frame=std::get<rk::PreparedSrInputs>(prepared);
+    REQUIRE(frame.width()==renderWidth);
+    REQUIRE(frame.height()==renderHeight);
+    REQUIRE(frame.outputWidth()==displayWidth);
+    REQUIRE(frame.outputHeight()==displayHeight);
+    const std::array<ID3D11Texture2D*,3> copied{
+        frame.color(),frame.motion(),frame.depth()};
+    const auto captured=rk::readbackCandidates(context.Get(),copied);
+    REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(captured));
+    const auto& images=std::get<std::vector<rk::ProbeImage>>(captured);
+    for(UINT y=0;y<renderHeight;++y)for(UINT x=0;x<renderWidth;++x) {
+        for(std::size_t i=0;i<2;++i) {
+            const UINT width=i?displayWidth:renderWidth;
+            REQUIRE(std::memcmp(images[i].pixels.data()+(y*renderWidth+x)*4,
+                pixels[i].data()+(y*width+x)*4,4)==0);
+        }
+        std::uint32_t packed{};float actual{};
+        std::memcpy(&packed,pixels[2].data()+(y*displayWidth+x)*4,4);
+        std::memcpy(&actual,images[2].pixels.data()+(y*renderWidth+x)*4,4);
+        REQUIRE(std::abs(actual-static_cast<float>(packed&0xffffffU)/16777215.0f)<0.000001f);
+    }
+    D3D11_TEXTURE2D_DESC bad{};
+    sources[1]->GetDesc(&bad);bad.Width=renderWidth;
+    sources[1].Reset();
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&bad,nullptr,&sources[1])));
+    const std::array<ID3D11Texture2D*,3> mismatched{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::prepareSdrSrInputsFromOwnedScene(context.Get(),mismatched,
+            displayWidth,displayHeight)));
+}

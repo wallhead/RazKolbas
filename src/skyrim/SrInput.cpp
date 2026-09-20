@@ -72,7 +72,8 @@ ComPtr<ID3D11ComputeShader> cachedDepthCropShader(ID3D11Device* device) {
 }
 Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,DXGI_FORMAT colorFormat,
-    UINT outputWidth,UINT outputHeight,SrSourceRegion region={}) {
+    UINT outputWidth,UINT outputHeight,SrSourceRegion region={},
+    bool ownedScene=false) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
         return Error{ErrorCode::InvalidInput,"SR preparation requires an immediate context and three textures"};
     ComPtr<ID3D11Device> device;
@@ -97,7 +98,8 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
            (i||colorFormat!=DXGI_FORMAT_R8G8B8A8_UNORM)&&
            !(d.BindFlags&D3D11_BIND_SHADER_RESOURCE))
             return Error{ErrorCode::Unsupported,"SR source format or texture geometry differs"};
-        if(i&&(d.Width!=descriptions[0].Width||d.Height!=descriptions[0].Height))
+        if(i&&!ownedScene&&
+           (d.Width!=descriptions[0].Width||d.Height!=descriptions[0].Height))
             return Error{ErrorCode::Conflict,"SR source dimensions differ"};
     }
     if(!outputWidth)outputWidth=descriptions[0].Width;
@@ -114,6 +116,21 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     const UINT renderWidth=cropped?region.width:descriptions[0].Width;
     const UINT renderHeight=cropped?region.height:descriptions[0].Height;
     if(!cropped)region={0,0,renderWidth,renderHeight};
+    if(ownedScene) {
+        if(!cropped||region.left||region.top||
+           descriptions[0].Width!=renderWidth||
+           descriptions[0].Height!=renderHeight||
+           (renderWidth==outputWidth&&renderHeight==outputHeight))
+            return Error{ErrorCode::Conflict,"Owned SDR scene must be the exact reduced rectangle"};
+        const auto guideExtent=[&](const D3D11_TEXTURE2D_DESC& d) {
+            return (d.Width==renderWidth&&d.Height==renderHeight)||
+                (d.Width==outputWidth&&d.Height==outputHeight);
+        };
+        if(!guideExtent(descriptions[1])||!guideExtent(descriptions[2])||
+           descriptions[1].Width!=descriptions[2].Width||
+           descriptions[1].Height!=descriptions[2].Height)
+            return Error{ErrorCode::Conflict,"Owned SDR motion/depth guides have inconsistent extents"};
+    }
     if(outputWidth<renderWidth||outputHeight<renderHeight||
        outputWidth>8192||outputHeight>8192)
         return Error{ErrorCode::InvalidInput,"SR display extent must cover render extent"};
@@ -222,5 +239,14 @@ Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* conte
         return Error{ErrorCode::InvalidInput,"SR source or display region is zero"};
     return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,
         outputWidth,outputHeight,region);
+}
+Result<PreparedSrInputs> prepareSdrSrInputsFromOwnedScene(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight) {
+    if(sources.size()!=3||!sources[0]||!outputWidth||!outputHeight)
+        return Error{ErrorCode::InvalidInput,"Owned SDR scene or display extent is unavailable"};
+    D3D11_TEXTURE2D_DESC scene{};
+    sources[0]->GetDesc(&scene);
+    return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,
+        outputWidth,outputHeight,{0,0,scene.Width,scene.Height},true);
 }
 }

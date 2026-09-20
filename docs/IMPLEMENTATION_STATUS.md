@@ -509,3 +509,13 @@ UI to a different native target on frame two while the world returned to the
 reduced scene before that publication. This is source-only preparation for
 the observed three-buffer flip chain; it has not been hooked into ENB's live
 context or run in Skyrim.
+
+After the 0.1.35 trace, the owned SDR input preparer now accepts a truly
+render-sized colour texture with motion and depth guides that are both either
+render-sized or display-sized. It copies only the valid top-left render region
+and rejects inconsistent guide extents. A WARP readback test verified colour,
+motion and normalized depth pixels for reduced colour plus native-sized
+guides; the Release build and all 33 CTest groups passed. This fixes an input
+contract that would otherwise reject the planned reduced alias. It is
+source-only: the installed MO2 build remains 0.1.35, the alias is not armed,
+and Skyrim DLSS SR remains **NOT RUN**.
