@@ -29,6 +29,12 @@ bool OwnedSceneDomain::enterUi(std::uint64_t frame,std::uint64_t generation,
        !currentImagePublished)return false;
     phase_=ScenePhase::NativeUi;return true;
 }
+bool OwnedSceneDomain::closePublishedFrame(std::uint64_t frame,
+    std::uint64_t generation) noexcept {
+    if(phase_!=ScenePhase::NativeUi||frame!=frame_||generation!=plan_.generation)
+        return false;
+    phase_=ScenePhase::Dormant;renderThread_=0;return true;
+}
 bool OwnedSceneDomain::remapFullUiViewport(float& width,float& height,float x,float y,
     bool nativeTargetBound) const noexcept {
     if(phase_!=ScenePhase::NativeUi||!nativeTargetBound||x!=0||y!=0||

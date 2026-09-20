@@ -42,6 +42,10 @@ TEST_CASE("Owned scene requires a reduced resource generation and a published na
     REQUIRE(height==1440);
     width=1707;height=960;
     REQUIRE_FALSE(route.remapFullUiViewport(width,height,1,0,true));
+    REQUIRE_FALSE(route.closePublishedFrame(2,1));
+    REQUIRE(route.closePublishedFrame(1,1));
+    REQUIRE(route.phase()==rk::ScenePhase::Dormant);
+    REQUIRE_FALSE(route.closePublishedFrame(1,1));
     REQUIRE_FALSE(route.begin(1,1));
     REQUIRE(route.begin(2,1));
     REQUIRE(route.phase()==rk::ScenePhase::World);

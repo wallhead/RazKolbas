@@ -19,6 +19,9 @@ public:
     bool startProcessing(std::uint64_t frame,std::uint64_t generation) noexcept;
     bool enterUi(std::uint64_t frame,std::uint64_t generation,
         bool currentImagePublished) noexcept;
+    // Complete a published frame when no further native-UI remapping is
+    // required before the next renderer Begin call.
+    bool closePublishedFrame(std::uint64_t frame,std::uint64_t generation) noexcept;
     void suspend() noexcept { phase_=ScenePhase::Suspended; }
     ScenePhase phase() const noexcept { return phase_; }
     std::uint64_t frame() const noexcept { return frame_; }

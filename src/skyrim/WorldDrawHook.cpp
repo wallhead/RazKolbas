@@ -487,13 +487,14 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
-        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
-            throw std::runtime_error("Owned native UI publication or context compatibility failed");
+        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault()||
+           !domain->closePublishedFrame(sequence,domain->plan().generation))
+            throw std::runtime_error("Owned native publication or context compatibility failed");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
         state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
         state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
         if(sequence<=3||sequence%600==0)
-            spdlog::info("Owned world frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; UI native",
+            spdlog::info("Owned pre-Present frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; reduced full frame including game UI",
                 sequence,domain->plan().render.width,domain->plan().render.height,
                 domain->plan().display.width,domain->plan().display.height,
                 std::get<NativeFlipTarget>(native).index,
@@ -522,7 +523,7 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     state->forwarder.dispatch(world,flags);
     state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
 #ifdef RK_WITH_NGX
-    if(processOwnedWorldFrame(state,world,sequence))return;
+    if(activeOwnedSceneDomain()||ownedScenePreviouslyActive())return;
 #endif
     std::array<float,4> drsRatios{};
     const bool drsRead=state->jitterCamera&&
@@ -1057,6 +1058,11 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
        reinterpret_cast<std::uintptr_t>(swap))return;
+#ifdef RK_WITH_NGX
+    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World)
+        processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
+            state->forwarded.load(std::memory_order_relaxed));
+#endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
     const bool ownedProbe=ownedRemaining!=0;

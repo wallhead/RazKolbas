@@ -681,3 +681,31 @@ NVIDIA runtime are unchanged. The assistant did not start Skyrim.
 Runtime result: **NOT RUN**. Next is one user-started menu session; inspect
 the first two pre-Present samples and provider log, close the game, then
 restore 0.1.35 if the image remains black. No save load is needed.
+
+## 0.1.38 live result and pre-Present processing candidate
+
+The user started 0.1.38 and again saw a black screen. The camera extent was
+exactly 1707x960, confirming the render-space jitter correction. NGX
+submitted one DLSS frame, but the 16x16 post-world sample of its input and
+the native output were both all black. The first pre-ENB-Present sample,
+after the two-RTV/reduced-depth bind, found 87/256 non-black reduced-scene
+pixels and 49 distinct values; frame two found 255/256 non-black and 250
+distinct. The native buffer remained black in both pre-Present samples.
+Thus the reduced scene really is populated **after** the original world
+callback, and the one submitted DLSS frame evaluated an unfinished black
+image. These are sampled pixels, not a full-frame semantic/UI analysis.
+The assistant closed the user-started game, verified exit, and restored the
+0.1.35 MO2 DLL and manifest with all four hashes checked. No game was
+started by the assistant.
+
+The next source candidate defers owned SR/fallback evaluation from the
+post-original world callback to the observed pre-ENB-Present callback. It
+keeps the domain in World phase while the reduced scene is populated, so
+the intervening two-RTV/reduced-depth bind is forwarded normally; after
+publication it closes the frame to Dormant before the next Renderer Begin.
+This candidate processes the **whole reduced frame including game UI**.
+It aims to restore a visible image and test DLSS on non-black input; it does
+**not** meet the final native-resolution UI requirement. A separate, verified
+scene/UI boundary remains necessary. Release build and all 35 CTest groups
+pass; visible output, colour quality, UI behavior and continuous submissions
+are **NOT RUN** for this source candidate.
