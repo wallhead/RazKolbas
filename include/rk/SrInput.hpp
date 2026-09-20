@@ -60,4 +60,12 @@ Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
 Result<PreparedSrInputs> prepareSdrSrInputsForDisplay(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
+// Extracts a verified top-left active world rectangle from matching full-size
+// SDR colour, motion and depth textures. Depth is converted to normalized
+// R32_FLOAT because D3D11 forbids partial depth-stencil copies. This does not
+// establish that Skyrim rendered only that rectangle or that NGX accepts this
+// converted depth; both must be verified before SR submission.
+Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT renderWidth,UINT renderHeight,
+    UINT outputWidth,UINT outputHeight);
 }

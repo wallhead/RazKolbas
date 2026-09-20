@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <cstring>
+#include <cmath>
 
 using Microsoft::WRL::ComPtr;
 
@@ -172,4 +173,73 @@ TEST_CASE("Reduced SR input retains its render extent and allocates a display-si
         rk::prepareSdrSrInputsForDisplay(context.Get(),raw,320,180)));
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::prepareSdrSrInputsForDisplay(context.Get(),raw,0,displayHeight)));
+}
+
+TEST_CASE("Full-size scene guides copy only a reduced top-left active rectangle", "[sr_input]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,
+        D3D11_SDK_VERSION,&device,nullptr,&context)));
+    constexpr UINT sourceWidth=8,sourceHeight=6,renderWidth=4,renderHeight=3;
+    const std::array formats{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R24G8_TYPELESS};
+    const std::array<UINT,3> binds{D3D11_BIND_RENDER_TARGET,
+        D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE,
+        D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE};
+    std::array<ComPtr<ID3D11Texture2D>,3> sources;
+    std::array<std::vector<std::uint8_t>,3> pixels;
+    for(std::size_t i=0;i<sources.size();++i) {
+        pixels[i].resize(sourceWidth*sourceHeight*4);
+        for(UINT y=0;y<sourceHeight;++y)for(UINT x=0;x<sourceWidth;++x)
+            for(UINT channel=0;channel<4;++channel)
+                pixels[i][(y*sourceWidth+x)*4+channel]=
+                    static_cast<std::uint8_t>(i*47+y*13+x*3+channel);
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width=sourceWidth;d.Height=sourceHeight;d.MipLevels=d.ArraySize=1;
+        d.SampleDesc.Count=1;d.Format=formats[i];d.BindFlags=binds[i];
+        const D3D11_SUBRESOURCE_DATA initial{pixels[i].data(),sourceWidth*4,0};
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&d,&initial,&sources[i])));
+    }
+    const std::array<ID3D11Texture2D*,3> raw{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    auto result=rk::prepareSdrSrInputsFromRegion(context.Get(),raw,
+        renderWidth,renderHeight,sourceWidth,sourceHeight);
+    REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(result));
+    auto& owned=std::get<rk::PreparedSrInputs>(result);
+    REQUIRE(owned.width()==renderWidth);
+    REQUIRE(owned.height()==renderHeight);
+    REQUIRE(owned.outputWidth()==sourceWidth);
+    REQUIRE(owned.outputHeight()==sourceHeight);
+    const std::array<ID3D11Texture2D*,3> copies{
+        owned.color(),owned.motion(),owned.depth()};
+    const auto captured=rk::readbackCandidates(context.Get(),copies);
+    REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(captured));
+    const auto& images=std::get<std::vector<rk::ProbeImage>>(captured);
+    D3D11_TEXTURE2D_DESC croppedDepth{};
+    owned.depth()->GetDesc(&croppedDepth);
+    REQUIRE(croppedDepth.Format==DXGI_FORMAT_R32_FLOAT);
+    for(std::size_t i=0;i<images.size();++i) {
+        std::vector<std::uint8_t> expected;
+        for(UINT y=0;y<renderHeight;++y)
+            expected.insert(expected.end(),pixels[i].begin()+y*sourceWidth*4,
+                pixels[i].begin()+y*sourceWidth*4+renderWidth*4);
+        if(i<2)REQUIRE(images[i].pixels==expected);
+        else {
+            REQUIRE(images[i].pixels.size()==expected.size());
+            for(std::size_t pixel=0;pixel<renderWidth*renderHeight;++pixel) {
+                std::uint32_t packed{};
+                float actual{};
+                std::memcpy(&packed,expected.data()+pixel*4,4);
+                std::memcpy(&actual,images[i].pixels.data()+pixel*4,4);
+                const float normalized=static_cast<float>(packed&0xffffffU)/16777215.0f;
+                REQUIRE(std::abs(actual-normalized)<0.000001f);
+            }
+        }
+    }
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputsFromRegion(
+        context.Get(),raw,sourceWidth+1,renderHeight,sourceWidth,sourceHeight)));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputsFromRegion(
+        context.Get(),raw,renderWidth,renderHeight,renderWidth-1,sourceHeight)));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputsFromRegion(
+        context.Get(),raw,0,renderHeight,sourceWidth,sourceHeight)));
 }

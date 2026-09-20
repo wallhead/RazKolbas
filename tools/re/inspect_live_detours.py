@@ -43,6 +43,14 @@ def main():
     class ModuleInfo(ctypes.Structure):
         _fields_ = [("base", ctypes.c_void_p), ("size", W.DWORD),
                     ("entry", ctypes.c_void_p)]
+    class MemoryInfo(ctypes.Structure):
+        _fields_ = [("base", ctypes.c_void_p), ("allocationBase", ctypes.c_void_p),
+                    ("allocationProtect", W.DWORD), ("_pad", W.DWORD),
+                    ("size", ctypes.c_size_t), ("state", W.DWORD),
+                    ("protect", W.DWORD), ("type", W.DWORD), ("_pad2", W.DWORD)]
+    kernel.VirtualQueryEx.argtypes = [W.HANDLE, ctypes.c_void_p, ctypes.c_void_p,
+                                      ctypes.c_size_t]
+    kernel.VirtualQueryEx.restype = ctypes.c_size_t
     handle = kernel.OpenProcess(0x410, False, args.pid)
     if not handle:
         raise ctypes.WinError(ctypes.get_last_error())
@@ -56,7 +64,7 @@ def main():
             raise ValueError("Unknown Skyrim executable hash")
 
         def read(address, size):
-            if not 0 < size <= 0x100:
+            if not 0 < size <= 0x120:
                 raise ValueError("Read extent exceeded")
             buffer = ctypes.create_string_buffer(size)
             copied = ctypes.c_size_t()
@@ -97,16 +105,29 @@ def main():
                     item["pointerAddress"] = hex(pointer_address)
                     pointer = struct.unpack("<Q", read(pointer_address, 8))[0]
                     item["target"] = hex(pointer)
-                    item["targetBytes"] = read(pointer, 32).hex()
+                    item["targetBytes"] = read(pointer, 96).hex()
                 elif data[:1] == b"\xe9":
                     target = entry + 5 + struct.unpack_from("<i", data, 1)[0]
                     item["target"] = hex(target)
-                    item["targetBytes"] = read(target, 32).hex()
+                    item["targetBytes"] = read(target, 96).hex()
                 if "target" in item:
                     resolved = int(item["target"], 16)
                     owner = next((module for module in modules
                                   if module["base"] <= resolved < module["end"]), None)
                     item["targetOwner"] = owner["path"] if owner else None
+                    region = MemoryInfo()
+                    if kernel.VirtualQueryEx(handle, resolved, ctypes.byref(region),
+                                             ctypes.sizeof(region)) == ctypes.sizeof(region):
+                        item["targetRegion"] = {"base": hex(region.base),
+                            "allocationBase": hex(region.allocationBase),
+                            "size": hex(region.size), "state": hex(region.state),
+                            "protect": hex(region.protect), "type": hex(region.type)}
+                    if label == "resize_buffer_entry" and item["targetBytes"].startswith("488b1526000000"):
+                        data_pointer = struct.unpack("<Q", read(resolved + 0x2d, 8))[0]
+                        data_owner = next((module for module in modules
+                            if module["base"] <= data_pointer < module["end"]), None)
+                        item["embeddedDataPointer"] = hex(data_pointer)
+                        item["embeddedDataOwner"] = data_owner["path"] if data_owner else None
             except OSError as error:
                 item["followError"] = str(error)
             sites[label] = item
@@ -119,6 +140,8 @@ def main():
                 "currentRatio": struct.unpack_from("<ff", state, 0x104),
                 "previousRatio": struct.unpack_from("<ff", state, 0x10c),
                 "drsCounter": struct.unpack_from("<I", state, 0x118)[0],
+                "drsDirectionFlags": list(state[0x11c:0x11e]),
+                "dynamicResolutionEnabled": read(args.base + 0x2012490, 1)[0],
                 "viewport": viewport})
             if index + 1 < args.samples:
                 time.sleep(args.interval)

@@ -10,6 +10,7 @@
 #include "rk/WorldDraw.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
+#include "rk/DrsReadiness.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/SdrDlssPresenter.hpp"
@@ -49,6 +50,7 @@ struct WorldState {
     std::atomic<bool> initialTargetMapDone{false};
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
+    std::atomic<bool> drsSuppressed{false};
     std::mutex stagePairMutex;
     std::optional<StagePairCapture> stagePair;
     std::uint64_t stagePairFrame{};
@@ -345,6 +347,40 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
     state->forwarder.dispatch(world,flags);
     state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
+    std::array<float,4> drsRatios{};
+    const bool drsRead=state->jitterCamera&&
+        read(state->jitterCamera+0x104,drsRatios.data(),sizeof(drsRatios));
+    const bool nativeRatios=drsRead&&nativeDlaaRatiosReady(
+        drsRatios[0],drsRatios[1],drsRatios[2],drsRatios[3]);
+    if(!nativeRatios) {
+        if(!state->drsSuppressed.exchange(true,std::memory_order_acq_rel)) {
+#ifdef RK_WITH_NGX
+            state->sdrPresenter.requestReset();
+#endif
+            try { spdlog::warn("Native DLAA suspended: engine DRS ratios current=({},{}), previous=({},{}), read={}; measuring world-pass inputs",
+                drsRatios[0],drsRatios[1],drsRatios[2],drsRatios[3],drsRead); } catch(...) {}
+            const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+            if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&
+               numbers.lockRecursion>0&&numbers.colour&&numbers.motion&&numbers.depth&&
+               numbers.context==state->createdContext.load(std::memory_order_acquire)) {
+                D3D11_TEXTURE2D_DESC colour{},motion{},depth{};
+                reinterpret_cast<ID3D11Texture2D*>(numbers.colour)->GetDesc(&colour);
+                reinterpret_cast<ID3D11Texture2D*>(numbers.motion)->GetDesc(&motion);
+                reinterpret_cast<ID3D11Texture2D*>(numbers.depth)->GetDesc(&depth);
+                D3D11_VIEWPORT viewport{};
+                UINT count=1;
+                reinterpret_cast<ID3D11DeviceContext*>(numbers.context)->RSGetViewports(&count,&viewport);
+                try { spdlog::info("Engine DRS world boundary: colour={}x{} motion={}x{} depth={}x{} viewport={}x{} origin=({},{}); read-only; no reduced SR submitted",
+                    colour.Width,colour.Height,motion.Width,motion.Height,depth.Width,depth.Height,
+                    viewport.Width,viewport.Height,viewport.TopLeftX,viewport.TopLeftY); } catch(...) {}
+            }
+        }
+    } else if(state->drsSuppressed.exchange(false,std::memory_order_acq_rel)) {
+#ifdef RK_WITH_NGX
+        state->sdrPresenter.requestReset();
+#endif
+        try { spdlog::info("Engine DRS ratios returned to native; DLAA history reset"); } catch(...) {}
+    }
     if((sequence<=12||sequence%600==0)&&state->jitterCamera) {
         std::array<std::uint8_t,0x4c> camera{};
         if(read(state->jitterCamera,camera.data(),camera.size())) {
@@ -362,8 +398,9 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             else try { spdlog::warn("World jitter observation rejected: invalid camera dimensions or offsets; frame={}",sequence); } catch(...) {}
         } else try { spdlog::warn("World jitter observation unavailable: camera read failed; frame={}",sequence); } catch(...) {}
     }
-    if(const auto status=state->copyStatus.load(std::memory_order_acquire);
-       status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
+    const auto copyStatus=state->copyStatus.load(std::memory_order_acquire);
+    if(copyStatus==WorldState::CopyStatus::Pending||
+       (nativeRatios&&copyStatus==WorldState::CopyStatus::NotAttempted))
         copyWorldInputsOnce(state,readWorldNumbers(world,state->expectedRenderer));
     if(sequence>=600&&!state->initialTargetMapDone.load(std::memory_order_acquire)) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
@@ -446,7 +483,7 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
 #ifdef RK_WITH_NGX
     if(drsProbeHasRun())
         state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
-    if(state->completedOutput&&!state->sdrDisabled&&!drsProbeHasRun()) {
+    if(state->completedOutput&&!state->sdrDisabled&&!drsProbeHasRun()&&nativeRatios) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
         if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
            numbers.device==state->createdDevice.load(std::memory_order_acquire)&&

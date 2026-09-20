@@ -452,3 +452,53 @@ valid cropped colour/depth/motion rectangle. Texture allocation remains
 native sized. Its shared counter model makes the old ratio-writing probe
 unsafe, so it is retired in source; `ProbeReducedWorld=true` now returns
 Unsupported without installing the call-site hook.
+
+## Live hook ownership and native DRS control, user run 17:21
+
+The user started the installed 0.1.28 package as exact-hash PID 14920.
+`inspect_live_detours.py` sampled the live process through read-only APIs.
+The `0xe4fbb0` texture-creation detour targets
+`D:/TESV_EX/skse64_1_6_1170.dll`. The `0xe43e84` resize detour targets a
+`MEM_PRIVATE` executable trampoline near SKSE; its embedded data pointer
+resolves inside `SSE Display Tweaks/SKSE/Plugins/SSEDisplayTweaks.dll`.
+Therefore both entries are occupied by active modlist owners and must be
+chained or avoided, not overwritten. The 12 one-second samples kept display
+and DRS ratios at 2560x1440 and 1/1. The shared counter naturally alternated
+between 0 and 1. Viewport dimensions included 2560x1440 and shorter-lived
+512x512, 2048x2048 and 2048x1024 passes, so a sampled viewport alone does
+not identify the active world rectangle. No process memory or input was
+changed by this capture. Raw reports remain ignored in
+`artifacts/local/skyrim-live-2026-09-20-1721/`.
+
+At this runtime the engine's global dynamic-resolution enable byte at
+`0x2012490` was 0 and direction bytes at state `+0x11c/+0x11d` were 1/0.
+Decoded function `0x643c00` calls native ratio update `0xe587f0` before
+Renderer Begin. Near frame end, `0x644212` checks the enable byte and, when
+nonzero, calls `0xe589b0` with a measured render-time value to set direction
+flags. Decoded console handler `0x37a54c..0x37a778` recognizes the
+`DynamicResolution` command's `width`, `height` and `toggle` arguments; its
+`toggle` branch writes the same enable byte. This is a native DRS control
+path, identified offline from decoded code and plaintext string literals;
+the assistant did not issue the command. A future owned integration must
+verify world-pass viewport, colour, motion and depth as one same-frame
+transaction before enabling reduced SR.
+
+D3D11 forbids a boxed `CopySubresourceRegion` of a depth-stencil resource;
+the [Microsoft API contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11devicecontext-copysubresourceregion)
+requires copying the whole subresource. `prepareSdrSrInputsFromRegion` now
+extracts a supplied top-left rectangle from display-sized SDR colour and
+motion textures and converts the matching R24 depth samples through a
+compute shader to normalized R32_FLOAT. Its WARP test verifies actual
+cropped pixels and rejects invalid geometry; all 26 Release CTest groups
+passed. This is a prepared input path only. The current game run did not
+enable native DRS, prove a reduced valid world rectangle or submit reduced
+DLSS SR. NVIDIA NGX acceptance of the converted depth remains NOT RUN.
+
+The diagnostic build also gates native DLAA on both current and previous
+DRS ratios being exactly 1.0 and readable at the verified game-state
+address. A transition to a reduced or invalid ratio stops new DLAA display
+submissions, resets temporal history and logs same-boundary colour, motion,
+depth descriptors plus the current D3D11 viewport. Pending input-copy
+retirement still polls. When native ratios return, the presenter resets
+history before resuming. This guard and one-time reduced-boundary log are
+build-tested but NOT RUN in game; they do not activate DRS or submit SR.
