@@ -41,7 +41,7 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     if(!device||!context||initialized_||pending_||feature_||parameters_)
         return Error{ErrorCode::InvalidInput,"DLSS probe has invalid lifecycle or device"};
     if(!inputs.color()||!inputs.motion()||!inputs.depth()||!inputs.output()||
-        !inputs.width()||!inputs.height())
+        !inputs.width()||!inputs.height()||!inputs.outputWidth()||!inputs.outputHeight())
         return Error{ErrorCode::InvalidInput,"DLSS probe inputs are incomplete"};
     D3D11_TEXTURE2D_DESC inputDescription{};
     inputs.color()->GetDesc(&inputDescription);
@@ -49,8 +49,13 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     inputs.output()->GetDesc(&outputDescription);
     const bool hdr=inputDescription.Format==DXGI_FORMAT_R16G16B16A16_FLOAT;
     const bool sdr=inputDescription.Format==DXGI_FORMAT_R8G8B8A8_UNORM;
+    const bool reduced=inputs.width()!=inputs.outputWidth()||
+        inputs.height()!=inputs.outputHeight();
     if((!hdr&&!sdr)||outputDescription.Format!=inputDescription.Format||
-        outputDescription.Width!=inputs.width()||outputDescription.Height!=inputs.height())
+        inputDescription.Width!=inputs.width()||inputDescription.Height!=inputs.height()||
+        outputDescription.Width!=inputs.outputWidth()||
+        outputDescription.Height!=inputs.outputHeight()||
+        inputs.outputWidth()<inputs.width()||inputs.outputHeight()<inputs.height())
         return Error{ErrorCode::Unsupported,"DLSS probe input/output format differs"};
     const auto folder=pluginDirectory();
     if(folder.empty())return Error{ErrorCode::Unavailable,"Cannot locate RazKolbas plugin directory"};
@@ -87,9 +92,12 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     if(!success(parameters_->Get(NVSDK_NGX_Parameter_SuperSampling_Available,&available))||!available)
         return Error{ErrorCode::Unsupported,"NVIDIA DLSS SR unavailable on game device"};
     NVSDK_NGX_DLSS_Create_Params create{};
-    create.Feature.InWidth=create.Feature.InTargetWidth=inputs.width();
-    create.Feature.InHeight=create.Feature.InTargetHeight=inputs.height();
-    create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_DLAA;
+    create.Feature.InWidth=inputs.width();
+    create.Feature.InHeight=inputs.height();
+    create.Feature.InTargetWidth=inputs.outputWidth();
+    create.Feature.InTargetHeight=inputs.outputHeight();
+    create.Feature.InPerfQualityValue=reduced?
+        NVSDK_NGX_PerfQuality_Value_MaxQuality:NVSDK_NGX_PerfQuality_Value_DLAA;
     create.InFeatureCreateFlags=(hdr?NVSDK_NGX_DLSS_Feature_Flags_IsHDR:0)|
         NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     if(!success(NGX_D3D11_CREATE_DLSS_EXT(context,&feature_,parameters_,&create))||!feature_)
@@ -128,7 +136,7 @@ Result<bool> OffscreenDlssProbe::begin(ID3D11Device* device,ID3D11DeviceContext*
     scope.reset(); // Restore Skyrim's complete context state before returning.
     context->CopyResource(readback_.Get(),inputs.output());
     context->End(completion_.Get());context->Flush();
-    width_=inputs.width();height_=inputs.height();pixelBytes_=hdr?8:4;pending_=true;
+    width_=inputs.outputWidth();height_=inputs.outputHeight();pixelBytes_=hdr?8:4;pending_=true;
     return true;
 }
 

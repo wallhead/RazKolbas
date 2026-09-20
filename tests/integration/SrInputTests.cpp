@@ -136,3 +136,40 @@ TEST_CASE("SDR scene preparation accepts an RTV-only backbuffer and preserves it
     invalid[0]=sources[1].Get();
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputs(context.Get(),invalid)));
 }
+
+TEST_CASE("Reduced SR input retains its render extent and allocates a display-sized output", "[sr_input]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,
+        D3D11_SDK_VERSION,&device,nullptr,&context)));
+    constexpr UINT renderWidth=640,renderHeight=360,displayWidth=1280,displayHeight=720;
+    const std::array formats{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R24G8_TYPELESS};
+    const std::array<UINT,3> binds{D3D11_BIND_RENDER_TARGET,
+        D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET,
+        D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_DEPTH_STENCIL};
+    std::array<ComPtr<ID3D11Texture2D>,3> sources;
+    for(std::size_t i=0;i<sources.size();++i) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width=renderWidth;desc.Height=renderHeight;desc.MipLevels=desc.ArraySize=1;
+        desc.SampleDesc.Count=1;desc.Format=formats[i];desc.BindFlags=binds[i];
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&sources[i])));
+    }
+    const std::array<ID3D11Texture2D*,3> raw{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    auto prepared=rk::prepareSdrSrInputsForDisplay(context.Get(),raw,displayWidth,displayHeight);
+    REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(prepared));
+    auto& owned=std::get<rk::PreparedSrInputs>(prepared);
+    REQUIRE(owned.width()==renderWidth);
+    REQUIRE(owned.height()==renderHeight);
+    REQUIRE(owned.outputWidth()==displayWidth);
+    REQUIRE(owned.outputHeight()==displayHeight);
+    D3D11_TEXTURE2D_DESC output{};owned.output()->GetDesc(&output);
+    REQUIRE(output.Width==displayWidth);
+    REQUIRE(output.Height==displayHeight);
+    REQUIRE(output.Format==DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::prepareSdrSrInputsForDisplay(context.Get(),raw,320,180)));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::prepareSdrSrInputsForDisplay(context.Get(),raw,0,displayHeight)));
+}

@@ -14,7 +14,8 @@ public:
     PreparedSrInputs(Microsoft::WRL::ComPtr<ID3D11Texture2D> color,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> motion,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> depth,
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> output,UINT width,UINT height) noexcept;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> output,UINT width,UINT height,
+        UINT outputWidth,UINT outputHeight) noexcept;
     PreparedSrInputs(const PreparedSrInputs&)=delete;
     PreparedSrInputs& operator=(const PreparedSrInputs&)=delete;
     PreparedSrInputs(PreparedSrInputs&&) noexcept=default;
@@ -26,9 +27,11 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> takeOutput() noexcept { return std::move(output_); }
     UINT width() const noexcept { return width_; }
     UINT height() const noexcept { return height_; }
+    UINT outputWidth() const noexcept { return outputWidth_; }
+    UINT outputHeight() const noexcept { return outputHeight_; }
 private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> color_,motion_,depth_,output_;
-    UINT width_{},height_{};
+    UINT width_{},height_{},outputWidth_{},outputHeight_{};
 };
 
 struct DepthSampleStats {
@@ -46,9 +49,15 @@ Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
 // does not wait for GPU completion or alter Skyrim's source textures.
 Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
+// The three source textures share the actual world render extent. Output is
+// allocated at the separate display extent; this does not resize game targets.
+Result<PreparedSrInputs> prepareSrInputsForDisplay(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
 // Uses the already tone-mapped, HUD-free SDR scene in an RTV-only backbuffer.
 // The owned copy is shader-readable; the original backbuffer is never bound
 // to NGX and remains unchanged until an explicit presentation decision.
 Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
+Result<PreparedSrInputs> prepareSdrSrInputsForDisplay(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
 }
