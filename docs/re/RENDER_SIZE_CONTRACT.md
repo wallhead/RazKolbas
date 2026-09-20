@@ -26,6 +26,15 @@ The existing full-size SDR DLAA replay also passed, output SHA-256
 These are compatibility results on synthetic guides, not image-quality or
 actual reduced-workload Skyrim results.
 
+The source-only SDR spatial fallback now accepts a preserved RGBA8 scene
+texture and produces a display-sized RGBA8 output, alongside the existing HDR
+RGBA16F fallback. A WARP integration test submitted a 2x2 four-colour source
+to a 4x4 target, waited for GPU completion, and checked format, extent,
+corners and interpolation by readback. Release `tools/Build.ps1 -Preset
+win-release` passed all 22 CTest groups. This producer is not yet connected
+to Skyrim's reduced-render path; its test does not establish an in-game
+fallback or render-workload reduction.
+
 ## Exact Skyrim AE 1.6.1170 address map
 
 The installed Address Library file SHA-256 is
@@ -55,9 +64,11 @@ during a user-started game session. It performs no writes or remote calls.
 
 ## Activation boundary
 
-Skyrim still renders at 2560x1440, TAA remains enabled, and installed 0.1.22
-continues its working full-resolution DLAA path. Reduced game sizing cannot be
+Skyrim still renders at 2560x1440, TAA remains enabled, and installed 0.1.24
+retains the working full-resolution DLAA path. Reduced game sizing cannot be
 activated until the exact DRS/scissor field and instruction contracts, native
-UI placement, output ownership, and display-sized failure fallback are ready
-as one reversible transition. The next live step is a **read-only capture**
-of the mapped code; no new plugin package or MO2 install is needed for it.
+UI placement, output ownership and the connection to the display-sized
+failure fallback are ready as one reversible transition. The next live step
+is a **read-only capture** of the mapped code during a user-started game
+session. The user has deferred a cursor-only game test; no new plugin package
+or MO2 install is needed for this source-only fallback.

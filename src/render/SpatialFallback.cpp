@@ -29,7 +29,7 @@ Result<ComPtr<ID3DBlob>> compile(const char* entry,const char* profile) {
     const auto status=D3DCompile(shader,sizeof(shader)-1,nullptr,nullptr,nullptr,
         entry,profile,D3DCOMPILE_ENABLE_STRICTNESS,0,&code,&diagnostics);
     if(FAILED(status)||!code)
-        return Error{ErrorCode::Unavailable,"Cannot compile HDR fallback shader"};
+        return Error{ErrorCode::Unavailable,"Cannot compile spatial fallback shader"};
     return code;
 }
 
@@ -47,12 +47,12 @@ Result<bool> draw(ID3D11Device* device,ID3D11DeviceContext* context,
         nullptr,&vertexShader))||
        FAILED(device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),
         nullptr,&pixelShader)))
-        return Error{ErrorCode::Unavailable,"Cannot create HDR fallback shaders"};
+        return Error{ErrorCode::Unavailable,"Cannot create spatial fallback shaders"};
     ComPtr<ID3D11ShaderResourceView> sourceView;
     ComPtr<ID3D11RenderTargetView> targetView;
     if(FAILED(device->CreateShaderResourceView(source,nullptr,&sourceView))||
        FAILED(device->CreateRenderTargetView(output,nullptr,&targetView)))
-        return Error{ErrorCode::Unavailable,"Cannot create HDR fallback views"};
+        return Error{ErrorCode::Unavailable,"Cannot create spatial fallback views"};
     D3D11_SAMPLER_DESC samplerDescription{};
     samplerDescription.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;
     samplerDescription.AddressU=samplerDescription.AddressV=samplerDescription.AddressW=
@@ -60,7 +60,7 @@ Result<bool> draw(ID3D11Device* device,ID3D11DeviceContext* context,
     samplerDescription.MaxLOD=D3D11_FLOAT32_MAX;
     ComPtr<ID3D11SamplerState> sampler;
     if(FAILED(device->CreateSamplerState(&samplerDescription,&sampler)))
-        return Error{ErrorCode::Unavailable,"Cannot create HDR fallback sampler"};
+        return Error{ErrorCode::Unavailable,"Cannot create spatial fallback sampler"};
     auto isolated=D3D11StateScope::begin(context);
     if(const auto error=std::get_if<Error>(&isolated))return *error;
     auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
@@ -100,8 +100,9 @@ Result<bool> SpatialFallbackFrame::complete(ID3D11DeviceContext* context) const 
         return Error{ErrorCode::DeviceRemoved,"Fallback GPU completion failed"};
     return true;
 }
-Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context,
-    ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight) {
+static Result<SpatialFallbackFrame> produceFallback(ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight,
+    DXGI_FORMAT expectedFormat) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||!source||
        !displayWidth||!displayHeight||displayWidth>8192||displayHeight>8192)
         return Error{ErrorCode::InvalidInput,"Fallback requires source, immediate context and valid display extent"};
@@ -114,19 +115,19 @@ Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context
         return Error{ErrorCode::Conflict,"Fallback source belongs to another device"};
     D3D11_TEXTURE2D_DESC description{};
     source->GetDesc(&description);
-    if(description.Format!=DXGI_FORMAT_R16G16B16A16_FLOAT||!description.Width||
+    if(description.Format!=expectedFormat||!description.Width||
        !description.Height||description.Width>8192||description.Height>8192||
        description.MipLevels!=1||description.ArraySize!=1||
        description.SampleDesc.Count!=1||description.Usage!=D3D11_USAGE_DEFAULT||
        !(description.BindFlags&D3D11_BIND_SHADER_RESOURCE))
-        return Error{ErrorCode::Unsupported,"Fallback source is not a single-sample HDR scene texture"};
+        return Error{ErrorCode::Unsupported,"Fallback source format or geometry differs"};
     auto targetDescription=description;
     targetDescription.Width=displayWidth;targetDescription.Height=displayHeight;
     targetDescription.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
     targetDescription.CPUAccessFlags=0;targetDescription.MiscFlags=0;
     ComPtr<ID3D11Texture2D> target;
     if(FAILED(device->CreateTexture2D(&targetDescription,nullptr,&target)))
-        return Error{ErrorCode::Unavailable,"Cannot allocate display-sized HDR fallback"};
+        return Error{ErrorCode::Unavailable,"Cannot allocate display-sized spatial fallback"};
     const D3D11_QUERY_DESC queryDescription{D3D11_QUERY_EVENT,0};
     ComPtr<ID3D11Query> completion;
     if(FAILED(device->CreateQuery(&queryDescription,&completion)))
@@ -138,5 +139,15 @@ Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context
     context->End(completion.Get());
     return SpatialFallbackFrame{ComPtr<ID3D11Texture2D>(source),std::move(target),
         std::move(completion),displayWidth,displayHeight};
+}
+Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight) {
+    return produceFallback(context,source,displayWidth,displayHeight,
+        DXGI_FORMAT_R16G16B16A16_FLOAT);
+}
+Result<SpatialFallbackFrame> produceSdrSpatialFallback(ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight) {
+    return produceFallback(context,source,displayWidth,displayHeight,
+        DXGI_FORMAT_R8G8B8A8_UNORM);
 }
 }

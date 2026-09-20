@@ -23,4 +23,8 @@ private:
 
 Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context,
     ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight);
+// Preserved HUD-free SDR colour receives a correctly sized RGBA8 fallback if
+// a reduced-render SR evaluation cannot be published.
+Result<SpatialFallbackFrame> produceSdrSpatialFallback(ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight);
 }

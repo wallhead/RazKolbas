@@ -96,3 +96,61 @@ TEST_CASE("Spatial fallback retains a scene frame and produces display-sized HDR
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::produceSpatialFallback(context.Get(),foreign.Get(),4,4)));
 }
+
+TEST_CASE("SDR fallback produces display-sized colour from a reduced frame", "[fallback]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    D3D11_TEXTURE2D_DESC sourceDesc{};
+    sourceDesc.Width=sourceDesc.Height=2;
+    sourceDesc.MipLevels=sourceDesc.ArraySize=sourceDesc.SampleDesc.Count=1;
+    sourceDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    sourceDesc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    constexpr std::array<std::uint8_t,16> pixels{
+        255,0,0,255, 0,255,0,255,
+        0,0,255,255, 255,255,255,255};
+    const D3D11_SUBRESOURCE_DATA initial{pixels.data(),8,0};
+    ComPtr<ID3D11Texture2D> source;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&sourceDesc,&initial,&source)));
+    auto produced=rk::produceSdrSpatialFallback(context.Get(),source.Get(),4,4);
+    REQUIRE(std::holds_alternative<rk::SpatialFallbackFrame>(produced));
+    auto& frame=std::get<rk::SpatialFallbackFrame>(produced);
+    REQUIRE(frame.width()==4);
+    REQUIRE(frame.height()==4);
+    D3D11_TEXTURE2D_DESC output{};frame.output()->GetDesc(&output);
+    REQUIRE(output.Format==DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE(output.Width==4);
+    REQUIRE(output.Height==4);
+    source.Reset();
+    context->Flush();
+    bool ready=false;
+    for(unsigned attempt=0;attempt<500&&!ready;++attempt) {
+        const auto completed=frame.complete(context.Get());
+        REQUIRE(std::holds_alternative<bool>(completed));
+        ready=std::get<bool>(completed);
+        if(!ready)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(ready);
+    auto staging=output;
+    staging.Usage=D3D11_USAGE_STAGING;
+    staging.BindFlags=0;
+    staging.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    ComPtr<ID3D11Texture2D> readback;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&staging,nullptr,&readback)));
+    context->CopyResource(readback.Get(),frame.output());
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    REQUIRE(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));
+    const auto* top=static_cast<const std::uint8_t*>(mapped.pData);
+    const auto* bottom=top+3*mapped.RowPitch;
+    REQUIRE(top[0]==255);
+    REQUIRE(top[1]==0);
+    REQUIRE(top[3*4+1]==255);
+    REQUIRE(bottom[2]==255);
+    REQUIRE(bottom[3*4]==255);
+    REQUIRE(top[4+0]>0);
+    REQUIRE(top[4+1]>0);
+    context->Unmap(readback.Get(),0);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::produceSdrSpatialFallback(context.Get(),frame.output(),0,4)));
+}
