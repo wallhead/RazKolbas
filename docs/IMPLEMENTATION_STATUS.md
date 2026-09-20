@@ -953,3 +953,22 @@ isolate the capture-only live operations (preparation, readback and ensuing
 spatial publication) and examine command/resource lifetime at the driver
 boundary before deploying another game diagnostic. No new game launch is
 needed to review the present evidence.
+
+## Depth snapshot isolation candidate after the capture-only crash
+
+The common operation in the 0.1.42 first evaluation frame and 0.1.43
+capture-only frame is reduced input preparation. Before this change the
+R32 crop shader sampled Skyrim's original typeless depth texture directly;
+that resource may still be a writable DSV in the saved engine context state.
+The preparer now enters its isolated context state, copies the full-size
+depth into an owned SRV-only typeless texture, and samples that copy for the
+reduced R32 output. It does not change Skyrim's depth pixels or DSV binding.
+The existing WARP regression with the source DSV bound verifies the reduced
+colour/motion/depth bytes and restored binding. A 30-frame NVIDIA owned-R32
+replay with the full-size depth DSV bound submitted 30 DLSS frames at
+1707x960-to-2560x1440 with zero fallback and output SHA-256
+`2a2c8d5e458e090787ce03074589db10d9f35f2123a83a5e55e11f6a5646a550`.
+Release build and all 35 CTest groups passed. This is a live-driver hazard
+hypothesis, not a demonstrated Skyrim crash fix. The game-facing
+capture-only mode still submits **no NGX**; a user-started save-load run is
+**NOT RUN** for this candidate.

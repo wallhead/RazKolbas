@@ -263,6 +263,15 @@ int wmain(int argc,wchar_t** argv) {
         }
         ComPtr<ID3D11Texture2D> depth;
         checked(device->CreateTexture2D(&depthDesc,&zeros,&depth),"DEPTH");
+        ComPtr<ID3D11DepthStencilView> ownedDepthView;
+        if(ngxPlanOwned) {
+            D3D11_DEPTH_STENCIL_VIEW_DESC depthViewDesc{};
+            depthViewDesc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+            depthViewDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+            checked(device->CreateDepthStencilView(depth.Get(),&depthViewDesc,
+                &ownedDepthView),"OWNED_DEPTH_DSV");
+            context->OMSetRenderTargets(1,view.GetAddressOf(),ownedDepthView.Get());
+        }
         constexpr std::array<rk::NgxJitter,8> observedGameCycle{{
             {-0.25f,-1.0f/6.0f},{0.25f,7.0f/18.0f},
             {-0.375f,1.0f/18.0f},{0.125f,-5.0f/18.0f},

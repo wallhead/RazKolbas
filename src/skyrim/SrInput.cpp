@@ -156,6 +156,7 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     if(FAILED(device->CreateTexture2D(&d,nullptr,&output)))
         return Error{ErrorCode::Unavailable,"Cannot allocate owned SR output texture"};
     ComPtr<ID3D11ComputeShader> depthShader;
+    ComPtr<ID3D11Texture2D> depthSnapshot;
     ComPtr<ID3D11ShaderResourceView> depthView;
     ComPtr<ID3D11UnorderedAccessView> depthTarget;
     ComPtr<ID3D11Buffer> cropConstants;
@@ -164,11 +165,20 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         depthShader=cachedDepthCropShader(device.Get());
         if(!depthShader)
             return Error{ErrorCode::Unavailable,"Cannot prepare depth crop shader"};
+        // The original depth may remain bound as Skyrim's writable DSV in the
+        // context state we restore after this pass. Sample an owned full-size
+        // snapshot, never that live resource, while producing reduced R32.
+        auto snapshotDesc=descriptions[2];
+        snapshotDesc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+        snapshotDesc.CPUAccessFlags=0;
+        snapshotDesc.MiscFlags=0;
+        if(FAILED(device->CreateTexture2D(&snapshotDesc,nullptr,&depthSnapshot)))
+            return Error{ErrorCode::Unavailable,"Cannot allocate owned depth snapshot"};
         D3D11_SHADER_RESOURCE_VIEW_DESC sourceView{};
         sourceView.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
         sourceView.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D;
         sourceView.Texture2D.MipLevels=1;
-        if(FAILED(device->CreateShaderResourceView(sources[2],&sourceView,&depthView))||
+        if(FAILED(device->CreateShaderResourceView(depthSnapshot.Get(),&sourceView,&depthView))||
            FAILED(device->CreateUnorderedAccessView(copies[2].Get(),nullptr,&depthTarget)))
             return Error{ErrorCode::Unavailable,"Cannot create depth crop views"};
         D3D11_BUFFER_DESC constantsDesc{};
@@ -182,6 +192,7 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         auto scope=D3D11StateScope::begin(context);
         if(const auto error=std::get_if<Error>(&scope))return *error;
         isolated=std::move(std::get<std::unique_ptr<D3D11StateScope>>(scope));
+        context->CopyResource(depthSnapshot.Get(),sources[2]);
     }
     for(std::size_t i=0;i<copies.size();++i) {
         if(cropped) {
