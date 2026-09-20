@@ -132,6 +132,28 @@ blindly scaling every UI scissor would damage native-resolution UI.
 
 ## Activation boundary
 
+The existing ignored `artifacts/local/live-stage-2026-09-20-1234/` bundle
+already contains 12,288 decoded bytes beginning at the original world-draw
+target `0xe44850`. Its first function returns at `0xe44bc9`; it selects and
+clears render targets through renderer virtual calls. Capturing it again would
+not reveal where the engine creates a smaller world target.
+
+The decoded Renderer Begin function from the 14:36 user run gives a narrower
+target. Its branch at `0xe445c3..0xe44625` invokes two renderer-state
+callees, `0xe43bc0` and `0xe44050`. Later, at `0xe44725..0xe4475c`, it
+constructs a stack descriptor with width and height from renderer state or
+fallback globals, loads static object `0x328be80` into RCX, and calls
+`0xe4fb90`. The exact dimensions represented by that descriptor, the
+allocation/recreation side effects, and the relation to DRS ratios are not
+established by this caller alone. These four callees were absent from the
+prior decoded captures. The read-only, exact-executable-hash inspector now
+includes bounded regions at those four RVAs for the next **user-started**
+game session. It still makes no writes, remote calls, or game-control inputs.
+The capture will test whether this path creates genuinely reduced world
+colour before the post-world SDR conversion; it may identify a source for
+the already implemented display-sized SR/fallback stage. No DRS hook or
+reduced-render mode is enabled on this inference.
+
 Skyrim still renders at 2560x1440, TAA remains enabled, and installed 0.1.24
 retains the working full-resolution DLAA path. The DRS CALL, state field
 accesses and scissor entry ABI are now decoded for this executable. Reduced
