@@ -27,4 +27,11 @@ std::optional<DrsTransition> planDrsRelease(const RenderSizePlan& plan,
        std::fabs(state.currentHeight-height)>0.00001f)return std::nullopt;
     return DrsTransition{state.currentWidth,state.currentHeight,1.0f,1.0f,0};
 }
+bool drsStateMayRetryAfterNativeLock(const RenderSizePlan& plan,
+    DrsStateSnapshot state) noexcept {
+    return plan.valid()&&plan.reduced&&
+        state.displayWidth==plan.display.width&&
+        state.displayHeight==plan.display.height&&
+        state.lock==1&&state.currentWidth==1.0f&&state.currentHeight==1.0f;
+}
 }

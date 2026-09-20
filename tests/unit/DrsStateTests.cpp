@@ -40,3 +40,15 @@ TEST_CASE("Only the exact owned ratio can release the DRS lock", "[drs_state]") 
     REQUIRE_FALSE(rk::planDrsRelease(plan,{1920,1080,0.75f,0.5f,1},true));
     REQUIRE_FALSE(rk::planDrsRelease(plan,{1920,1080,0.5f,0.5f,1},false));
 }
+
+TEST_CASE("An initial native-ratio lock can clear before a later world frame", "[drs_state]") {
+    const rk::RenderSizePlan plan{{2560,1440},{1706,960},true};
+    REQUIRE(rk::drsStateMayRetryAfterNativeLock(plan,{2560,1440,1.0f,1.0f,1}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock(plan,{2560,1440,0.8f,1.0f,1}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock(plan,{2560,1440,1.0f,1.0f,2}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock(plan,{1920,1080,1.0f,1.0f,1}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock(plan,{2560,1440,1.0f,1.0f,0}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock(plan,{2560,1440,0.0f,1.0f,1}));
+    REQUIRE_FALSE(rk::drsStateMayRetryAfterNativeLock({{2560,1440},{2560,1440},false},
+        {2560,1440,1.0f,1.0f,1}));
+}

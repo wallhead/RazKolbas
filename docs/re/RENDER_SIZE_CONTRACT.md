@@ -322,3 +322,34 @@ earlier WARP test. A separate exact patch descriptor is at
 `patches/skyrim/jitter-drs.probe-v1.json`. In-game probe and scissor/UI
 compatibility remain NOT RUN until the user starts Skyrim with a staged
 opt-in build. The existing 0.1.24 game process was not modified.
+
+## 0.1.25 user-run result and guarded retry
+
+The user started installed 0.1.25 at 16:16:16 as exact-hash SkyrimSE.exe
+PID 15004. The startup CALL hook installed and ENB/ReShade device creation
+completed. At the first world callback the ratio was (1,1), the display was
+2560x1440, and state lock was 1, so the 0.1.25 ownership guard rejected the
+probe permanently and performed no DRS write. The world stayed at native
+2560x1440; full-resolution DLAA continued through at least 28,200 world and
+Present observations, with zero reported Present failures. The End diagnostics
+menu was opened; no reduced-render result was obtained.
+
+A later bounded, read-only `BSGraphics::State` sample of the same process
+reported display 2560x1440, previous/current ratios all 1.0, lock 0, and
+flags `01 00 00 00`. The loaded module list contained RazKolbas, ENB,
+ReShade and SSE Display Tweaks, but no separate SkyrimUpscaler or
+DynamicShaderFrameGen module. These observations support treating the first
+native-sized lock as potentially transient; they do not establish its owner
+or prove that it clears at the exact Renderer Begin callback. The decoded
+vanilla DRS callee at `0xe587f0` returns immediately when lock is nonzero.
+Raw process bytes are ignored under
+`artifacts/local/drs-live-2026-09-20-1616-probe/`.
+
+The next source revision permits a strictly read-only retry when the state
+still has exact display dimensions, native (1,1) ratios, and lock 1. It logs
+the first wait and every 600th wait. It never overwrites that lock. If a
+later callback sees lock 0, the existing guarded transition can activate;
+changed ratios, extents or other lock values still reject. The 0.1.25 DLL
+was not modified during the running game. This retry is build-tested only;
+in-game DRS activation, guide extents, scissor/UI behavior and DLSS SR remain
+NOT RUN for the revised build.

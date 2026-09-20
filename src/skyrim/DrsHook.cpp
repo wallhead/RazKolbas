@@ -19,6 +19,7 @@ struct ProbeState {
     std::uintptr_t expectedState{},worldTextureSlot{};
     float scale{};
     std::atomic<std::uint32_t> displayWidth{0},displayHeight{0};
+    std::atomic<std::uint32_t> nativeLockWaits{0};
     std::atomic<bool> ownsLock{false},active{false},everActivated{false},rejected{false};
 };
 std::atomic<ProbeState*> probe{nullptr};
@@ -79,6 +80,13 @@ void jitterProxy(void* gameState) noexcept {
     const auto transition=planDrsTransition(plan,snapshot,
         state->ownsLock.load(std::memory_order_acquire));
     if(!transition) {
+        if(!state->ownsLock.load(std::memory_order_acquire)&&
+           drsStateMayRetryAfterNativeLock(plan,snapshot)) {
+            const auto waits=state->nativeLockWaits.fetch_add(1,std::memory_order_relaxed)+1;
+            if(waits==1||waits%600==0)
+                try { spdlog::info("Experimental DRS probe waiting for native-sized lock to clear: samples={}; lock=1 ratio=1; no state write",waits); } catch(...) {}
+            return;
+        }
         if(state->ownsLock.load(std::memory_order_acquire)) {
             if(const auto release=planDrsRelease(plan,snapshot,true)) {
                 writeTransition(bytes,*release);
@@ -99,8 +107,9 @@ void jitterProxy(void* gameState) noexcept {
     state->ownsLock.store(true,std::memory_order_release);
     state->everActivated.store(true,std::memory_order_release);
     if(!state->active.exchange(true,std::memory_order_acq_rel))
-        try { spdlog::info("Experimental engine DRS probe applied: {}x{} -> {}x{}; original jitter update forwarded; DLSS SR not implied",
-            width,height,requested.width,requested.height); } catch(...) {}
+        try { spdlog::info("Experimental engine DRS probe applied: {}x{} -> {}x{} after {} native-lock waits; original jitter update forwarded; DLSS SR not implied",
+            width,height,requested.width,requested.height,
+            state->nativeLockWaits.load(std::memory_order_relaxed)); } catch(...) {}
 }
 }
 Result<bool> installDrsProbe(HMODULE game,std::string_view verifiedGameHash,
