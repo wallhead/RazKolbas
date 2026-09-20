@@ -285,3 +285,43 @@ copies GPU data, or changes rendering. This is needed to determine whether
 the original target leaves the candidate resources and lock in a state where
 owned SR preparation can safely run. Debug and Release passed all 15 CTest
 groups; in-game telemetry is **NOT RUN** until the next user launch.
+
+The user-run 0.1.12 launch at 09:46:25 reached the world-stage callback at
+09:46:56. Across 29 logged samples through world call #15,600, every
+before/after renderer read succeeded, RCX matched the renderer object, the
+current callback thread owned its lock with recursion 1 on both sides, and
+the colour/motion/depth candidate pointers remained nonzero and unchanged
+around the original target. The device/context/swap fields matched the
+observed renderer creation path. The corresponding Present counts equalled
+`worldForwarded` throughout, with `failed=0`. At sampled frames the callback
+thread alternated between IDs 6588 and 4764, and ownership followed the
+current thread. This establishes a guarded post-world access boundary in this
+run; it does not prove the three buffers' exact image semantics, jitter,
+depth conversion, or temporal quality. The user reported loading a save;
+the log itself does not identify the scene or save. No hotkey was needed.
+
+## Native depth and owned source-copy preparation
+
+An isolated run of the supplied NVIDIA DLSS runtime used the captured Skyrim
+R24G8 typeless depth bytes directly, with the native shader-resource/depth
+bind flags. NGX init, DLAA creation, evaluation and teardown all returned
+success. The independent validator found finite, nonuniform output and SHA-256
+`facc7b1e54bcc2f30fdcc3aac9c110c39e3732c5c8a1b2f782fb30967938642c`,
+identical to the earlier normalized-R32 experiment. This proves that this
+runtime accepts that typeless texture for this reset-frame replay; the equal
+hash does **not** establish correct depth interpretation or temporal quality.
+The reproducible mode is `RAZKOLBAS_SR_REPLAY_DEPTH_MODE=typeless` with
+`tools/re/run_sr_replay.py`. Its ignored validation is under
+`artifacts/local/sr-depth-typeless-validated-2026-09-20/`.
+
+0.1.13 adds an owned D3D11 input path. Under the proven post-world renderer
+lock, it checks the actual creation device/context/swap and each candidate's
+device identity, exact format, dimensions and resource shape before allocating
+separate colour, motion, native typeless depth and output textures. It queues
+three `CopyResource` operations on the same immediate context, then an event
+query, and retains the copies until the GPU reports completion. Source
+textures and game render state are not changed; NGX is not invoked in Skyrim
+yet. WARP independently checked byte-identical copies of all three formats,
+including typeless depth, and rejected missing, swapped and foreign-device
+sources. Debug and Release passed all 16 CTest groups. In-game copy completion
+is **NOT RUN** until the next user launch.

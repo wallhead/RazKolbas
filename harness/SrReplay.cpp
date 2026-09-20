@@ -137,7 +137,22 @@ int wmain(int argc, wchar_t** argv) {
         std::wcout << L"Verified loaded supplied runtime: " << loadedPath << std::endl;
         color = texture(device.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT, width*8, colorBytes.data());
         motion = texture(device.Get(), DXGI_FORMAT_R16G16_FLOAT, width*4, motionBytes.data());
-        z = texture(device.Get(), DXGI_FORMAT_R32_FLOAT, width*4, depth.data());
+        wchar_t depthMode[32]{};
+        GetEnvironmentVariableW(L"RAZKOLBAS_SR_REPLAY_DEPTH_MODE", depthMode, 32);
+        if (std::wstring_view(depthMode) == L"typeless") {
+            // Probe whether the existing NGX runtime accepts Skyrim's native
+            // R24G8 texture without a conversion pass. Isolated child only.
+            D3D11_TEXTURE2D_DESC native{};
+            native.Width=width;native.Height=height;native.MipLevels=native.ArraySize=1;
+            native.Format=DXGI_FORMAT_R24G8_TYPELESS;native.SampleDesc.Count=1;
+            native.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_DEPTH_STENCIL;
+            D3D11_SUBRESOURCE_DATA input{depthBytes.data(),width*4,0};
+            hr(device->CreateTexture2D(&native,&input,&z),"TYPELESS_DEPTH_CREATE");
+            std::cout << "DEPTH_MODE=SKYRIM_R24G8_TYPELESS" << std::endl;
+        } else if (!depthMode[0] || std::wstring_view(depthMode)==L"normalized") {
+            z = texture(device.Get(), DXGI_FORMAT_R32_FLOAT, width*4, depth.data());
+            std::cout << "DEPTH_MODE=LOW24_NORMALIZED_R32_FLOAT" << std::endl;
+        } else stop("UNKNOWN_DEPTH_MODE");
         std::vector<std::uint16_t> sentinel(width*height*4, 0x7e00); // NaNs detect unwritten output.
         output = texture(device.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT, width*8, sentinel.data());
         NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};

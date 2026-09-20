@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import os
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -18,6 +19,9 @@ p.add_argument('--runtime-directory', type=Path, required=True)
 p.add_argument('--capture', type=Path, required=True)
 p.add_argument('--output', type=Path, required=True)
 a = p.parse_args()
+depth_mode = os.environ.get('RAZKOLBAS_SR_REPLAY_DEPTH_MODE', 'normalized')
+if depth_mode not in ('normalized', 'typeless'):
+    raise ValueError('Unknown replay depth mode')
 output = a.output/'dlss-output-rgba16f.raw'
 if output.exists():
     raise ValueError('Use a fresh output directory; never validate stale GPU output')
@@ -55,7 +59,8 @@ report = {'scope': 'offline single reset frame DLAA; no temporal-quality claim',
     'rgb_mean_absolute_change': float(np.abs(source[:, :, :3]-rgb).mean()),
     'changed_rgb_fraction': float(np.mean(source[:, :, :3] != rgb)),
     'experiment': {'reset': True, 'jitter': [0, 0], 'mv_scale': [2560, 1440],
-                   'depth': 'low24 / 16777215 -> R32_FLOAT; not linearized',
+                   'depth': ('native R24G8_TYPELESS, no conversion' if depth_mode == 'typeless'
+                             else 'low24 / 16777215 -> R32_FLOAT; not linearized'),
                    'flags': ['HDR', 'MVLowRes', 'AutoExposure']}}
 (a.output/'validation.json').write_text(json.dumps(report, indent=2, allow_nan=False))
 canvas = Image.new('RGB', (1600, 500), '#15181c')

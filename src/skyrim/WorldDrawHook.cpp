@@ -3,12 +3,14 @@
 #include "rk/FrameProbe.hpp"
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
+#include "rk/SrInput.hpp"
 #include "rk/WorldDraw.hpp"
 #include <spdlog/spdlog.h>
 #include <array>
 #include <atomic>
 #include <cstring>
 #include <memory>
+#include <optional>
 
 namespace rk {
 namespace {
@@ -16,6 +18,12 @@ struct WorldState {
     WorldDrawForwarder forwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::uintptr_t expectedRenderer{};
+    std::atomic_flag creationBound=ATOMIC_FLAG_INIT;
+    std::atomic<std::uintptr_t> createdDevice{0},createdContext{0},createdSwap{0};
+    enum class CopyStatus { NotAttempted, Pending, Complete, Failed };
+    std::atomic<CopyStatus> copyStatus{CopyStatus::NotAttempted};
+    Microsoft::WRL::ComPtr<ID3D11Query> copyEvent;
+    std::optional<PreparedSrInputs> copiedFrame;
 };
 std::atomic<WorldState*> active{nullptr};
 struct WorldNumbers {
@@ -40,6 +48,67 @@ WorldNumbers readWorldNumbers(void* world,std::uintptr_t expected) noexcept {
     result.valid=true;
     return result;
 }
+void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept {
+    const auto status=state->copyStatus.load(std::memory_order_acquire);
+    if(status==WorldState::CopyStatus::Complete||status==WorldState::CopyStatus::Failed)return;
+    const auto thread=GetCurrentThreadId();
+    const auto device=state->createdDevice.load(std::memory_order_acquire);
+    const auto context=state->createdContext.load(std::memory_order_relaxed);
+    const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+    if(!numbers.valid||numbers.lockOwner!=thread||numbers.lockRecursion<=0||
+       !device||!context||!swap||numbers.device!=device||numbers.context!=context||
+       numbers.swap!=swap||!numbers.colour||!numbers.motion||!numbers.depth)return;
+    auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(context);
+    if(status==WorldState::CopyStatus::Pending) {
+        const auto result=immediate->GetData(state->copyEvent.Get(),nullptr,0,
+            D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        if(result==S_OK) {
+            const auto removed=reinterpret_cast<ID3D11Device*>(device)->GetDeviceRemovedReason();
+            if(FAILED(removed)) {
+                state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                try { spdlog::warn("Owned SR input copy device removed: HRESULT=0x{:08x}; resources retained",static_cast<std::uint32_t>(removed)); } catch (...) {}
+                return;
+            }
+            state->copiedFrame.reset();state->copyEvent.Reset();
+            state->copyStatus.store(WorldState::CopyStatus::Complete,std::memory_order_release);
+            try { spdlog::info("Owned SR input copies completed on game GPU: original colour/motion/native typeless depth; no NGX evaluation or display write"); } catch (...) {}
+        } else if(FAILED(result)) {
+            state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+            // Completion is uncertain; retain resources until process exit.
+            try { spdlog::warn("Owned SR input copy completion failed: HRESULT=0x{:08x}; resources retained",static_cast<std::uint32_t>(result)); } catch (...) {}
+        }
+        return;
+    }
+    state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+    try {
+        auto* actualDevice=reinterpret_cast<ID3D11Device*>(device);
+        Microsoft::WRL::ComPtr<ID3D11Query> event;
+        const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
+        const auto created=actualDevice->CreateQuery(&query,&event);
+        if(FAILED(created)) {
+            spdlog::warn("Owned SR input copy event unavailable: HRESULT=0x{:08x}",static_cast<std::uint32_t>(created));return;
+        }
+        const std::array sources{
+            reinterpret_cast<ID3D11Texture2D*>(numbers.colour),
+            reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+            reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
+        auto prepared=prepareSrInputs(immediate,sources);
+        if(const auto error=std::get_if<Error>(&prepared)) {
+            spdlog::warn("Owned SR input copy rejected: {}",error->message);return;
+        }
+        state->copiedFrame.emplace(std::move(std::get<PreparedSrInputs>(prepared)));
+        state->copyEvent=std::move(event);
+        immediate->End(state->copyEvent.Get());
+        immediate->Flush();
+        state->copyStatus.store(WorldState::CopyStatus::Pending,std::memory_order_release);
+        try { spdlog::info("Owned SR input copies queued: {}x{} colour/motion/native typeless depth; original resources unchanged; no NGX evaluation",
+            state->copiedFrame->width(),state->copiedFrame->height()); } catch (...) {}
+    } catch(const std::exception& error) {
+        try { spdlog::warn("Owned SR input copy aborted: {}",error.what()); } catch (...) {}
+    } catch(...) {
+        try { spdlog::warn("Owned SR input copy aborted by unknown exception"); } catch (...) {}
+    }
+}
 void afterOriginal(void*,std::uint32_t) noexcept {
     active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
 }
@@ -49,6 +118,9 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     const bool sample=sequence<=3||sequence%600==0;
     const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
     state->forwarder.dispatch(world,flags);
+    if(const auto status=state->copyStatus.load(std::memory_order_acquire);
+       status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
+        copyWorldInputsOnce(state,readWorldNumbers(world,state->expectedRenderer));
     if(!sample)return;
     const auto after=readWorldNumbers(world,state->expectedRenderer);
     try {
@@ -70,6 +142,14 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
 std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
+}
+void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
+    IDXGISwapChain* swap) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!device||!context||!swap||state->creationBound.test_and_set(std::memory_order_acq_rel))return;
+    state->createdContext.store(reinterpret_cast<std::uintptr_t>(context),std::memory_order_relaxed);
+    state->createdSwap.store(reinterpret_cast<std::uintptr_t>(swap),std::memory_order_relaxed);
+    state->createdDevice.store(reinterpret_cast<std::uintptr_t>(device),std::memory_order_release);
 }
 Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedGameHash,
     const Settings& settings) {
