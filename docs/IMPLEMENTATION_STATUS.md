@@ -77,3 +77,7 @@ A move-only near relay allocator now reserves a free page within signed rel32 re
 ## 0.1.10 read-only live code snapshot (pending runtime)
 
 After the exact 1.6.1170 world CALL contract is accepted, the plugin now logs bounded decoded live bytes from caller base RVA `0xfa4f00` (0x200 bytes) and original target RVA `0xe44850` (0x100 bytes). This is needed because the hash-verified on-disk executable text is encoded and cannot establish the callee ABI. It changes no game instruction and activates no vendor provider. Debug/Release builds passed all 15 CTest groups. Runtime verification is NOT RUN; 0.1.9 remains installed until managed 0.1.10 deployment. The user specifically requested no assistant-driven game launch.
+
+## 0.1.10 managed MO2 deployment
+
+At 09:15:05 on 2026-09-20, managed install replaced only the RazKolbas DLL in `D:/TESV_EX/MO2/mods/RazKolbas` after verifying the prior installed hash and absence of SkyrimSE.exe. Existing INI SHA256 `7de35e2d1e60a0bdc1e06517cec25e9b50a34af7ee47f3583035a7a88535fea1` was preserved. New DLL SHA256 `2c76caaa56e19168a5fb0299d7a8e98bedc25f2012dced9b83b29b3a80c0f127`; MO2 download `RazKolbas-0.1.10-sr-live-code-7489ed5.zip` SHA256 `5a5ca103b958896e66f4c024ba7940665169f8089e845ea34ef784a2a7e88290`. Prior DLL/INI/meta were backed up under `artifacts/local/sr-live-code-install-2026-09-20-091505`. No game launch was performed; runtime probe remains NOT RUN until the user starts Skyrim through MO2. The new code only reads/logs bounded decoded game bytes after the exact callsite contract passes.
