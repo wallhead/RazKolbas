@@ -51,6 +51,8 @@ struct WorldState {
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
     std::atomic<bool> drsSuppressed{false};
+    std::mutex drsTupleMutex;
+    StableDrsTupleGate drsTupleGate;
     std::mutex stagePairMutex;
     std::optional<StagePairCapture> stagePair;
     std::uint64_t stagePairFrame{};
@@ -352,6 +354,11 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
         read(state->jitterCamera+0x104,drsRatios.data(),sizeof(drsRatios));
     const bool nativeRatios=drsRead&&nativeDlaaRatiosReady(
         drsRatios[0],drsRatios[1],drsRatios[2],drsRatios[3]);
+    std::optional<std::uint64_t> stableDrsGeneration;
+    if(drsRead) {
+        std::scoped_lock lock(state->drsTupleMutex);
+        stableDrsGeneration=state->drsTupleGate.observe(drsRatios);
+    }
     if(!nativeRatios) {
         if(!state->drsSuppressed.exchange(true,std::memory_order_acq_rel)) {
 #ifdef RK_WITH_NGX
@@ -359,27 +366,63 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
 #endif
             try { spdlog::warn("Native DLAA suspended: engine DRS ratios current=({},{}), previous=({},{}), read={}; measuring world-pass inputs",
                 drsRatios[0],drsRatios[1],drsRatios[2],drsRatios[3],drsRead); } catch(...) {}
-            const auto numbers=readWorldNumbers(world,state->expectedRenderer);
-            if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&
-               numbers.lockRecursion>0&&numbers.colour&&numbers.motion&&numbers.depth&&
-               numbers.context==state->createdContext.load(std::memory_order_acquire)) {
-                D3D11_TEXTURE2D_DESC colour{},motion{},depth{};
-                reinterpret_cast<ID3D11Texture2D*>(numbers.colour)->GetDesc(&colour);
-                reinterpret_cast<ID3D11Texture2D*>(numbers.motion)->GetDesc(&motion);
-                reinterpret_cast<ID3D11Texture2D*>(numbers.depth)->GetDesc(&depth);
-                D3D11_VIEWPORT viewport{};
-                UINT count=1;
-                reinterpret_cast<ID3D11DeviceContext*>(numbers.context)->RSGetViewports(&count,&viewport);
-                try { spdlog::info("Engine DRS world boundary: colour={}x{} motion={}x{} depth={}x{} viewport={}x{} origin=({},{}); read-only; no reduced SR submitted",
-                    colour.Width,colour.Height,motion.Width,motion.Height,depth.Width,depth.Height,
-                    viewport.Width,viewport.Height,viewport.TopLeftX,viewport.TopLeftY); } catch(...) {}
-            }
         }
     } else if(state->drsSuppressed.exchange(false,std::memory_order_acq_rel)) {
 #ifdef RK_WITH_NGX
         state->sdrPresenter.requestReset();
 #endif
         try { spdlog::info("Engine DRS ratios returned to native; DLAA history reset"); } catch(...) {}
+    }
+    if(stableDrsGeneration&&!nativeRatios) {
+        const bool settled=std::abs(drsRatios[0]-drsRatios[2])<=0.0001f&&
+            std::abs(drsRatios[1]-drsRatios[3])<=0.0001f;
+        try { spdlog::info("Engine DRS tuple stable: generation={} worldFrame={} current=({},{}), previous=({},{}), settled={}; post-world diagnostic only",
+            *stableDrsGeneration,sequence,drsRatios[0],drsRatios[1],
+            drsRatios[2],drsRatios[3],settled); } catch(...) {}
+        if(settled) {
+            const auto numbers=readWorldNumbers(world,state->expectedRenderer);
+            if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&
+               numbers.lockRecursion>0&&numbers.colour&&numbers.motion&&numbers.depth&&
+               numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+               numbers.context==state->createdContext.load(std::memory_order_acquire)) {
+                try {
+                    D3D11_TEXTURE2D_DESC colour{},motion{},depth{};
+                    auto* colourSource=reinterpret_cast<ID3D11Texture2D*>(numbers.colour);
+                    auto* motionSource=reinterpret_cast<ID3D11Texture2D*>(numbers.motion);
+                    auto* depthSource=reinterpret_cast<ID3D11Texture2D*>(numbers.depth);
+                    colourSource->GetDesc(&colour);motionSource->GetDesc(&motion);
+                    depthSource->GetDesc(&depth);
+                    auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
+                    D3D11_VIEWPORT viewport{};UINT count=1;
+                    immediate->RSGetViewports(&count,&viewport);
+                    spdlog::info("Engine DRS stable source descriptors: generation={} colour={}x{} format={} motion={}x{} format={} depth={}x{} format={} viewport={}x{} origin=({},{}); same world frame; no reduced SR submitted",
+                        *stableDrsGeneration,colour.Width,colour.Height,static_cast<unsigned>(colour.Format),
+                        motion.Width,motion.Height,static_cast<unsigned>(motion.Format),
+                        depth.Width,depth.Height,static_cast<unsigned>(depth.Format),
+                        viewport.Width,viewport.Height,viewport.TopLeftX,viewport.TopLeftY);
+                    const std::array<ID3D11Texture2D*,3> guides{
+                        colourSource,motionSource,depthSource};
+                    const auto captured=readbackCandidates(immediate,guides,48*1024*1024);
+                    if(const auto error=std::get_if<Error>(&captured))
+                        spdlog::warn("Engine DRS same-frame guide readback unavailable: {}",error->message);
+                    else {
+                        const auto& images=std::get<std::vector<ProbeImage>>(captured);
+                        const auto sampled=sampleWorldDepth(images[2].pixels,
+                            images[2].descriptor.Width,images[2].descriptor.Height,
+                            images[2].rowBytes);
+                        const auto depthStats=std::get_if<DepthSampleStats>(&sampled);
+                        spdlog::info("Engine DRS same-frame guides: generation={} worldFrame={} colourSHA256={} motionSHA256={} depthSHA256={} depthDistinct={} depthNonFar={}; post-world pixels, producer phase unverified",
+                            *stableDrsGeneration,sequence,sha256(images[0].pixels),
+                            sha256(images[1].pixels),sha256(images[2].pixels),
+                            depthStats?depthStats->distinct:0,depthStats?depthStats->nonFar:0);
+                    }
+                } catch(const std::exception& error) {
+                    try { spdlog::warn("Engine DRS stable guide diagnostic failed: {}",error.what()); } catch(...) {}
+                } catch(...) {
+                    try { spdlog::warn("Engine DRS stable guide diagnostic failed"); } catch(...) {}
+                }
+            } else try { spdlog::warn("Engine DRS stable guides unavailable at world boundary: generation={} renderer ownership changed",*stableDrsGeneration); } catch(...) {}
+        }
     }
     if((sequence<=12||sequence%600==0)&&state->jitterCamera) {
         std::array<std::uint8_t,0x4c> camera{};

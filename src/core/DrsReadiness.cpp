@@ -20,4 +20,25 @@ bool nativeDlaaRatiosReady(float currentWidth,float currentHeight,
         currentWidth==1.0f&&currentHeight==1.0f&&
         previousWidth==1.0f&&previousHeight==1.0f;
 }
+std::optional<std::uint64_t> StableDrsTupleGate::observe(
+    std::array<float,4> ratios) noexcept {
+    for(const auto ratio:ratios)if(!std::isfinite(ratio)||ratio<=0.0f||ratio>1.0f) {
+        hasTuple_=false;consecutive_=0;emitted_=false;
+        return std::nullopt;
+    }
+    bool same=hasTuple_;
+    for(std::size_t i=0;i<ratios.size();++i)
+        same&=std::abs(ratios[i]-last_[i])<=0.0001f;
+    if(!same) {
+        last_=ratios;hasTuple_=true;consecutive_=1;emitted_=false;
+        ++generation_;
+        return std::nullopt;
+    }
+    if(consecutive_<2)++consecutive_;
+    if(consecutive_==2&&!emitted_) {
+        emitted_=true;
+        return generation_;
+    }
+    return std::nullopt;
+}
 }

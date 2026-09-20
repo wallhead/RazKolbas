@@ -23,3 +23,16 @@ TEST_CASE("Engine DRS target reports the game-quantized world extent", "[drs_rea
     REQUIRE_FALSE(rk::engineDrsTarget(2560,1440,1.2f,1.0f));
     REQUIRE_FALSE(rk::engineDrsTarget(0,1440,1.0f,1.0f));
 }
+
+TEST_CASE("DRS diagnostics wait for each stable four-ratio generation", "[drs_readiness]") {
+    rk::StableDrsTupleGate gate;
+    REQUIRE_FALSE(gate.observe({0.666f,1.0f,1.0f,1.0f}));
+    REQUIRE_FALSE(gate.observe({0.666f,0.666f,1.0f,1.0f}));
+    REQUIRE(gate.observe({0.666f,0.666f,1.0f,1.0f})==2);
+    REQUIRE_FALSE(gate.observe({0.666f,0.666f,1.0f,1.0f}));
+    REQUIRE_FALSE(gate.observe({0.666f,0.666f,0.666f,0.666f}));
+    REQUIRE(gate.observe({0.666f,0.666f,0.666f,0.666f})==3);
+    REQUIRE_FALSE(gate.observe({0.0f,0.666f,0.666f,0.666f}));
+    REQUIRE_FALSE(gate.observe({1.0f,1.0f,1.0f,1.0f}));
+    REQUIRE(gate.observe({1.0f,1.0f,1.0f,1.0f})==4);
+}

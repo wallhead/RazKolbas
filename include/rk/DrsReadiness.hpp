@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -12,4 +13,15 @@ std::optional<EngineDrsTarget> engineDrsTarget(std::uint32_t displayWidth,
 // the D3D11 source boundary.
 bool nativeDlaaRatiosReady(float currentWidth,float currentHeight,
     float previousWidth,float previousHeight) noexcept;
+// Emits once after two consecutive world frames have the same valid four-ratio
+// tuple. A changed tuple starts a new diagnostic generation.
+class StableDrsTupleGate {
+public:
+    std::optional<std::uint64_t> observe(std::array<float,4> ratios) noexcept;
+private:
+    std::array<float,4> last_{};
+    std::uint64_t generation_{};
+    unsigned consecutive_{};
+    bool hasTuple_{},emitted_{};
+};
 }
