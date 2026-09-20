@@ -972,3 +972,20 @@ Release build and all 35 CTest groups passed. This is a live-driver hazard
 hypothesis, not a demonstrated Skyrim crash fix. The game-facing
 capture-only mode still submits **no NGX**; a user-started save-load run is
 **NOT RUN** for this candidate.
+
+The diagnostic is source commit `5e454e9`, packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.44-depth-snapshot-5e454e9.zip`
+(SHA-256 `31e15c55a3e1cb497004e7a4009489a628ab4576009589892923fddd8a17e06f`).
+The archive contains only the four manifest-listed payloads plus manifest;
+its status is `DIAGNOSTIC_CAPTURE_ONLY_DEPTH_SNAPSHOT_NO_NGX_EVALUATION`.
+With Skyrim stopped, the complete 0.1.35 MO2 mod was hash-verified and backed
+up under ignored `artifacts/local/mo2-install-backup-0.1.44-5e454e9`.
+Only the installed DLL and manifest were replaced; all four installed files
+match the 0.1.44 manifest. The installed DLL SHA-256 is
+`e05dd53a0fa1c0aed7054d4b6f6352d86178aa2d641e9531982837ae61ce0baf`.
+The user's INI and signed NVIDIA runtime are unchanged. The assistant did
+not start Skyrim. This game diagnostic is **NOT RUN** until a user-started
+save-load session; inspect whether the owned input capture completes and
+whether any NVIDIA worker crash follows it. Restore the verified 0.1.35
+backup after a crash. No DLSS SR success should be inferred from a stable
+capture-only result.
