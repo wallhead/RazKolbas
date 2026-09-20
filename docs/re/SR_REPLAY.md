@@ -359,3 +359,46 @@ render-target and viewport restoration across state switching; Debug and
 Release passed all 17 CTest groups. **In-game NGX evaluation is NOT RUN** until
 the next user launch. This diagnostic result cannot establish displayed SR or
 visual quality.
+
+The user-run 0.1.14 launch at 10:22:29 on 2026-09-20 reached original-first
+world forwarding and queued the three owned inputs. The exact runtime accepted
+NGX init, feature creation and offscreen evaluation on Skyrim's RTX 4080 SUPER
+D3D11 device: the probe logged submission at 10:23:01, with no display write.
+The completion/readback path ran but rejected output as **nonfinite or uniform**.
+That combined diagnostic does not distinguish an unwritten NaN sentinel from
+a uniform valid image. It was the first world callback shortly after renderer
+creation, so a menu-like frame is plausible; the log alone does not identify
+the scene. An isolated replay of the older main-menu capture with the same
+signed runtime and native typeless depth produced 11,059,200 finite RGB
+components and 7,194 distinct half-float values, so the menu hypothesis alone
+does not explain the live failure. The live run continued through Present
+#10,800 with `failed=0` and equal world-forwarding counts. **Live NGX output
+validation FAILED; displayed SR remains NOT RUN.** The assistant did not
+control Skyrim. Next: reproduce the live context-state and owned-copy path in
+an isolated process and split the output diagnostic before another game run.
+
+## 0.1.15 exact-path isolation and world-depth gate
+
+`RazKolbasSrLivePathReplay` now exercises the production probe implementation
+in a separate process: it creates Skyrim-format source textures, uses
+`prepareSrInputs` to copy them, switches the D3D11.1 context state, evaluates
+the exact-hash signed runtime, restores state, fences and validates output,
+then retires NGX. On the captured main-menu frame it returned output SHA-256
+`9e0929f3835a3b9c890e880089d4e817a7a0de1adc1b03eb23fd38aef4a13ce8`,
+identical to the independent replay. On the stationary world capture it
+returned `facc7b1e54bcc2f30fdcc3aac9c110c39e3732c5c8a1b2f782fb30967938642c`,
+also identical to the independent replay. Both reported clean retirement.
+Thus the owned-copy/state-switch implementation works on this NVIDIA adapter
+in isolation; the remaining live failure depends on game frame contents,
+hook timing or other in-process state. No specific cause is established.
+
+The four archived depth captures were sampled at a fixed 10x10 grid: the menu
+had one distinct low-24 depth value (far plane), while stationary/slow/fast
+world frames had 98/95/89 distinct values. The next game build retries at
+most 24 times, at least 600 world calls apart, until sampled depth has at
+least 16 distinct and 16 non-far values. It logs hashes of the three owned
+inputs before one NGX evaluation and splits output failure into finite,
+varying, zero, NaN-sentinel counts and SHA-256. A depth readback is a bounded
+diagnostic frame stall. Debug/Release CTest results and game deployment are
+recorded separately in `../IMPLEMENTATION_STATUS.md`. **0.1.15 in-game
+evaluation is NOT RUN** until the user launches it.

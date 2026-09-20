@@ -1,6 +1,6 @@
 {
   "id": "skyrim1170.world-draw.sr-v1",
-  "status": "EXPERIMENTAL_PASS_THROUGH_MENU_VALIDATED",
+  "status": "EXPERIMENTAL_OFFSCREEN_NGX_OUTPUT_UNVALIDATED",
   "shipping_enabled": false,
   "purpose": "Pass through Skyrim's original world draw, prepare owned SR input copies, then run one guarded offscreen NGX DLAA probe without changing game render targets",
   "target": {
@@ -25,5 +25,5 @@
   "lifetime": "Callback DLL pinned and relay plus forwarding state retained for process lifetime; owned copied textures and NGX resources retained until event-query GPU completion and validated retirement, or until process exit on uncertain failure; no hot unpatch",
   "recovery": "On validation/write preparation failure no game instruction is written. A post-write protection/flush/readback failure terminates rather than resuming half-patched code. Disable this patch ID or SafeMode for the next game launch; restore only when exact installed bytes and execution quiescence are proven",
   "evidence": ["docs/re/SR_REPLAY.md", "tests/unit/CallSiteTests.cpp", "tests/unit/WorldDrawTests.cpp"],
-  "game_runtime": "0.1.13 user-run three-input GPU copy completion PASS through Present #18000; 0.1.14 offscreen NGX evaluation NOT RUN"
+  "game_runtime": "0.1.13 user-run three-input GPU copy completion PASS; 0.1.14 NGX submission PASS but output validation FAILED as nonfinite-or-uniform; 0.1.15 world-depth gated diagnostic NOT RUN"
 }

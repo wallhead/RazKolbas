@@ -29,6 +29,15 @@ private:
     UINT width_{},height_{};
 };
 
+struct DepthSampleStats {
+    unsigned distinct{},nonFar{};
+    bool worldLike() const noexcept { return distinct>=16&&nonFar>=16; }
+};
+// Samples a fixed 10x10 grid of raw Skyrim R24G8 depth words. This is only a
+// bounded scene-readiness gate: it does not infer linearization or guide units.
+Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
+    UINT width,UINT height,std::size_t rowBytes);
+
 // The caller proves exclusive access to the actual immediate context and
 // renderer-owned source textures. All validation/allocation precedes CopyResource.
 // Copies are ordered with subsequent NGX work on the same context; this call

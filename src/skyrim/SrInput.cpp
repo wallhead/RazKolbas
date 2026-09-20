@@ -10,6 +10,27 @@ PreparedSrInputs::PreparedSrInputs(ComPtr<ID3D11Texture2D> color,
     color_(std::move(color)),motion_(std::move(motion)),depth_(std::move(depth)),
     output_(std::move(output)),width_(width),height_(height) {}
 
+Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
+    UINT width,UINT height,std::size_t rowBytes) {
+    if(!width||!height||width>8192||height>8192||rowBytes<static_cast<std::size_t>(width)*4||
+       rowBytes>pixels.size()/height)
+        return Error{ErrorCode::InvalidInput,"Raw depth sample extent differs"};
+    std::array<std::uint32_t,100> seen{};
+    DepthSampleStats stats{};
+    for(UINT y=0;y<10;++y)for(UINT x=0;x<10;++x) {
+        const auto sx=static_cast<UINT>((2*x+1)*static_cast<std::uint64_t>(width)/20);
+        const auto sy=static_cast<UINT>((2*y+1)*static_cast<std::uint64_t>(height)/20);
+        std::uint32_t packed{};
+        std::memcpy(&packed,pixels.data()+static_cast<std::size_t>(sy)*rowBytes+sx*4,4);
+        const auto depth=packed&0xffffffU;
+        stats.nonFar+=depth!=0xffffffU;
+        bool known=false;
+        for(unsigned i=0;i<stats.distinct;++i)known|=seen[i]==depth;
+        if(!known)seen[stats.distinct++]=depth;
+    }
+    return stats;
+}
+
 Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)

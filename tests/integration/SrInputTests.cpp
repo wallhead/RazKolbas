@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 #include <utility>
+#include <cstring>
 
 using Microsoft::WRL::ComPtr;
 
@@ -59,4 +60,25 @@ TEST_CASE("Owned D3D11 SR inputs copy Skyrim colour, motion and native typeless 
     REQUIRE(SUCCEEDED(otherDevice->CreateTexture2D(&foreignDesc,nullptr,&foreign)));
     raw[0]=foreign.Get();
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSrInputs(context.Get(),raw)));
+}
+
+TEST_CASE("Raw depth sample gate distinguishes a menu clear from world geometry", "[sr_input]") {
+    constexpr UINT width=100,height=100;
+    std::vector<std::uint8_t> bytes(width*height*4,0xff);
+    auto menu=rk::sampleWorldDepth(bytes,width,height,width*4);
+    REQUIRE(std::holds_alternative<rk::DepthSampleStats>(menu));
+    REQUIRE(std::get<rk::DepthSampleStats>(menu).distinct==1);
+    REQUIRE_FALSE(std::get<rk::DepthSampleStats>(menu).worldLike());
+    for(UINT y=0;y<10;++y)for(UINT x=0;x<10;++x) {
+        const auto sx=(2*x+1)*width/20,sy=(2*y+1)*height/20;
+        const std::uint32_t depth=1000+y*10+x;
+        std::memcpy(bytes.data()+(sy*width+sx)*4,&depth,4);
+    }
+    auto world=rk::sampleWorldDepth(bytes,width,height,width*4);
+    REQUIRE(std::holds_alternative<rk::DepthSampleStats>(world));
+    const auto stats=std::get<rk::DepthSampleStats>(world);
+    REQUIRE(stats.distinct==100);
+    REQUIRE(stats.nonFar==100);
+    REQUIRE(stats.worldLike());
+    REQUIRE(std::holds_alternative<rk::Error>(rk::sampleWorldDepth(bytes,width,height,width*4-1)));
 }

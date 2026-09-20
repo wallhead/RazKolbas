@@ -1,6 +1,7 @@
 #include "rk/WorldDrawHook.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
+#include "rk/PatchDescriptor.hpp"
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
 #include "rk/SrInput.hpp"
@@ -25,6 +26,8 @@ struct WorldState {
     std::atomic<std::uintptr_t> createdDevice{0},createdContext{0},createdSwap{0};
     enum class CopyStatus { NotAttempted, Pending, Complete, Failed };
     std::atomic<CopyStatus> copyStatus{CopyStatus::NotAttempted};
+    std::uint64_t nextCopyFrame{1};
+    unsigned copyAttempts{};
     Microsoft::WRL::ComPtr<ID3D11Query> copyEvent;
     std::optional<PreparedSrInputs> copiedFrame;
 #ifdef RK_WITH_NGX
@@ -58,6 +61,8 @@ WorldNumbers readWorldNumbers(void* world,std::uintptr_t expected) noexcept {
 void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept {
     const auto status=state->copyStatus.load(std::memory_order_acquire);
     if(status==WorldState::CopyStatus::Complete||status==WorldState::CopyStatus::Failed)return;
+    if(status==WorldState::CopyStatus::NotAttempted&&
+       state->forwarded.load(std::memory_order_relaxed)<state->nextCopyFrame)return;
     const auto thread=GetCurrentThreadId();
     const auto device=state->createdDevice.load(std::memory_order_acquire);
     const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -74,6 +79,53 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
             if(FAILED(removed)) {
                 state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
                 try { spdlog::warn("Owned SR input copy device removed: HRESULT=0x{:08x}; resources retained",static_cast<std::uint32_t>(removed)); } catch (...) {}
+                return;
+            }
+            try {
+                const std::array<ID3D11Texture2D*,1> depth{state->copiedFrame->depth()};
+                const auto readback=readbackCandidates(immediate,depth,16*1024*1024);
+                if(const auto error=std::get_if<Error>(&readback)) {
+                    state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                    spdlog::warn("Owned depth readiness readback failed: {}; resources retained",error->message);
+                    return;
+                }
+                const auto& image=std::get<std::vector<ProbeImage>>(readback).at(0);
+                const auto sampled=sampleWorldDepth(image.pixels,image.descriptor.Width,
+                    image.descriptor.Height,image.rowBytes);
+                if(const auto error=std::get_if<Error>(&sampled)) {
+                    state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                    spdlog::warn("Owned depth readiness sample failed: {}; resources retained",error->message);
+                    return;
+                }
+                const auto stats=std::get<DepthSampleStats>(sampled);
+                if(!stats.worldLike()) {
+                    state->copiedFrame.reset();state->copyEvent.Reset();
+                    state->nextCopyFrame=state->forwarded.load(std::memory_order_relaxed)+600;
+                    state->copyStatus.store(WorldState::CopyStatus::NotAttempted,std::memory_order_release);
+                    if(state->copyAttempts<=3||state->copyAttempts%6==0)
+                        spdlog::info("Offscreen DLAA waiting for world-like depth: attempt={}; sampled distinct={}; nonFar={}; next world call >= {}",
+                            state->copyAttempts,stats.distinct,stats.nonFar,state->nextCopyFrame);
+                    return;
+                }
+                const std::array<ID3D11Texture2D*,2> guides{
+                    state->copiedFrame->color(),state->copiedFrame->motion()};
+                const auto guidesReadback=readbackCandidates(immediate,guides,45*1024*1024);
+                if(const auto error=std::get_if<Error>(&guidesReadback)) {
+                    state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                    spdlog::warn("Owned colour/motion diagnostic readback failed: {}; resources retained",error->message);
+                    return;
+                }
+                const auto& images=std::get<std::vector<ProbeImage>>(guidesReadback);
+                spdlog::info("Offscreen DLAA input frame accepted: attempt={}; depthDistinct={}; depthNonFar={}; colourSHA256={}; motionSHA256={}; depthSHA256={}",
+                    state->copyAttempts,stats.distinct,stats.nonFar,
+                    sha256(images[0].pixels),sha256(images[1].pixels),sha256(image.pixels));
+            } catch(const std::exception& error) {
+                state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                try { spdlog::warn("Owned SR readiness diagnostic failed: {}; resources retained",error.what()); } catch(...) {}
+                return;
+            } catch(...) {
+                state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+                try { spdlog::warn("Owned SR readiness diagnostic failed; resources retained"); } catch(...) {}
                 return;
             }
 #ifdef RK_WITH_NGX
@@ -98,7 +150,7 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
 #endif
             state->copyEvent.Reset();
             state->copyStatus.store(WorldState::CopyStatus::Complete,std::memory_order_release);
-            try { spdlog::info("Owned SR input copies completed on game GPU: original colour/motion/native typeless depth; no NGX evaluation or display write"); } catch (...) {}
+            try { spdlog::info("Owned SR input copies completed on game GPU: original colour/motion/native typeless depth; display unchanged"); } catch (...) {}
         } else if(FAILED(result)) {
             state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
             // Completion is uncertain; retain resources until process exit.
@@ -106,7 +158,13 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
         }
         return;
     }
+    if(state->copyAttempts>=24) {
+        state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+        try { spdlog::warn("Offscreen DLAA world-depth readiness not reached in 24 attempts; no NGX evaluation"); } catch(...) {}
+        return;
+    }
     state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
+    ++state->copyAttempts;
     try {
         auto* actualDevice=reinterpret_cast<ID3D11Device*>(device);
         Microsoft::WRL::ComPtr<ID3D11Query> event;
@@ -261,7 +319,11 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         return *error;
     }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
+#ifdef RK_WITH_NGX
+    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; guarded offscreen DLAA diagnostic armed",worldDrawPatchId); } catch (...) {}
+#else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
+#endif
     return true;
 }
 }

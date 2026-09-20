@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(RazKolbas VERSION 0.1.14 LANGUAGES C CXX)
+project(RazKolbas VERSION 0.1.15 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -42,6 +42,12 @@ if(WIN32)
     target_include_directories(RazKolbasSrReplay SYSTEM PRIVATE "${RK_NGX_SDK_ROOT}/include")
     target_compile_definitions(RazKolbasSrReplay PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(RazKolbasSrReplay PRIVATE rk_core d3d11 dxgi
+      debug "${ngx_debug_library}" optimized "${ngx_library}")
+    add_executable(RazKolbasSrLivePathReplay harness/SrLivePathReplay.cpp
+      src/backends/dlss/OffscreenDlssProbe.cpp)
+    target_include_directories(RazKolbasSrLivePathReplay SYSTEM PRIVATE "${RK_NGX_SDK_ROOT}/include")
+    target_compile_definitions(RazKolbasSrLivePathReplay PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(RazKolbasSrLivePathReplay PRIVATE rk_core d3d11 dxgi
       debug "${ngx_debug_library}" optimized "${ngx_library}")
   endif()
   add_executable(RazKolbasNrBootstrapProbe harness/NrBootstrapProbe.cpp harness/NrFeatureExperiment.cpp)

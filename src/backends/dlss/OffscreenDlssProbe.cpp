@@ -138,18 +138,24 @@ Result<std::string> OffscreenDlssProbe::poll(ID3D11Device* device,ID3D11DeviceCo
             static_cast<const std::uint8_t*>(mapped.pData)+static_cast<std::size_t>(y)*mapped.RowPitch,
             static_cast<std::size_t>(width_)*8);
     context->Unmap(readback_.Get(),0);
-    std::uint16_t first{};bool varying=false;std::size_t finite=0;
+    std::uint16_t first{};bool varying=false;std::size_t finite=0,zero=0,nanSentinel=0;
     for(std::size_t pixel=0;pixel<static_cast<std::size_t>(width_)*height_;++pixel) {
         for(unsigned channel=0;channel<3;++channel) {
             std::uint16_t half{};
             std::memcpy(&half,bytes.data()+pixel*8+channel*2,2);
             if((half&0x7c00U)!=0x7c00U)++finite;
+            if(half==0)++zero;
+            if((half&0x7fffU)==0x7e00U)++nanSentinel;
             if(pixel||channel) varying|=half!=first;else first=half;
         }
     }
     const auto hash=sha256(bytes);
     if(finite!=static_cast<std::size_t>(width_)*height_*3||!varying)
-        return Error{ErrorCode::Unavailable,"DLSS output is nonfinite or uniform; resources retained"};
+        return Error{ErrorCode::Unavailable,"DLSS output rejected: finite="+
+            std::to_string(finite)+"/"+std::to_string(static_cast<std::size_t>(width_)*height_*3)+
+            ", varying="+(varying?"true":"false")+", zero="+std::to_string(zero)+
+            ", NaN-sentinel="+std::to_string(nanSentinel)+", firstHalf="+
+            std::to_string(first)+", SHA256="+hash+"; resources retained"};
     auto isolated=D3D11StateScope::begin(context);
     if(const auto error=std::get_if<Error>(&isolated))return *error;
     auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
