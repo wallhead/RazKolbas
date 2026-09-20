@@ -19,6 +19,9 @@ public:
     ReducedSdrSurface& operator=(ReducedSdrSurface&&) noexcept=default;
     ID3D11Texture2D* texture() const noexcept { return texture_.Get(); }
     ID3D11RenderTargetView* renderTarget() const noexcept { return view_.Get(); }
+    // For a future controlled swap-chain GetBuffer route. The caller validates
+    // the buffer index and generation before exposing this stable identity.
+    HRESULT queryBuffer(REFIID iid,void** output) const noexcept;
     Extent renderExtent() const noexcept { return render_; }
     Extent displayExtent() const noexcept { return display_; }
 private:

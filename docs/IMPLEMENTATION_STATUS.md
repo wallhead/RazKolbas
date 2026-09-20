@@ -375,3 +375,42 @@ The owner supplied `C:/Users/user/Downloads/RazKolbas_Code_Examples.zip` as a re
 ## 2026-09-20 configured DLSS quality, 0.1.33 source candidate
 
 The selected `Upscaling.Quality` value now reaches the NVIDIA SR feature creation: Quality, Balanced, Performance and UltraPerformance map to the corresponding pinned NGX enum, while NativeAA requests only native DLAA. An active feature refuses quality changes until it is retired. Exact parsing, invalid choice and active-feature tests passed. Release `tools/Build.ps1 -Preset win-release` passed all 27 CTest groups. This fixes a configuration-to-NGX gap but does **not** create the reduced world scene or native UI handoff. The MO2 installation remains 0.1.32; 0.1.33 has NOT RUN in Skyrim and is not described as DLSS SR working.
+
+## 2026-09-20 owned scene routing components, source only
+
+The `RazKolbas_Owned_Scene_Fix` handoff was hash-verified and inspected as a
+reference, not applied as a pre-tested patch. Its calculated Skyrim rectangle
+hook address `0xE44722` was rejected: exact local decoded code places the
+six-byte `GetClientRect` call at `0xE4471B`, followed by an instruction starting
+at `0xE44721`. The import cell is `0x174F928`. See
+`re/OWNED_SCENE_RECT_1170.md` for the caller and identity evidence.
+
+Source now includes a version-gated six-byte indirect CALL decoder/encoder,
+nearby read-only pointer cell and ownership-checked startup-boundary write and
+restore. An executable fixture proved the original HWND/RECT callable is
+forwarded exactly once and the callsite is restored. `OwnedSceneDomain` tracks
+world, processing and native UI phases by real frame and generation;
+`RendererLogicalSize` narrows rectangle replacement to the matching window and
+world phase. `NativeUiRedirector` recognizes the underlying reduced texture
+identity and maps a cached single RTV plus full viewport to a native target
+after publication; its WARP test validates native target pixels and next-frame
+world return without ReShade. `ReducedSdrSurface::queryBuffer` now exposes the
+stable reduced resource through COM `QueryInterface` for a future controlled
+GetBuffer route. Release `tools/Build.ps1 -Preset win-release`
+built and passed all 30 CTest groups.
+
+These are production source modules and offline tests, but the **owned scene
+producer is not yet connected to Skyrim**: factory interception before nested
+swap creation, a correct swap-chain alias/proxy, actual game guide identities,
+NGX sizing, context-hook installation, resize retirement and game UI behavior
+remain open. The new rectangle patch and UI adapter are not installed in the
+game. The user's MO2 mod remains 0.1.32 and DLSS SR is **not on** in Skyrim.
+The 0.1.34 candidate adds a read-only pre-creation adapter-parent factory
+provenance log to the existing verified device-creation chain. It records the
+actual live factory vtable and CreateSwapChain method owner without changing
+that factory. This is the last missing identity needed before a versioned
+early factory interception can be prepared. No game was started or controlled
+by the assistant. The next runtime action is one user-started normal Skyrim
+session to collect this log; the next implementation action is the controlled
+factory/GetBuffer proxy route with a WARP fixture where an inner consumer
+caches GetBuffer before the outer creation returns.

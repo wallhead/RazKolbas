@@ -15,6 +15,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <wrl/client.h>
 
 namespace rk {
 namespace {
@@ -29,6 +30,7 @@ struct ObserverLease {
 // Process-lifetime lease: both callback DLL and prior owner's DLL are pinned.
 // SKSE can FreeLibrary during shutdown; reachable callback code must remain valid.
 std::atomic<ObserverLease*> lease{nullptr};
+std::atomic_flag factoryProvenanceLogged=ATOMIC_FLAG_INIT;
 struct FileIdentity { std::string hash; std::size_t size; };
 FileIdentity identify(HMODULE module) {
     wchar_t name[32768];
@@ -42,6 +44,46 @@ FileIdentity identify(HMODULE module) {
     std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});
     if (file.bad()) throw std::runtime_error("Module file read failed");
     return {sha256(bytes),bytes.size()};
+}
+void logFactoryBeforeCreation(IDXGIAdapter* adapter) noexcept {
+    if(factoryProvenanceLogged.test_and_set(std::memory_order_acq_rel))return;
+    if(!adapter) {
+        try { spdlog::info("Pre-create factory provenance: adapter=null; no factory table inspected"); } catch(...) {}
+        return;
+    }
+    try {
+        Microsoft::WRL::ComPtr<IDXGIFactory> factory;
+        const auto result=adapter->GetParent(IID_PPV_ARGS(&factory));
+        if(FAILED(result)||!factory) {
+            spdlog::warn("Pre-create factory provenance: adapter=0x{:x}; GetParent HRESULT=0x{:08x}",
+                reinterpret_cast<std::uintptr_t>(adapter),static_cast<std::uint32_t>(result));
+            return;
+        }
+        auto** table=*reinterpret_cast<void***>(factory.Get());
+        const auto create=std::atomic_ref<void*>(table[10]).load(std::memory_order_acquire);
+        HMODULE tableOwner{},methodOwner{};
+        constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+        GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(table),&tableOwner);
+        if(!GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(create),&methodOwner)) {
+            if(tableOwner)FreeLibrary(tableOwner);
+            spdlog::warn("Pre-create factory provenance: CreateSwapChain method has no loaded-module owner");
+            return;
+        }
+        struct Refs {HMODULE a,b;~Refs(){if(a)FreeLibrary(a);if(b)FreeLibrary(b);}} refs{tableOwner,methodOwner};
+        const auto tableIdentity=tableOwner?identify(tableOwner):FileIdentity{"unowned",0};
+        const auto methodIdentity=methodOwner==tableOwner?tableIdentity:identify(methodOwner);
+        const auto tableBase=reinterpret_cast<std::uintptr_t>(tableOwner);
+        const auto methodBase=reinterpret_cast<std::uintptr_t>(methodOwner);
+        spdlog::info("Pre-create factory provenance: adapter=0x{:x}; factory=0x{:x}; tableOwnerSHA256={}; tableSize={}; tableRVA=0x{:x}; CreateSwapChainOwnerSHA256={}; methodSize={}; methodRVA=0x{:x}; read-only",
+            reinterpret_cast<std::uintptr_t>(adapter),reinterpret_cast<std::uintptr_t>(factory.Get()),
+            tableIdentity.hash,tableIdentity.size,
+            tableOwner?reinterpret_cast<std::uintptr_t>(table)-tableBase:0,
+            methodIdentity.hash,methodIdentity.size,reinterpret_cast<std::uintptr_t>(create)-methodBase);
+    } catch(const std::exception& error) {
+        try { spdlog::warn("Pre-create factory provenance unavailable: {}",error.what()); } catch(...) {}
+    } catch(...) {
+        try { spdlog::warn("Pre-create factory provenance unavailable"); } catch(...) {}
+    }
 }
 std::vector<std::uint8_t> snapshotModule(HMODULE module,std::size_t size) {
     const auto base=reinterpret_cast<std::uintptr_t>(module);
@@ -223,6 +265,7 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
     IDXGISwapChain** swapChain,ID3D11Device** device,D3D_FEATURE_LEVEL* featureLevel,ID3D11DeviceContext** context) noexcept {
     auto* state=lease.load(std::memory_order_acquire);
     if (!state || !state->original) return E_UNEXPECTED;
+    logFactoryBeforeCreation(adapter);
     const DeviceCreationArgs args{adapter,driverType,software,flags,levels,levelCount,sdkVersion,
         swapDesc,swapChain,device,featureLevel,context};
     return observeDeviceCreation(state->original,args,&observed);

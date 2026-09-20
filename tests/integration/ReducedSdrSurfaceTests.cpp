@@ -22,6 +22,13 @@ TEST_CASE("Owned reduced SDR scene reaches a display-sized fallback", "[reduced_
     auto scene=std::move(std::get<rk::ReducedSdrSurface>(created));
     REQUIRE(scene.texture()!=nullptr);
     REQUIRE(scene.renderTarget()!=nullptr);
+    ComPtr<ID3D11Texture2D> queried;
+    REQUIRE(SUCCEEDED(scene.queryBuffer(IID_PPV_ARGS(&queried))));
+    REQUIRE(queried.Get()==scene.texture());
+    queried.Reset();
+    void* invalid=reinterpret_cast<void*>(1);
+    REQUIRE(scene.queryBuffer(__uuidof(IDXGISwapChain),&invalid)==E_NOINTERFACE);
+    REQUIRE(invalid==nullptr);
     D3D11_TEXTURE2D_DESC desc{};
     scene.texture()->GetDesc(&desc);
     REQUIRE(desc.Width==4);

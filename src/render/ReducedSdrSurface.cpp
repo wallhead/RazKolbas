@@ -7,6 +7,12 @@ ReducedSdrSurface::ReducedSdrSurface(ComPtr<ID3D11Texture2D> texture,
     ComPtr<ID3D11RenderTargetView> view,
     Extent render,Extent display) noexcept:
     texture_(std::move(texture)),view_(std::move(view)),render_(render),display_(display) {}
+HRESULT ReducedSdrSurface::queryBuffer(REFIID iid,void** output) const noexcept {
+    if(!output)return E_POINTER;
+    *output=nullptr;
+    if(!texture_)return DXGI_ERROR_INVALID_CALL;
+    return texture_->QueryInterface(iid,output);
+}
 
 Result<ReducedSdrSurface> createReducedSdrSurface(ID3D11Device* device,
     Extent display,Extent render) {
