@@ -614,6 +614,23 @@ The next source candidate records the first provider rejection, the first
 incompatible UI bind (phase, frame count, thread, target count/slot and depth
 extent), and a bounded first-frame 16x16 pixel sample of both the reduced
 scene and native output. No raw capture is saved by this probe. Release build
-and 35 CTest groups pass. These diagnostics are **SOURCE-ONLY/NOT RUN** in
+and 35 CTest groups pass. These diagnostics are **NOT RUN** in
 Skyrim; no UI translation or image fix is claimed until the bind and pixels
 are observed.
+
+The 0.1.37 diagnostic candidate is source commit `6d702b1`. Package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.37-black-screen-diag-6d702b1.zip`
+has SHA-256
+`c22c350903926decba5b69b844c400ec345830e9bc97f5b4376e45eeadbc3be5`
+and exactly the four manifest-listed payloads plus manifest. After confirming
+Skyrim was stopped and all old files matched the restored 0.1.35 manifest,
+the full mod folder was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.37-6d702b1` with hashes verified.
+Only the MO2 DLL and manifest were replaced. All installed payloads match
+the 0.1.37 manifest; DLL SHA-256 is
+`44820e26186c682c6541a66347dc77e95796f39e2dd6e81af62a67e2f2e8bdf8`.
+The INI and signed NVIDIA runtime remain byte-identical. The assistant did
+not start Skyrim. The diagnostic build is **NOT RUN** in Skyrim; next action
+is one user-started menu run, read the new bounded log records, close
+the game and restore 0.1.35 if the screen remains black. No save load is
+needed for that diagnostic.
