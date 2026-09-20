@@ -64,3 +64,25 @@ TEST_CASE("World GetBuffer exposes stable reduced identity while native calls fo
     REQUIRE(route.sceneTexture()==nullptr);
     REQUIRE(route.generation()==0);
 }
+
+TEST_CASE("Exact Skyrim view-cache caller receives the alias and ENB remains native",
+    "[owned_swap_buffer]") {
+    Fixture fixture;
+    rk::OwnedSwapBufferRoute route;
+    REQUIRE(SUCCEEDED(route.configure(fixture.swap.Get(),&downstream,fixture.scene(),1)));
+    constexpr std::uintptr_t gameBase=0x7ff6f59a0000;
+    constexpr auto gameHash=
+        "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9";
+    ComPtr<ID3D11Texture2D> scene,native;
+    REQUIRE(SUCCEEDED(route.getBufferForCaller(gameBase+0xe4cc87,
+        gameBase,gameHash,fixture.swap.Get(),0,IID_PPV_ARGS(&scene))));
+    REQUIRE(SUCCEEDED(route.getBufferForCaller(gameBase+0xe4cc88,
+        gameBase,gameHash,fixture.swap.Get(),0,IID_PPV_ARGS(&native))));
+    REQUIRE(scene.Get()==route.sceneTexture());
+    REQUIRE(native.Get()!=scene.Get());
+    D3D11_TEXTURE2D_DESC a{},b{};
+    scene->GetDesc(&a);native->GetDesc(&b);
+    REQUIRE(a.Width==32);
+    REQUIRE(b.Width==64);
+    scene.Reset();native.Reset();route.releaseAfterRetirement();
+}

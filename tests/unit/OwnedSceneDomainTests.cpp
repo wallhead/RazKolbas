@@ -6,6 +6,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <thread>
 
 namespace {
 using RectCall=BOOL(WINAPI*)(HWND,RECT*);
@@ -161,4 +162,31 @@ TEST_CASE("Renderer logical rectangle changes only the matching world call", "[o
     REQUIRE(route.enterUi(1,7,true));
     REQUIRE(body.query(window,&rect));
     REQUIRE(rect.right==2560);
+}
+
+TEST_CASE("Owned scene moves its render-thread lease between real frames", "[owned_scene]") {
+    rk::OwnedSceneDomain route;
+    REQUIRE(route.configure({{1707,960},{2560,1440},11}));
+    const auto window=reinterpret_cast<HWND>(0x1234);
+    rk::RendererLogicalSize body(route,&fixtureGetClientRect,window,GetCurrentThreadId());
+    RECT workerRect{};
+    bool begun{};
+    std::uint32_t workerThread{};
+    std::thread worker([&] {
+        workerThread=GetCurrentThreadId();
+        begun=route.begin(1,11,workerThread);
+        body.query(window,&workerRect);
+    });
+    worker.join();
+    REQUIRE(begun);
+    REQUIRE(route.renderThread()==workerThread);
+    REQUIRE(workerRect.right==1707);
+    REQUIRE(workerRect.bottom==960);
+    REQUIRE(route.startProcessing(1,11));
+    REQUIRE(route.enterUi(1,11,true));
+    REQUIRE(route.begin(2,11,GetCurrentThreadId()));
+    REQUIRE(route.renderThread()==GetCurrentThreadId());
+    RECT nextRect{};
+    REQUIRE(body.query(window,&nextRect));
+    REQUIRE(nextRect.right==1707);
 }

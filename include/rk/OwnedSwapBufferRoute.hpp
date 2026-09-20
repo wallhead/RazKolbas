@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 
 namespace rk {
 using SwapGetBufferFn=HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*,UINT,REFIID,void**);
@@ -16,6 +17,9 @@ public:
         ReducedSdrSurface scene,std::uint64_t generation) noexcept;
     HRESULT getBuffer(IDXGISwapChain* swap,UINT index,REFIID iid,void** output,
         bool worldConsumer) const noexcept;
+    HRESULT getBufferForCaller(std::uintptr_t returnAddress,
+        std::uintptr_t verifiedGameBase,std::string_view verifiedGameHash,
+        IDXGISwapChain* swap,UINT index,REFIID iid,void** output) const noexcept;
     ID3D11Texture2D* sceneTexture() const noexcept {
         return scene_?scene_->texture():nullptr;
     }

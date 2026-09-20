@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <d3d11.h>
 
 namespace rk {
 const OwnedRouteSite& reshade673FactoryCreateSite() noexcept {
@@ -59,5 +60,17 @@ Result<bool> validateOwnedRouteSite(std::span<const std::uint8_t> image,
        !std::equal(site.prologue.begin(),site.prologue.end(),image.begin()+site.methodRva))
         return Error{ErrorCode::Conflict,"Owned route method pointer or prologue differs"};
     return true;
+}
+bool isSkyrim1170OwnedSceneBufferCall(std::uintptr_t returnAddress,
+    std::uintptr_t gameBase,std::string_view verifiedGameHash,
+    IDXGISwapChain* swap,IDXGISwapChain* selectedSwap,
+    UINT index,REFIID iid) noexcept {
+    constexpr std::string_view gameHash=
+        "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9";
+    constexpr std::uintptr_t returnRva=0xe4cc87;
+    return gameBase&&gameBase<=std::numeric_limits<std::uintptr_t>::max()-returnRva&&
+        verifiedGameHash==gameHash&&returnAddress==gameBase+returnRva&&
+        swap&&swap==selectedSwap&&index==0&&
+        IsEqualIID(iid,__uuidof(ID3D11Texture2D));
 }
 }

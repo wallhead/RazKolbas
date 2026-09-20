@@ -1,4 +1,5 @@
 #include "rk/OwnedSwapBufferRoute.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include <utility>
 
 namespace rk {
@@ -32,6 +33,13 @@ HRESULT OwnedSwapBufferRoute::getBuffer(IDXGISwapChain* swap,UINT index,
     }
     if(!next_) { *output=nullptr;return DXGI_ERROR_INVALID_CALL; }
     return next_(swap,index,iid,output);
+}
+HRESULT OwnedSwapBufferRoute::getBufferForCaller(std::uintptr_t returnAddress,
+    std::uintptr_t verifiedGameBase,std::string_view verifiedGameHash,
+    IDXGISwapChain* swap,UINT index,REFIID iid,void** output) const noexcept {
+    const auto world=isSkyrim1170OwnedSceneBufferCall(returnAddress,
+        verifiedGameBase,verifiedGameHash,swap,swap_.Get(),index,iid);
+    return getBuffer(swap,index,iid,output,world);
 }
 void OwnedSwapBufferRoute::releaseAfterRetirement() noexcept {
     scene_.reset();swap_.Reset();next_=nullptr;bufferCount_=0;generation_=0;

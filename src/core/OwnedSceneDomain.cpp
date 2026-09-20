@@ -10,13 +10,14 @@ bool OwnedScenePlan::valid() const noexcept {
 }
 bool OwnedSceneDomain::configure(OwnedScenePlan plan) noexcept {
     if(!plan.valid()||(plan_.generation&&plan.generation<=plan_.generation))return false;
-    plan_=plan;frame_=0;phase_=ScenePhase::Dormant;return true;
+    plan_=plan;frame_=0;renderThread_=0;phase_=ScenePhase::Dormant;return true;
 }
-bool OwnedSceneDomain::begin(std::uint64_t frame,std::uint64_t generation) noexcept {
+bool OwnedSceneDomain::begin(std::uint64_t frame,std::uint64_t generation,
+    std::uint32_t renderThread) noexcept {
     if(!plan_.valid()||generation!=plan_.generation||!frame||frame<=frame_||
        phase_==ScenePhase::Suspended||phase_==ScenePhase::Processing||phase_==ScenePhase::World)
         return false;
-    frame_=frame;phase_=ScenePhase::World;return true;
+    frame_=frame;renderThread_=renderThread;phase_=ScenePhase::World;return true;
 }
 bool OwnedSceneDomain::startProcessing(std::uint64_t frame,std::uint64_t generation) noexcept {
     if(phase_!=ScenePhase::World||frame!=frame_||generation!=plan_.generation)return false;

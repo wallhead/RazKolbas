@@ -490,3 +490,15 @@ and verified process exit. No reduced alias was enabled and **DLSS SR is not
 on**. The game render lock moved between two threads, so the current fixed
 thread guard in the dormant UI/rectangle adapters must become frame-scoped
 before activation. See `re/OWNED_SCENE_LIVE_CHAIN_1170.md`.
+
+Follow-up source after the 0.1.35 run: the dormant buffer route now selects
+only the exact verified Skyrim return address `0xE4CC87`, selected ReShade
+swap instance, buffer zero, `ID3D11Texture2D` IID and game hash. All other
+callers, including ENB and RazKolbas, forward to the native buffer. The
+world-domain policy and rectangle/UI adapters now accept a new render-thread
+owner at each real-frame begin instead of assuming the first render thread is
+permanent. WARP buffer-route and worker-thread rectangle tests passed;
+Release build and all 33 CTest groups passed. These components are **not
+activated or installed in the game**. Native UI context hooking, per-buffer
+destination selection, coherent scene/guide production and same-frame NGX
+publication remain required before enabling the alias.

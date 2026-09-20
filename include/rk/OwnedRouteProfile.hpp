@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <dxgi.h>
 
 namespace rk {
 struct OwnedRouteSite {
@@ -25,4 +26,10 @@ Result<bool> validateOwnedRouteSite(std::span<const std::uint8_t> image,
     std::uintptr_t moduleBase,std::string_view verifiedFileHash,
     std::size_t verifiedFileSize,std::uint32_t actualTableRva,
     const OwnedRouteSite& site);
+// The only live-confirmed game request that caches the SDR scene views.
+// The caller first verifies the game image's identity at renderer startup.
+bool isSkyrim1170OwnedSceneBufferCall(std::uintptr_t returnAddress,
+    std::uintptr_t gameBase,std::string_view verifiedGameHash,
+    IDXGISwapChain* swap,IDXGISwapChain* selectedSwap,
+    UINT index,REFIID iid) noexcept;
 }

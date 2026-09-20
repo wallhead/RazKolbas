@@ -3,6 +3,7 @@
 #include <array>
 #include <cstring>
 #include <vector>
+#include <d3d11.h>
 
 TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[owned_route_profile]") {
     const auto& factory=rk::reshade673FactoryCreateSite();
@@ -52,4 +53,25 @@ TEST_CASE("ENB context methods retain their current downstream ownership", "[own
     image[sites[1]->tableRva+sites[1]->slot*8]^=1;
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(image,
         base,sites[1]->moduleSha256,sites[1]->fileSize,sites[1]->tableRva,*sites[1])));
+}
+
+TEST_CASE("Only the observed Skyrim view-cache call owns the reduced buffer", "[owned_route_profile]") {
+    constexpr std::uintptr_t base=0x7ff6f59a0000;
+    constexpr auto hash="c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9";
+    auto* selected=reinterpret_cast<IDXGISwapChain*>(0x12340000);
+    auto* other=reinterpret_cast<IDXGISwapChain*>(0x12350000);
+    const auto matches=[&](std::uintptr_t caller,IDXGISwapChain* swap,
+        UINT index,REFIID iid,std::string_view gameHash={}) {
+        return rk::isSkyrim1170OwnedSceneBufferCall(caller,base,
+            gameHash.empty()?std::string_view(hash):gameHash,
+            swap,selected,index,iid);
+    };
+    REQUIRE(matches(base+0xe4cc87,selected,0,__uuidof(ID3D11Texture2D)));
+    REQUIRE_FALSE(matches(base+0xe4cc86,selected,0,__uuidof(ID3D11Texture2D)));
+    REQUIRE_FALSE(matches(base+0xe48f0d,selected,0,__uuidof(ID3D11Texture2D)));
+    REQUIRE_FALSE(matches(base+0xe4cc87,other,0,__uuidof(ID3D11Texture2D)));
+    REQUIRE_FALSE(matches(base+0xe4cc87,selected,1,__uuidof(ID3D11Texture2D)));
+    REQUIRE_FALSE(matches(base+0xe4cc87,selected,0,__uuidof(ID3D11Resource)));
+    REQUIRE_FALSE(matches(base+0xe4cc87,selected,0,__uuidof(ID3D11Texture2D),
+        std::string(64,'0')));
 }

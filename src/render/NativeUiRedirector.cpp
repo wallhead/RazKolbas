@@ -51,7 +51,8 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     return S_OK;
 }
 HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
-    if(!context_||GetCurrentThreadId()!=thread_||generation_!=route_.plan().generation||
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        !route_.enterUi(frame,generation_,true))return E_UNEXPECTED;
     auto* view=nativeRtv_.Get();next_.om(context_.Get(),1,&view,nullptr);
     const auto display=route_.plan().display;
@@ -64,7 +65,8 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     return S_OK;
 }
 bool NativeUiRedirector::eligible(ID3D11DeviceContext* context) const noexcept {
-    return context==context_.Get()&&GetCurrentThreadId()==thread_&&
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    return context==context_.Get()&&GetCurrentThreadId()==owner&&
        route_.phase()==ScenePhase::NativeUi&&generation_==route_.plan().generation;
 }
 bool NativeUiRedirector::nativeBound() const noexcept {
