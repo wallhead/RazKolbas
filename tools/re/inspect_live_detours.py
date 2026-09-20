@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 import json
 import struct
+import time
 from ctypes import wintypes as W
 from pathlib import Path
 
@@ -20,9 +21,13 @@ def main():
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--base", type=lambda value: int(value, 0), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--samples", type=int, default=12)
+    parser.add_argument("--interval", type=float, default=1.0)
     args = parser.parse_args()
     if args.output.exists():
         raise ValueError("Output report already exists")
+    if not 1 <= args.samples <= 30 or not 0 <= args.interval <= 5:
+        raise ValueError("Sampling bound exceeded")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.argtypes = [W.DWORD, W.BOOL, W.DWORD]
     kernel.OpenProcess.restype = W.HANDLE
@@ -105,8 +110,21 @@ def main():
             except OSError as error:
                 item["followError"] = str(error)
             sites[label] = item
+        samples = []
+        for index in range(args.samples):
+            state = read(args.base + 0x328cc20, 0x120)
+            viewport = struct.unpack("<6f", read(args.base + 0x202abe0, 24))
+            samples.append({"index": index,
+                "display": struct.unpack_from("<II", state, 0x24),
+                "currentRatio": struct.unpack_from("<ff", state, 0x104),
+                "previousRatio": struct.unpack_from("<ff", state, 0x10c),
+                "drsCounter": struct.unpack_from("<I", state, 0x118)[0],
+                "viewport": viewport})
+            if index + 1 < args.samples:
+                time.sleep(args.interval)
         report = {"processPath": str(path), "gameSha256": GAME_SHA256,
-                  "pid": args.pid, "base": hex(args.base), "sites": sites}
+                  "pid": args.pid, "base": hex(args.base), "sites": sites,
+                  "samples": samples}
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
         print(json.dumps(report))
