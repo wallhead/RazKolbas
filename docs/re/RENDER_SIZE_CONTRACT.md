@@ -243,19 +243,58 @@ surface stays distinct when a new extent is allocated. Debug and Release
 builds passed 25/25 CTest groups. This proves the offscreen resource and
 fallback handoff; genuine in-game reduced world rendering remains NOT RUN.
 
-## Renderer target-binding method capture prepared
+## Resolved D3D11 context wrapper chain, user-started run 15:43
 
-The saved decoded world-draw function calls a renderer interface at game RVA
-`0xe449f8` through virtual slot `+0x108`. Its object pointer is loaded from
-static game RVA `0x32887b0`, which starts 16 bytes before the old renderer
-data snapshot. The same pointer is used for a `+0x190` call earlier in the
-function. The object, vtable and method code were not retained in that
-snapshot, and the executable's on-disk text cannot supply decoded method
-bytes. `tools/re/inspect_live_renderer.py` now follows this one pointer during
-a user-started, loaded-world session, saves its first 0x1b0 vtable bytes and
-up to 0x300 bytes from each method only if the table and methods fall within
-the exact hash-verified game image. If a pointer is null or foreign, the
-manifest records the condition instead of following it. This is read-only
-inspection, not hook installation, reduced rendering or another DLSS test.
-The exact target-binding implementation and any later UI rebinding remain
-NOT RUN until that bounded capture.
+The saved decoded world-draw function calls virtual slot `+0x108` at game
+RVA `0xe449f8` on the object loaded from game RVA `0x32887b0`. The new
+bounded, read-only capture of PID 22120 resolves this as the D3D11 immediate
+context's `OMSetRenderTargets`, **not** a Skyrim renderer class method.
+The same function's `+0x190` call is `ClearRenderTargetView`; its `+0x1a8`
+call is `ClearDepthStencilView`. The instance handed to Skyrim is ENB's
+context wrapper: vtable RVA `0x1a49f8`, binding method RVA `0x68f40` in
+the exact ENB `d3d11.dll` hash
+`47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58`.
+Its method forwards through object offset `+0x6c68` at ENB RVA `0x69227`
+to a ReShade context wrapper. The latter's exact `dxgi.dll` hash is
+`059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc`,
+vtable RVA `0x3d2750`, binding method RVA `0xf40d0`; it forwards through
+object offset `+0x18` to a heap vtable. The `+0x108` and `+0x190` entries
+of that table resolve into Windows system `d3d11.dll` RVAs `0x100640` and
+`0x106eb0`, respectively. The system file hash matches the existing exact
+runtime profile
+`722871e4ac32972617483197709fe0d924ced5ed894b18fd13e0813d0b25950f`.
+This chain establishes API ownership and rules out patching a supposed
+game-owned target-binding method. The ignored raw manifest and bounded
+code/table snapshots are at
+`artifacts/local/d3d11-context-chain-2026-09-20-1555/`. No game memory was
+written, no remote call was made, and no game input was sent.
+
+The same live capture read the eight game target-index dwords at RVA
+`0x202ab88`: first index 8, remaining seven `-1` at the instant sampled.
+The renderer records at game RVA `0x32887c0+0xa58` have a null texture in
+slot 0 while slot 1 holds the HDR scene colour; this agrees with the
+separate post-world COM resource mapping and the DynamicShaderFrameGen
+source's warning that its `kFRAMEBUFFER.texture` route can be null. These
+unsynchronized pointer values are a snapshot, not proof that index 8 is
+always the UI or swap target. The existing 0.1.24 process has continued to
+submit full-resolution DLAA with no reported Present failures in the
+sampled log; reduced rendering is still NOT RUN.
+
+## DynamicShaderFrameGen adaptation boundary
+
+The current upstream `HEAD` is the locally pinned
+`daaba8aadb2dbc8c5e52b028f12475c3450b6866`. Its source provides a
+concrete render-time sequence: forward the original `Main_UpdateJitter`
+CALL, then set dynamic-resolution previous/current ratios and lock before
+the world render. Our exact-game mapping and decoded call at `0xe44672`
+support adapting that sequence with the existing exact-byte CALL patcher.
+Its scissor comments use left/top/right/bottom names, but the decoded game
+ABI is x/y/width/height; any hook here must use the verified ABI. Its
+`kFRAMEBUFFER` pre-UI path is disabled after the source observed a null
+texture, and its active Present path takes colour from the backbuffer, whose
+actual descriptor controls the submitted input size. That code cannot by
+itself establish a smaller DLSS input or native-resolution UI in this
+modlist. RazKolbas will use the DRS timing and ratios as a reference, keep
+its own post-world/UI placement, and activate a reduced ratio only with a
+verified smaller source plus display-sized fallback. No DynamicShaderFrameGen
+code or binaries have been copied into the product.
