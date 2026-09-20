@@ -207,3 +207,24 @@ edges round outward for coverage and coordinates clamp before arithmetic.
 This is a pure decision function used by offline tests, not an installed
 DRS/scissor hook. The readiness booleans do not themselves establish target
 ownership. The installed 0.1.24 mod remains unchanged.
+
+## Existing RazKolbas swap-chain integration boundary
+
+`RendererBootstrap::createProxy` currently forwards
+`D3D11CreateDeviceAndSwapChain` and observes its returned device/context/swap
+pointer; despite its local name, it does not allocate an `IDXGISwapChain`
+proxy. The same returned pointer is stored by `bindWorldDrawRenderer` and
+used by `WorldDrawHook` to call `GetBuffer(0)` at the post-world boundary.
+`installSwapObserver` patches only exact-hash known ENB/ReShade swap-chain
+vtables, with pass-through Present/Resize behavior. The installed source path
+therefore gets a display-sized backbuffer, and `SdrDlssPresenter` requires
+that backbuffer's format/extent for continuous DLAA.
+
+Substituting a render-sized `GetBuffer` here would change the identity and
+lifetime observed by the renderer, the world hook and the ENB/ReShade vtable
+chain. It would also deprive the current post-world copyback of its
+display-sized target. The reference's reduced proxy cannot be inserted by
+only changing the DRS ratio or scissor: an owned reduced scene surface,
+display-sized destination and native UI transition must be prepared and
+switched together. The unknown existing `ResizeBuffers` owner at game RVA
+`0xe43e84` remains untouched.
