@@ -84,3 +84,23 @@ would clip those highlights, while replacing the pre-Present image would
 also overwrite the observed intervening work. The owned output path still
 needs a verified pre-conversion attachment or measured HDR-to-display
 conversion with preserved UI/ENB/ReShade order; visible SR remains NOT RUN.
+
+Viewing the two captured RGBA8 images confirms the post-world image has the
+scene and first-person hands but no visible HUD, dialogue or debug overlays.
+Those appear in the pre-ENB-Present image. This supports post-world as a
+possible scene replacement boundary before UI, but it does not reveal the
+HDR-to-RGBA8 conversion shader or establish a safe way to replay it. The
+same-frame HDR/SDR values have per-channel correlations of approximately
+0.73/0.81/0.82 over a reproducible 120,000-pixel sample: tone mapping is
+nonlinear and a simple global per-channel conversion would not reproduce the
+observed scene exactly. The local visualization remains ignored under
+`artifacts/local/stage-pair-analysis/` and is not staged.
+
+0.1.19 adds a one-shot, read-only D3D11 pipeline snapshot alongside the
+world-like depth stage. It records the currently bound PS/VS identities,
+topology, viewport count and up to 16 bound PS texture slots, including
+format/extent and whether a slot aliases the HDR scene. It does not bind or
+draw anything. The next exact question is whether the game/ENB leaves its
+HDR-to-display PS and scene SRV bound after the world call. If not, a more
+precise hook within the world draw is required; no guessed shader replay or
+display write is enabled by this diagnostic.

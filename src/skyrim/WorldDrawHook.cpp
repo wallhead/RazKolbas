@@ -2,6 +2,7 @@
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/PatchDescriptor.hpp"
+#include "rk/PipelineBoundary.hpp"
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
 #include "rk/SrInput.hpp"
@@ -182,6 +183,27 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
                     const auto colourIdentity=identity(reinterpret_cast<IUnknown*>(numbers.colour));
                     logTargetBoundary("post-world",immediate,
                         reinterpret_cast<IDXGISwapChain*>(swap),colourIdentity);
+                    const auto pipeline=inspectPipelineBoundary(immediate,
+                        reinterpret_cast<ID3D11Texture2D*>(numbers.colour));
+                    if(const auto error=std::get_if<Error>(&pipeline))
+                        spdlog::warn("Post-world pipeline map unavailable: {}",error->message);
+                    else {
+                        const auto& boundary=std::get<PipelineBoundary>(pipeline);
+                        spdlog::info("Post-world pipeline: PS=0x{:x}; VS=0x{:x}; topology={}; viewports={}; textureSlots={}; read-only",
+                            boundary.pixelShaderIdentity,boundary.vertexShaderIdentity,
+                            static_cast<unsigned>(boundary.topology),boundary.viewportCount,
+                            boundary.resources.size());
+                        for(std::size_t i=0;i<boundary.resources.size()&&i<16;++i) {
+                            const auto& resource=boundary.resources[i];
+                            spdlog::info("Post-world PS SRV{}: resource=0x{:x} {}x{} format={}; matchesHDRScene={}; read-only",
+                                resource.slot,resource.resourceIdentity,resource.width,
+                                resource.height,static_cast<unsigned>(resource.format),
+                                resource.matchesScene);
+                        }
+                        if(boundary.resources.size()>16)
+                            spdlog::info("Post-world pipeline: {} further texture slots omitted",
+                                boundary.resources.size()-16);
+                    }
                     state->worldColourIdentity.store(colourIdentity,std::memory_order_relaxed);
                 } catch(const std::exception& error) {
                     spdlog::warn("Post-world target map unavailable: {}; DLAA probe continues",error.what());
