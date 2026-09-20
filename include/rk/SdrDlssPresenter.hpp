@@ -2,6 +2,7 @@
 #include "rk/Result.hpp"
 #include "rk/SrInput.hpp"
 #include "rk/JitterContract.hpp"
+#include "rk/RenderSizePolicy.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <Windows.h>
@@ -33,6 +34,7 @@ public:
         const PreparedSrInputs&,const SrFrameMetadata&,NgxJitter,bool)>;
     explicit SdrDlssPresenter(PreparedEvaluator evaluator={}):
         preparedEvaluator_(std::move(evaluator)) {}
+    Result<bool> configureQuality(UpscaleQuality quality) noexcept;
     Result<bool> render(ID3D11Device* device,ID3D11DeviceContext* context,
         ID3D11Texture2D* backbuffer,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
         NgxJitter jitter);
@@ -98,5 +100,6 @@ private:
     bool ngxStartAttempted_{},ngxInitSucceeded_{};
     bool reduced_{};
     bool resetPending_{};
+    UpscaleQuality quality_{UpscaleQuality::Quality};
 };
 }

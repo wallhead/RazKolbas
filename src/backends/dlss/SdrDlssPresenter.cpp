@@ -109,9 +109,26 @@ Result<bool> validatePrepared(ID3D11Device* device,const PreparedSrInputs& frame
     return true;
 }
 }
+Result<bool> SdrDlssPresenter::configureQuality(UpscaleQuality quality) noexcept {
+    if(ngxStartAttempted_||initialized_||preparedGeneration_)
+        return Error{ErrorCode::Conflict,"Cannot change NVIDIA quality during an active feature"};
+    switch(quality) {
+    case UpscaleQuality::NativeAA:
+    case UpscaleQuality::Quality:
+    case UpscaleQuality::Balanced:
+    case UpscaleQuality::Performance:
+    case UpscaleQuality::UltraPerformance:break;
+    default:return Error{ErrorCode::InvalidInput,"Unknown NVIDIA quality value"};
+    }
+    quality_=quality;
+    return true;
+}
+
 Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     ID3D11DeviceContext* context,UINT width,UINT height,
     UINT displayWidth,UINT displayHeight,bool reduced) {
+    if(reduced&&quality_==UpscaleQuality::NativeAA)
+        return Error{ErrorCode::InvalidInput,"NativeAA cannot create a reduced DLSS feature"};
     if(ngxStartAttempted_)
         return Error{ErrorCode::Conflict,"NVIDIA SR initialization already attempted; retire before retry"};
     ngxStartAttempted_=true;
@@ -154,8 +171,20 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     create.Feature.InWidth=width;create.Feature.InHeight=height;
     create.Feature.InTargetWidth=displayWidth;
     create.Feature.InTargetHeight=displayHeight;
-    create.Feature.InPerfQualityValue=reduced?NVSDK_NGX_PerfQuality_Value_MaxQuality:
-        NVSDK_NGX_PerfQuality_Value_DLAA;
+    if(reduced) {
+        switch(quality_) {
+        case UpscaleQuality::Quality:
+            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_MaxQuality;break;
+        case UpscaleQuality::Balanced:
+            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_Balanced;break;
+        case UpscaleQuality::Performance:
+            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_MaxPerf;break;
+        case UpscaleQuality::UltraPerformance:
+            create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_UltraPerformance;break;
+        case UpscaleQuality::NativeAA:
+            return Error{ErrorCode::InvalidInput,"NativeAA cannot create a reduced DLSS feature"};
+        }
+    } else create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_DLAA;
     create.InFeatureCreateFlags=NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     if(!success(NGX_D3D11_CREATE_DLSS_EXT(context,&feature_,parameters_,&create))||!feature_)

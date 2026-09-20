@@ -1,8 +1,12 @@
 #pragma once
 #include "rk/FrameContracts.hpp"
 #include <cstdint>
+#include <optional>
+#include <string_view>
 
 namespace rk {
+enum class UpscaleQuality { NativeAA, Quality, Balanced, Performance, UltraPerformance };
+std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexcept;
 enum class RenderDomain { World, Ui };
 struct ScissorExtent {
     std::uint32_t x{},y{},width{},height{};

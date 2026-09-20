@@ -71,8 +71,13 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
         context->ClearUnorderedAccessViewFloat(view.Get(),colour);
         return true;
     }};
+    REQUIRE(std::holds_alternative<rk::Error>(presenter.configureQuality(
+        static_cast<rk::UpscaleQuality>(99))));
+    REQUIRE(std::get<bool>(presenter.configureQuality(rk::UpscaleQuality::Balanced)));
     auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
         scene.cropped(),{10,3,true},{0.125f,-0.25f});
+    REQUIRE(std::holds_alternative<rk::Error>(
+        presenter.configureQuality(rk::UpscaleQuality::Performance)));
     REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
     const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
     REQUIRE(token.has_value());

@@ -1,6 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/RenderSizePolicy.hpp"
 
+TEST_CASE("Configured SR quality has a complete exact mapping", "[render_size_policy]") {
+    using rk::UpscaleQuality;
+    REQUIRE(rk::parseUpscaleQuality("NativeAA")==UpscaleQuality::NativeAA);
+    REQUIRE(rk::parseUpscaleQuality("Quality")==UpscaleQuality::Quality);
+    REQUIRE(rk::parseUpscaleQuality("Balanced")==UpscaleQuality::Balanced);
+    REQUIRE(rk::parseUpscaleQuality("Performance")==UpscaleQuality::Performance);
+    REQUIRE(rk::parseUpscaleQuality("UltraPerformance")==UpscaleQuality::UltraPerformance);
+    REQUIRE_FALSE(rk::parseUpscaleQuality("quality").has_value());
+}
+
 TEST_CASE("Reduced world sizing requires both owned paths", "[render_size_policy]") {
     const rk::Extent display{2560,1440}, render{1280,720};
     auto native=rk::chooseRenderSize(display,render,false,true);

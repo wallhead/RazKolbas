@@ -12,6 +12,7 @@
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
+#include "rk/RenderSizePolicy.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/SdrDlssPresenter.hpp"
@@ -982,7 +983,13 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     auto pending=std::make_unique<WorldState>();
 #ifdef RK_WITH_NGX
     const auto provider=settings.get<Choice>("Upscaling.Provider").value;
-    pending->srRequested=provider=="Auto"||provider=="DLSS";
+    const auto quality=parseUpscaleQuality(
+        settings.get<Choice>("Upscaling.Quality").value);
+    if(!quality)return Error{ErrorCode::InvalidInput,"Unrecognized SR quality setting"};
+    if(const auto configured=pending->srPresenter.configureQuality(*quality);
+       const auto error=std::get_if<Error>(&configured))return *error;
+    pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
+        *quality!=UpscaleQuality::NativeAA;
 #endif
     pending->expectedRenderer=base+renderer1170Rva;
     constexpr std::array<std::uint8_t,7> cameraLoad{0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02};
@@ -1025,7 +1032,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; SDR DLAA armed; guarded native-DRS SR requested={}",worldDrawPatchId,published->srRequested); } catch (...) {}
+    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; SDR DLAA armed; guarded native-DRS SR requested={}; configuredQuality={}",worldDrawPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

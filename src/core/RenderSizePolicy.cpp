@@ -2,6 +2,14 @@
 #include <algorithm>
 
 namespace rk {
+std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexcept {
+    if(value=="NativeAA")return UpscaleQuality::NativeAA;
+    if(value=="Quality")return UpscaleQuality::Quality;
+    if(value=="Balanced")return UpscaleQuality::Balanced;
+    if(value=="Performance")return UpscaleQuality::Performance;
+    if(value=="UltraPerformance")return UpscaleQuality::UltraPerformance;
+    return std::nullopt;
+}
 RenderSizePlan chooseRenderSize(Extent display,Extent requested,
     bool worldTargetReady,bool displayPathReady) noexcept {
     if(!display.valid()) return {};
