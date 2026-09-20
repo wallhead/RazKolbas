@@ -353,9 +353,19 @@ TEST_CASE("Reduced owned SDR scene accepts native-sized motion and depth guides"
     }
     const std::array<ID3D11Texture2D*,3> raw{
         sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+    dsvDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+    ComPtr<ID3D11DepthStencilView> activeDepth;
+    REQUIRE(SUCCEEDED(device->CreateDepthStencilView(sources[2].Get(),
+        &dsvDesc,&activeDepth)));
+    context->OMSetRenderTargets(0,nullptr,activeDepth.Get());
     auto prepared=rk::prepareSdrSrInputsFromOwnedScene(context.Get(),raw,
         displayWidth,displayHeight);
     REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(prepared));
+    ComPtr<ID3D11DepthStencilView> restoredDepth;
+    context->OMGetRenderTargets(0,nullptr,&restoredDepth);
+    REQUIRE(restoredDepth.Get()==activeDepth.Get());
     auto& frame=std::get<rk::PreparedSrInputs>(prepared);
     REQUIRE(frame.width()==renderWidth);
     REQUIRE(frame.height()==renderHeight);

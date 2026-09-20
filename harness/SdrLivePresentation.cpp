@@ -30,11 +30,15 @@ int wmain(int argc,wchar_t** argv) {
         std::wstring_view(argv[1])==L"--prepared-r32-fallback";
     const bool preparedR32=preparedFailure||
         (argc==3&&std::wstring_view(argv[1])==L"--prepared-r32");
-    const bool ngxPlan=argc==3&&std::wstring_view(argv[1])==L"--ngx-plan";
-    const bool sr=injectFailure||preparedR32||ngxPlan||
+    const bool ngxPlanOwned=argc==3&&
+        std::wstring_view(argv[1])==L"--ngx-plan-owned-r32";
+    const bool ngxPlan=ngxPlanOwned||
+        (argc==3&&std::wstring_view(argv[1])==L"--ngx-plan");
+    const bool usePreparedR32=preparedR32||ngxPlanOwned;
+    const bool sr=injectFailure||usePreparedR32||ngxPlan||
         (argc==3&&std::wstring_view(argv[1])==L"--sr");
     if(argc!=2&&!sr) {
-        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback|--ngx-plan] <stage-pair directory>\n";
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback|--prepared-r32|--prepared-r32-fallback|--ngx-plan|--ngx-plan-owned-r32] <stage-pair directory>\n";
         return 2;
     }
     try {
@@ -69,6 +73,11 @@ int wmain(int argc,wchar_t** argv) {
             if(const auto error=std::get_if<rk::Error>(&planned))stop(error->message);
             inputWidth=std::get<rk::Extent>(planned).width;
             inputHeight=std::get<rk::Extent>(planned).height;
+            if(ngxPlanOwned) {
+                const auto created=presenter.createReducedFeature(device.Get(),context.Get());
+                if(const auto error=std::get_if<rk::Error>(&created))stop(error->message);
+                if(!std::get<bool>(created))stop("PREPARED_FEATURE_NOT_CREATED");
+            }
         }
         std::vector<std::uint8_t> reduced;
         if(sr) {
@@ -97,17 +106,19 @@ int wmain(int argc,wchar_t** argv) {
             const D3D11_SUBRESOURCE_DATA reducedPixels{reduced.data(),inputWidth*4,0};
             checked(device->CreateTexture2D(&sourceDesc,&reducedPixels,&sceneInput),"SCENE_INPUT");
         }
-        std::vector<std::uint8_t> zero(static_cast<std::size_t>(inputWidth)*inputHeight*4);
+        const UINT guideWidth=ngxPlanOwned?width:inputWidth;
+        const UINT guideHeight=ngxPlanOwned?height:inputHeight;
+        std::vector<std::uint8_t> zero(static_cast<std::size_t>(guideWidth)*guideHeight*4);
         auto motionDesc=desc;motionDesc.Format=DXGI_FORMAT_R16G16_FLOAT;
-        motionDesc.Width=inputWidth;motionDesc.Height=inputHeight;
+        motionDesc.Width=guideWidth;motionDesc.Height=guideHeight;
         motionDesc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
-        const D3D11_SUBRESOURCE_DATA zeros{zero.data(),inputWidth*4,0};
+        const D3D11_SUBRESOURCE_DATA zeros{zero.data(),guideWidth*4,0};
         ComPtr<ID3D11Texture2D> motion;
         checked(device->CreateTexture2D(&motionDesc,&zeros,&motion),"MOTION");
         auto depthDesc=desc;depthDesc.Format=DXGI_FORMAT_R24G8_TYPELESS;
-        depthDesc.Width=inputWidth;depthDesc.Height=inputHeight;
+        depthDesc.Width=guideWidth;depthDesc.Height=guideHeight;
         depthDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
-        for(std::size_t i=0;i<static_cast<std::size_t>(inputWidth)*inputHeight;++i) {
+        for(std::size_t i=0;i<static_cast<std::size_t>(guideWidth)*guideHeight;++i) {
             const std::uint32_t value=0x00400000+static_cast<std::uint32_t>(i%4096);
             std::memcpy(zero.data()+i*4,&value,4);
         }
@@ -134,13 +145,15 @@ int wmain(int argc,wchar_t** argv) {
                             return rk::Error{rk::ErrorCode::Unavailable,"Injected SR failure"};
                         }
                         const auto jitter=observedGameCycle[rendered%observedGameCycle.size()];
-                        if(!preparedR32)
+                        if(!usePreparedR32)
                             return presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),
                                 motion.Get(),depth.Get(),backbuffer.Get(),jitter);
                         const std::array<ID3D11Texture2D*,3> sources{
                             sceneInput.Get(),motion.Get(),depth.Get()};
-                        auto inputs=rk::prepareSdrSrInputsFromRegion(context.Get(),sources,
-                            rk::SrSourceRegion{0,0,inputWidth,inputHeight},width,height);
+                        auto inputs=ngxPlanOwned?
+                            rk::prepareSdrSrInputsFromOwnedScene(context.Get(),sources,width,height):
+                            rk::prepareSdrSrInputsFromRegion(context.Get(),sources,
+                                rk::SrSourceRegion{0,0,inputWidth,inputHeight},width,height);
                         if(const auto error=std::get_if<rk::Error>(&inputs))return *error;
                         const auto evaluated=presenter.evaluatePrepared(device.Get(),context.Get(),
                             std::move(std::get<rk::PreparedSrInputs>(inputs)),
@@ -205,9 +218,10 @@ int wmain(int argc,wchar_t** argv) {
         if((injectFailure||preparedFailure)&&
            (!injected||!fallbackFrames||fallbackHash.empty()))
             stop("FALLBACK_NOT_OBSERVED");
-        if(preparedR32&&presenter.submittedFrames()==0)stop("PREPARED_R32_NGX_NO_SUCCESS");
+        if(usePreparedR32&&presenter.submittedFrames()==0)stop("PREPARED_R32_NGX_NO_SUCCESS");
         std::cout<<"SDR_PRESENT_MODE="<<(sr?(injectFailure?"SR_WITH_FALLBACK":
             preparedFailure?"PREPARED_R32_WITH_FALLBACK":
+            ngxPlanOwned?"NGX_PLAN_OWNED_R32_SR":
             preparedR32?"PREPARED_R32_SR":ngxPlan?"NGX_PLAN_SR":"SR"):"DLAA")
             <<"\nSDR_PRESENT_RENDER="<<inputWidth<<"x"<<inputHeight
             <<"\nSDR_PRESENT_DISPLAY="<<width<<"x"<<height

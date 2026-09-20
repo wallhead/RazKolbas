@@ -205,6 +205,16 @@ Result<Extent> SdrDlssPresenter::prepareReducedPlan(ID3D11Device* device,
     preparedPlan_=RenderSizePlan{display,{width,height},true};
     return Extent{width,height};
 }
+Result<bool> SdrDlssPresenter::createReducedFeature(ID3D11Device* device,
+    ID3D11DeviceContext* context) {
+    if(!preparedPlan_)
+        return Error{ErrorCode::Conflict,"Reduced NGX plan must be prepared before feature creation"};
+    if(initialized_||preparedGeneration_)
+        return Error{ErrorCode::Conflict,"Reduced NGX feature is already active"};
+    return initialize(device,context,preparedPlan_->render.width,
+        preparedPlan_->render.height,preparedPlan_->display.width,
+        preparedPlan_->display.height,true);
+}
 Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     ID3D11DeviceContext* context,UINT width,UINT height,
     UINT displayWidth,UINT displayHeight,bool reduced) {

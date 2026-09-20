@@ -815,3 +815,38 @@ not start Skyrim. Actual-game NGX stability/appearance: **NOT RUN**. The next
 necessary action is a user-started menu and save-load test; inspect depth
 admission, NGX submissions, native output and any new crash. The assistant
 may close the game after collecting the result.
+
+## 0.1.41 loaded-world crash and isolated follow-up
+
+The user started Skyrim, loaded a save, and reported another crash. The
+0.1.41 log showed spatial output with zero NGX submissions through frame
+7200. At frame 7741 it recorded `distinct=97`, `nonFar=96`, and the depth
+gate's first `NGX-ready=true`; the log ends there. CrashLogger recorded a
+null-read access violation at the same `nvwgf2umx.dll+0x1B61A4` instruction
+as the three 0.1.39 crashes, on an NVIDIA worker thread. The log cannot yet
+distinguish feature creation, input preparation, evaluation, or asynchronous
+driver work on that first admitted frame. This run rejects the hypothesis
+that menu-like depth alone explains the crash; it does not establish that
+the converted world depth or motion guide semantics are correct. Skyrim had
+exited when checked. The assistant restored the 0.1.35 MO2 DLL and manifest
+from the verified pre-0.1.41 backup, checking all four payload hashes. The
+assistant did not start Skyrim.
+
+A WARP test bound the native-sized writable depth target during owned input
+preparation; the R32 crop preserved the expected depth pixels and restored
+the DSV. This rules out a persistent DSV/SRV conflict in that isolated path,
+not every game-context hazard. A standalone NVIDIA replay on the RTX 4080
+SUPER passed 30 frames at the exact 1707x960-to-2560x1440 NGX plan with
+native typeless depth. A second replay using the owned-scene helper, full-size
+guides, cropped R32 depth and the same extents also passed 30 frames with
+zero fallback. These synthetic-guide replays do not reproduce the live
+Skyrim/ENB/ReShade device and hook chain.
+
+The next source diagnostic separates live feature creation from evaluation:
+after valid depth it creates the NGX feature, displays spatial output for
+120 frames, then logs input preparation and the first evaluation boundary.
+It is instrumentation to locate the fault, not a demonstrated stability fix.
+The first Release build and all 35 CTest groups passed. After explicitly
+pre-creating the feature, the exact-size owned-R32 standalone replay passed
+30 frames with zero fallback. MO2 deployment and game runtime for this
+diagnostic are **NOT RUN** at this checkpoint.

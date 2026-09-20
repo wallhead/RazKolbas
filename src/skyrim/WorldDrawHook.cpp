@@ -82,6 +82,8 @@ struct WorldState {
     bool srRequested{};
     bool srDisabled{};
     WorldDepthGate ownedDepthGate;
+    std::uint64_t ownedNgxCreatedAt{};
+    bool ownedNgxInitFailed{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
     std::uint64_t srActiveGeneration{};
@@ -476,6 +478,31 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             [&]()->Result<bool> {
                 if(!state->ownedDepthGate.ready())
                     return Error{ErrorCode::Unavailable,"World depth has not passed the owned NGX admission gate"};
+                if(state->ownedNgxInitFailed)
+                    return Error{ErrorCode::Unavailable,"Owned NGX feature creation previously failed"};
+                if(!state->ownedNgxCreatedAt) {
+                    spdlog::info("Owned NGX stage frame {}: before feature creation",sequence);
+                    const auto initialized=state->srPresenter.createReducedFeature(device,context);
+                    if(const auto error=std::get_if<Error>(&initialized)) {
+                        state->ownedNgxInitFailed=true;
+                        spdlog::warn("Owned NGX stage frame {}: feature creation failed: {}",
+                            sequence,error->message);
+                        return *error;
+                    }
+                    if(!std::get<bool>(initialized)) {
+                        state->ownedNgxInitFailed=true;
+                        return Error{ErrorCode::Unavailable,"Owned NGX feature was not created"};
+                    }
+                    state->ownedNgxCreatedAt=sequence;
+                    spdlog::info("Owned NGX stage frame {}: feature created; waiting 120 frames before evaluation",
+                        sequence);
+                }
+                if(sequence<state->ownedNgxCreatedAt||
+                   sequence-state->ownedNgxCreatedAt<120)
+                    return Error{ErrorCode::Unavailable,"Owned NGX feature startup observation interval"};
+                const bool firstAttempt=state->srPresenter.submittedFrames()==0;
+                if(firstAttempt)
+                    spdlog::info("Owned NGX stage frame {}: preparing first evaluated inputs",sequence);
                 const std::array<ID3D11Texture2D*,3> sources{
                     scene,reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
                     reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
@@ -488,10 +515,15 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     domain->plan().render.width,domain->plan().render.height);
                 if(const auto error=std::get_if<Error>(&renderJitter))
                     return Error{ErrorCode::Unavailable,error->message};
+                if(firstAttempt)
+                    spdlog::info("Owned NGX stage frame {}: first inputs prepared; before evaluation",
+                        sequence);
                 auto evaluated=state->srPresenter.evaluatePrepared(device,context,
                     std::move(std::get<PreparedSrInputs>(prepared)),
                     SrFrameMetadata{sequence,domain->plan().generation,false},
                     std::get<NgxJitter>(renderJitter));
+                if(firstAttempt)
+                    spdlog::info("Owned NGX stage frame {}: first evaluation returned",sequence);
                 if(const auto error=std::get_if<Error>(&evaluated)) {
                     if(error->code==ErrorCode::DeviceRemoved)return *error;
                     return Error{ErrorCode::Unavailable,error->message};

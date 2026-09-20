@@ -40,6 +40,10 @@ public:
     // scene buffer is exposed to ENB/Skyrim.
     Result<Extent> prepareReducedPlan(ID3D11Device* device,
         ID3D11DeviceContext* context,Extent display);
+    // Separates feature creation from first-frame evaluation for a staged
+    // live diagnostic; uses only the dimensions of the verified NGX plan.
+    Result<bool> createReducedFeature(ID3D11Device* device,
+        ID3D11DeviceContext* context);
     Result<bool> render(ID3D11Device* device,ID3D11DeviceContext* context,
         ID3D11Texture2D* backbuffer,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
         NgxJitter jitter);
