@@ -195,3 +195,15 @@ the 768 bytes from `0xe44050` have SHA-256
 Raw code and disassembly remain ignored, not staged. A DRS transaction still
 requires a verified reduced scene source and post-world display/UI ownership
 before it can be activated.
+
+## Source-only render-size decision policy
+
+`RenderSizePolicy` now returns a native plan unless the requested extent is
+valid, no larger than the display, genuinely smaller, and both the owned
+world target and display-sized output/fallback path are declared ready.
+Its optional scissor conversion scales only the world domain using the
+verified x/y/width/height ABI; UI scissors remain native. Fractional world
+edges round outward for coverage and coordinates clamp before arithmetic.
+This is a pure decision function used by offline tests, not an installed
+DRS/scissor hook. The readiness booleans do not themselves establish target
+ownership. The installed 0.1.24 mod remains unchanged.

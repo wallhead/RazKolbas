@@ -1,0 +1,48 @@
+#include <catch2/catch_test_macros.hpp>
+#include "rk/RenderSizePolicy.hpp"
+
+TEST_CASE("Reduced world sizing requires both owned paths", "[render_size_policy]") {
+    const rk::Extent display{2560,1440}, render{1280,720};
+    auto native=rk::chooseRenderSize(display,render,false,true);
+    REQUIRE(native.valid());
+    REQUIRE_FALSE(native.reduced);
+    REQUIRE(native.render.width==2560);
+    REQUIRE_FALSE(rk::chooseRenderSize(display,render,true,false).reduced);
+    REQUIRE(rk::chooseRenderSize(display,render,true,true).reduced);
+    REQUIRE_FALSE(rk::chooseRenderSize(display,display,true,true).reduced);
+    REQUIRE_FALSE(rk::chooseRenderSize(display,{3000,720},true,true).reduced);
+    REQUIRE_FALSE(rk::chooseRenderSize(display,{0,720},true,true).reduced);
+}
+
+TEST_CASE("Only world scissors scale and fractional edges retain coverage", "[render_size_policy]") {
+    auto plan=rk::chooseRenderSize({2560,1440},{1280,720},true,true);
+    const rk::ScissorExtent source{3,5,101,103};
+    const auto world=rk::adaptScissor(plan,rk::RenderDomain::World,source);
+    REQUIRE(world.x==1);
+    REQUIRE(world.y==2);
+    REQUIRE(world.width==51);
+    REQUIRE(world.height==52);
+    const auto ui=rk::adaptScissor(plan,rk::RenderDomain::Ui,source);
+    REQUIRE(ui.x==source.x);
+    REQUIRE(ui.y==source.y);
+    REQUIRE(ui.width==source.width);
+    REQUIRE(ui.height==source.height);
+    const auto native=rk::adaptScissor(rk::chooseRenderSize({2560,1440},{1280,720},false,true),
+        rk::RenderDomain::World,source);
+    REQUIRE(native.x==source.x);
+    REQUIRE(native.width==source.width);
+}
+
+TEST_CASE("World scissors clamp without 32-bit overflow", "[render_size_policy]") {
+    auto plan=rk::chooseRenderSize({2560,1440},{1280,720},true,true);
+    const auto empty=rk::adaptScissor(plan,rk::RenderDomain::World,{3,5,0,0});
+    REQUIRE(empty.width==0);
+    REQUIRE(empty.height==0);
+    const auto edge=rk::adaptScissor(plan,rk::RenderDomain::World,{2559,1439,UINT32_MAX,UINT32_MAX});
+    REQUIRE(edge.x==1279);
+    REQUIRE(edge.y==719);
+    REQUIRE(edge.width==1);
+    REQUIRE(edge.height==1);
+    REQUIRE_FALSE(rk::chooseRenderSize({0,1440},{1280,720},true,true).valid());
+    REQUIRE_FALSE(rk::RenderSizePlan{{2560,1440},{3000,720},true}.valid());
+}

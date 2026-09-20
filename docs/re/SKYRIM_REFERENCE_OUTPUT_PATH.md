@@ -45,18 +45,53 @@ are relative to `SkyrimUpscaler.dll` unless explicitly called game RVAs.
    `+0x40` is RVA `0x1ea1d0`; the branch at `0x1ea231..0x1ea2a3` uses
    D3D11 `CopyResource` to move a proxy buffer into a selected buffer when
    its conditions require it, then calls the real swap chain's Present.
-   Another branch at `0x1ea2ad` performs further work before forwarding.
+   The branch at `0x1ea2ad` calls the substantial presentation helper
+   `0x201b70` before forwarding. That helper itself invokes SR wrapper
+   `0x1f4ca0` at `0x201f8e`. This is a second SR entry in the reference,
+   distinct from the post-world callback.
 
-This establishes **where this reference routes its SR result**, conditional
-on its proxy configuration. The exact pixels returned by each branch,
-pre/post-UI placement, ENB/ReShade order, and whether every branch reaches
-the real backbuffer are not established by static disassembly alone.
+## Render-sized proxy buffer and presentation pass
+
+The factory records the requested swap-chain extent at state `+0x24/+0x28`
+(`0x20319f..0x2031a9`). Unless its branch at `0x2031ac` forces scale 1,
+it multiplies those dimensions by the ratio at `+0x44` and truncates them
+into render extent `+0x2c/+0x30` (`0x2031d8..0x2031fd`). Both constructor
+paths pass that render extent to proxy constructor `0x1ea890`.
+
+Constructor `0x1ea890` sets proxy flags `+0x28=1`, `+0x29=0`, `+0x2a=1`
+and calls `0x1ea560`. The latter queries underlying swap buffers and creates
+proxy texture `+0x140` through `ID3D11Device::CreateTexture2D` at
+`0x1ea838..0x1ea84e`, replacing the descriptor's width/height with the
+passed render extent. `GetBuffer` at `0x1ea110..0x1ea177` returns `+0x140`
+with `AddRef` while flags `+0x2a` and `+0x28` remain set. The post-world
+callback supplies the same `+0x140` wrapper to `0x1f4ca0` at
+`0x156d92..0x156dab`; that wrapper calls D3D11 `CopyResource` from this
+source into its private input at `0x1f4d01..0x1f4d16`. Thus the reference
+has a concrete render-sized SDR texture in its own proxy path, rather than
+relying solely on Skyrim's display-sized backbuffer.
+
+In the proxy's `Present` method, the initial `+0x29=0` flag takes branch
+`0x1ea2ad`, which calls `0x201b70` before the real Present. The helper at
+`0x201ca1..0x201ccd` reads the indexed proxy target, and at
+`0x201d2a..0x201e1a` draws from proxy-owned resources using render
+dimensions. Its `0x201eac..0x201ee0` code computes render/display width
+and height ratios; `0x201f7d..0x201f8e` passes proxy `+0x140` to the same
+SR wrapper. No byte/word stores to these flags other than constructor/setup
+were identified in the proxy's `0x1e8000..0x1eb000` code range; a broader
+scan found other stores at the same offsets on unrelated objects, so this
+does **not** prove the flags never change at runtime.
+
+These facts support an owned reduced-buffer/proxy architecture as a possible
+source path for RazKolbas. They do not prove which pixel stages contain UI,
+how the reference composes the final full-size image, or compatibility with
+the existing ReShade/ENB swap-chain ownership. The tested RazKolbas path
+continues to use native 2560x1440 DLAA; reduced SR is not activated.
+
 The reference's private offsets are not a drop-in contract for RazKolbas.
-RazKolbas currently has a D3D11 creation/swap observer and an offscreen
-NGX result, but no owned presentation proxy or display write. Its 0.1.17
-runtime map found a distinct HDR world target and RGBA8 backbuffer; writing
-the RGBA16F DLAA output directly to that backbuffer would be the wrong
-format/colour pipeline.
+RazKolbas 0.1.24 has a D3D11 creation/swap observer and user-tested
+full-resolution SDR DLAA copyback before UI; it does not own a reduced
+presentation proxy. Its separate HDR world target cannot be copied directly
+to the RGBA8 display target without the game's colour conversion.
 
 ## Reproduction and next implementation question
 
@@ -67,10 +102,9 @@ outputs remain ignored under `artifacts/local/`. The independent Address
 Library decode is in `artifacts/local/skyrim-sr-hook-map.json` and its
 reproducible tool is `tools/re/map_skyrim_sr_hooks.py`.
 
-The next engineering question is which **RazKolbas-owned** target should
-receive an appropriately converted, display-sized SR image at the verified
-world/pre-UI boundary, with one presentation owner and a valid native
-fallback. The reference answers where its own proxy accepts a shader draw;
-it does not prove an existing writable native Skyrim backbuffer at that
-point. Trace the exact game stage and resource lifetime before adding a
-display write. No further unchanged menu-only run answers that question.
+The next engineering question is whether a **RazKolbas-owned** reduced SDR
+buffer can be substituted in the exact game/ENB/ReShade swap-chain chain
+without capturing UI at reduced resolution, while still delivering the
+display-sized SR or spatial fallback at the verified pre-UI boundary.
+The static reference proves its own allocation and routing, but not that
+compatibility contract. No further unchanged menu-only run answers it.
