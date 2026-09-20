@@ -37,4 +37,25 @@ The installed DLL SHA-256 is
 All four installed manifest payload hashes and all ZIP entries were checked.
 The user's INI and signed NVIDIA runtime retained their prior hashes. The
 prior DLL/manifest are backed up in ignored local artifacts; no reference
-host DLL, PDB or capture was packaged. The in-game result remains **NOT RUN**.
+host DLL, PDB or capture was packaged.
+
+## 0.1.23 user observation and 0.1.24 cursor fix
+
+The user started the installed 0.1.23 build. Its log recorded the End menu
+opening at 14:19:06 and toggling again at 14:22:50. World and Present counts
+matched through at least 37,200 with zero Present failures. The user confirmed
+the panel appeared, but its visible game cursor passed underneath and could
+not move the panel. During the menu test the log repeatedly sampled menu-like
+far-plane depth, so DLAA was not established for that session. Earlier 0.1.22
+DLAA results remain separate.
+
+The 0.1.23 panel polled `GetCursorPos` and mouse buttons for ImGui but left
+`ImGuiIO::MouseDrawCursor` at its default false. Skyrim's own drawn cursor is
+composited before the RazKolbas Present overlay, explaining why that cursor
+appears beneath the panel. The upstream community reference explicitly draws
+an ImGui cursor above its menu for the same Skyrim condition; no reference
+source was copied. Source 0.1.24 enables the ImGui cursor only while the panel
+is open and focused, resets the flag on close/focus loss, and logs a bounded
+sample of ImGui mouse position/button/capture state. The exact mouse-drag
+result is **NOT RUN** until the user starts the updated build. The code does
+not yet suppress Skyrim's own gameplay input while the panel is open.

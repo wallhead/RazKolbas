@@ -22,6 +22,7 @@ struct MenuState {
     float fontScale{1.0f};
     bool enabled{};
     bool visible{},endWasDown{},failed{};
+    std::uint64_t visibleFrames{};
 };
 MenuState& menu() {
     // The plugin and swap observer are pinned for the process lifetime.
@@ -114,11 +115,18 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         const bool endDown=focused&&(GetAsyncKeyState(state.hotkey)&0x8000)!=0;
         if(endDown&&!state.endWasDown) {
             state.visible=!state.visible;
+            state.visibleFrames=0;
             spdlog::info("Diagnostics menu {} by {} key",
                 state.visible?"opened":"closed",state.hotkeyName);
         }
         state.endWasDown=endDown;
-        if(!state.visible||!focused)return;
+        if(!state.visible||!focused) {
+            if(state.imgui) {
+                ImGui::SetCurrentContext(state.imgui);
+                ImGui::GetIO().MouseDrawCursor=false;
+            }
+            return;
+        }
         ComPtr<ID3D11Device> device;
         if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device)))||!device)return;
         ComPtr<ID3D11DeviceContext> context;
@@ -146,6 +154,9 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         ImGui::SetCurrentContext(state.imgui);
         auto& io=ImGui::GetIO();
         io.FontGlobalScale=state.fontScale;
+        // Skyrim's visible cursor is drawn by the game before this overlay.
+        // ImGui must draw its own cursor above the diagnostics window.
+        io.MouseDrawCursor=true;
         io.DisplaySize=ImVec2(static_cast<float>(backDesc.Width),
             static_cast<float>(backDesc.Height));
         const auto now=GetTickCount64();
@@ -158,6 +169,11 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         ImGui::NewFrame();
         drawStatus(snapshot,backDesc.Width,backDesc.Height,state.hotkeyName);
         ImGui::Render();
+        ++state.visibleFrames;
+        if(state.visibleFrames<=3||state.visibleFrames%600==0)
+            spdlog::info("Diagnostics mouse: frame={} pos=({:.0f},{:.0f}) left={} capture={}",
+                state.visibleFrames,io.MousePos.x,io.MousePos.y,io.MouseDown[0],
+                io.WantCaptureMouse);
         context->OMSetRenderTargets(1,target.GetAddressOf(),nullptr);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
     } catch(const std::exception& error) {
