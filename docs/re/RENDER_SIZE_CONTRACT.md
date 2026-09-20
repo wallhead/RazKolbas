@@ -35,6 +35,23 @@ win-release` passed all 22 CTest groups. This producer is not yet connected
 to Skyrim's reduced-render path; its test does not establish an in-game
 fallback or render-workload reduction.
 
+The continuous SDR presenter now has a separate Quality SR entry that takes
+render-sized scene colour/motion/depth and publishes a display-sized output
+to the active backbuffer. It validates the destination device, format,
+extent and active RTV before NGX submission, and keeps the existing DLAA mode
+unchanged. A standalone 30-frame replay on the selected NVIDIA adapter used
+synthetic 1280x720 colour/guides derived from the user capture's 2560x1440
+post-world SDR frame. It completed all 30 Quality SR submissions, copied
+2560x1440 output and retired cleanly; output SHA-256 was
+`867cce8ef853ab8329e0eb605d4f3c1960b6bab5874e7284ece2a9b051137bb2`.
+The same continuous path's 30-frame full-resolution DLAA regression passed
+with output SHA-256
+`8de9edf807257eb7efce05a646a05cdc6f09eeb3594c300b7fbd1cdc00fcb788`.
+Release `tools/Build.ps1 -Preset win-release` passed all 22 CTest groups.
+These results validate repeated NGX calls and destination copy in isolation;
+Skyrim still supplies no genuinely reduced scene to this path, and SR failure
+is not yet connected to the spatial fallback.
+
 ## Exact Skyrim AE 1.6.1170 address map
 
 The installed Address Library file SHA-256 is

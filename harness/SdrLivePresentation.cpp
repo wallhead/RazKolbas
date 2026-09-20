@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 #include <vector>
 #include <array>
 #include <cstring>
@@ -23,14 +24,26 @@ constexpr UINT width=2560,height=1440;
 void checked(HRESULT result,const char* step) { if(FAILED(result))stop(step); }
 }
 int wmain(int argc,wchar_t** argv) {
-    if(argc!=2) { std::cerr<<"Usage: RazKolbasSdrLivePresentation <stage-pair directory>\n";return 2; }
+    const bool sr=argc==3&&std::wstring_view(argv[1])==L"--sr";
+    if(argc!=2&&!sr) {
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr] <stage-pair directory>\n";
+        return 2;
+    }
     try {
-        const fs::path capture=fs::absolute(argv[1]);
+        const fs::path capture=fs::absolute(argv[sr?2:1]);
         const auto source=capture/L"post-world-backbuffer.raw";
         if(fs::file_size(source)!=static_cast<std::uint64_t>(width)*height*4)stop("SOURCE_SIZE");
         std::vector<std::uint8_t> scene(width*height*4);
         std::ifstream input(source,std::ios::binary);
         if(!input.read(reinterpret_cast<char*>(scene.data()),scene.size()))stop("SOURCE_READ");
+        const UINT inputWidth=sr?width/2:width,inputHeight=sr?height/2:height;
+        std::vector<std::uint8_t> reduced;
+        if(sr) {
+            reduced.resize(static_cast<std::size_t>(inputWidth)*inputHeight*4);
+            for(UINT y=0;y<inputHeight;++y)for(UINT x=0;x<inputWidth;++x)
+                std::memcpy(reduced.data()+(static_cast<std::size_t>(y)*inputWidth+x)*4,
+                    scene.data()+(static_cast<std::size_t>(y*2)*width+x*2)*4,4);
+        }
         ComPtr<IDXGIFactory6> factory;
         checked(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)),"FACTORY");
         ComPtr<IDXGIAdapter1> adapter;
@@ -59,15 +72,23 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ID3D11RenderTargetView> view;
         checked(device->CreateRenderTargetView(backbuffer.Get(),nullptr,&view),"RTV");
         context->OMSetRenderTargets(1,view.GetAddressOf(),nullptr);
-        std::vector<std::uint8_t> zero(width*height*4);
+        ComPtr<ID3D11Texture2D> sceneInput;
+        if(sr) {
+            auto sourceDesc=desc;sourceDesc.Width=inputWidth;sourceDesc.Height=inputHeight;
+            const D3D11_SUBRESOURCE_DATA reducedPixels{reduced.data(),inputWidth*4,0};
+            checked(device->CreateTexture2D(&sourceDesc,&reducedPixels,&sceneInput),"SCENE_INPUT");
+        }
+        std::vector<std::uint8_t> zero(static_cast<std::size_t>(inputWidth)*inputHeight*4);
         auto motionDesc=desc;motionDesc.Format=DXGI_FORMAT_R16G16_FLOAT;
+        motionDesc.Width=inputWidth;motionDesc.Height=inputHeight;
         motionDesc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
-        const D3D11_SUBRESOURCE_DATA zeros{zero.data(),width*4,0};
+        const D3D11_SUBRESOURCE_DATA zeros{zero.data(),inputWidth*4,0};
         ComPtr<ID3D11Texture2D> motion;
         checked(device->CreateTexture2D(&motionDesc,&zeros,&motion),"MOTION");
         auto depthDesc=desc;depthDesc.Format=DXGI_FORMAT_R24G8_TYPELESS;
+        depthDesc.Width=inputWidth;depthDesc.Height=inputHeight;
         depthDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
-        for(std::size_t i=0;i<static_cast<std::size_t>(width)*height;++i) {
+        for(std::size_t i=0;i<static_cast<std::size_t>(inputWidth)*inputHeight;++i) {
             const std::uint32_t value=0x00400000+static_cast<std::uint32_t>(i%4096);
             std::memcpy(zero.data()+i*4,&value,4);
         }
@@ -83,8 +104,12 @@ int wmain(int argc,wchar_t** argv) {
         const auto started=GetTickCount64();
         while(rendered<30) {
             context->UpdateSubresource(backbuffer.Get(),0,nullptr,scene.data(),width*4,0);
-            const auto result=presenter.render(device.Get(),context.Get(),backbuffer.Get(),
-                motion.Get(),depth.Get(),observedGameCycle[rendered%observedGameCycle.size()]);
+            if(sr)context->UpdateSubresource(sceneInput.Get(),0,nullptr,reduced.data(),inputWidth*4,0);
+            const auto result=sr?
+                presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),motion.Get(),
+                    depth.Get(),backbuffer.Get(),observedGameCycle[rendered%observedGameCycle.size()]):
+                presenter.render(device.Get(),context.Get(),backbuffer.Get(),motion.Get(),
+                    depth.Get(),observedGameCycle[rendered%observedGameCycle.size()]);
             if(const auto error=std::get_if<rk::Error>(&result))stop(error->message);
             if(std::get<bool>(result))++rendered;
             context->Flush();
@@ -106,7 +131,10 @@ int wmain(int argc,wchar_t** argv) {
             if(GetTickCount64()>deadline)stop("SHUTDOWN_TIMEOUT");
             Sleep(1);
         }
-        std::cout<<"SDR_PRESENT_FRAMES="<<rendered<<"\nSDR_PRESENT_SHA256="<<hash
+        std::cout<<"SDR_PRESENT_MODE="<<(sr?"SR":"DLAA")
+            <<"\nSDR_PRESENT_RENDER="<<inputWidth<<"x"<<inputHeight
+            <<"\nSDR_PRESENT_DISPLAY="<<width<<"x"<<height
+            <<"\nSDR_PRESENT_FRAMES="<<rendered<<"\nSDR_PRESENT_SHA256="<<hash
             <<"\nSDR_PRESENT_REPLAY=PASS"<<std::endl;
         return 0;
     } catch(const std::exception& error) { stop(error.what()); }

@@ -61,7 +61,8 @@ Result<bool> validateSources(ID3D11Device* device,ID3D11Texture2D* color,
 }
 }
 Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
-    ID3D11DeviceContext* context,UINT width,UINT height) {
+    ID3D11DeviceContext* context,UINT width,UINT height,
+    UINT displayWidth,UINT displayHeight,bool reduced) {
     const auto folder=moduleDirectory();
     if(folder.empty())return Error{ErrorCode::Unavailable,"Cannot locate RazKolbas module"};
     const auto runtimeDir=folder/L"RazKolbasRuntime";
@@ -87,7 +88,8 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     const wchar_t* paths[]={runtimeDir.c_str()};
     NVSDK_NGX_FeatureCommonInfo info{};info.PathListInfo={paths,1};
     if(!success(NVSDK_NGX_D3D11_Init_with_ProjectID("b3340e44-a57e-4b98-9318-d7150829d110",
-        NVSDK_NGX_ENGINE_TYPE_CUSTOM,"RazKolbas-SDR-DLAA-1",dataPath.c_str(),device,&info)))
+        NVSDK_NGX_ENGINE_TYPE_CUSTOM,reduced?"RazKolbas-SDR-SR-1":"RazKolbas-SDR-DLAA-1",
+        dataPath.c_str(),device,&info)))
         return Error{ErrorCode::Unavailable,"NVIDIA NGX SDR init failed"};
     if(!success(NVSDK_NGX_D3D11_GetCapabilityParameters(&parameters_))||!parameters_)
         return Error{ErrorCode::Unavailable,"NVIDIA NGX SDR parameters unavailable"};
@@ -95,9 +97,11 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     if(!success(parameters_->Get(NVSDK_NGX_Parameter_SuperSampling_Available,&available))||!available)
         return Error{ErrorCode::Unsupported,"NVIDIA DLSS unavailable for SDR session"};
     NVSDK_NGX_DLSS_Create_Params create{};
-    create.Feature.InWidth=create.Feature.InTargetWidth=width;
-    create.Feature.InHeight=create.Feature.InTargetHeight=height;
-    create.Feature.InPerfQualityValue=NVSDK_NGX_PerfQuality_Value_DLAA;
+    create.Feature.InWidth=width;create.Feature.InHeight=height;
+    create.Feature.InTargetWidth=displayWidth;
+    create.Feature.InTargetHeight=displayHeight;
+    create.Feature.InPerfQualityValue=reduced?NVSDK_NGX_PerfQuality_Value_MaxQuality:
+        NVSDK_NGX_PerfQuality_Value_DLAA;
     create.InFeatureCreateFlags=NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
     if(!success(NGX_D3D11_CREATE_DLSS_EXT(context,&feature_,parameters_,&create))||!feature_)
@@ -108,32 +112,65 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     if(!length||length>=32768)
         return Error{ErrorCode::Conflict,"Cannot identify loaded NVIDIA SR runtime"};
     if(const auto checked=exactRuntime(loadedName);const auto error=std::get_if<Error>(&checked))return *error;
-    device_=device;width_=width;height_=height;initialized_=true;
+    device_=device;width_=width;height_=height;
+    displayWidth_=displayWidth;displayHeight_=displayHeight;
+    reduced_=reduced;initialized_=true;
     return true;
 }
 Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
     ID3D11DeviceContext* context,ID3D11Texture2D* backbuffer,
     ID3D11Texture2D* motion,ID3D11Texture2D* depth,NgxJitter jitter) {
+    return renderFrame(device,context,backbuffer,motion,depth,backbuffer,jitter,false);
+}
+Result<bool> SdrDlssPresenter::renderSr(ID3D11Device* device,
+    ID3D11DeviceContext* context,ID3D11Texture2D* scene,
+    ID3D11Texture2D* motion,ID3D11Texture2D* depth,
+    ID3D11Texture2D* backbuffer,NgxJitter jitter) {
+    return renderFrame(device,context,scene,motion,depth,backbuffer,jitter,true);
+}
+Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
+    ID3D11DeviceContext* context,ID3D11Texture2D* scene,
+    ID3D11Texture2D* motion,ID3D11Texture2D* depth,
+    ID3D11Texture2D* backbuffer,NgxJitter jitter,bool reduced) {
     if(!std::isfinite(jitter.x)||!std::isfinite(jitter.y)||
        std::abs(jitter.x)>0.5001f||std::abs(jitter.y)>0.5001f)
-        return Error{ErrorCode::InvalidInput,"SDR DLAA jitter is invalid"};
-    if(!device||!context||!backbuffer||!motion||!depth||
+        return Error{ErrorCode::InvalidInput,"SDR DLSS jitter is invalid"};
+    if(!device||!context||!scene||!backbuffer||!motion||!depth||
        context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
-        return Error{ErrorCode::InvalidInput,"SDR DLAA needs device/context and scene guides"};
+        return Error{ErrorCode::InvalidInput,"SDR DLSS needs device/context and scene guides"};
     Microsoft::WRL::ComPtr<ID3D11Device> contextDevice;
     context->GetDevice(&contextDevice);
     if(!contextDevice||identity(contextDevice.Get()).Get()!=identity(device).Get()||
        (initialized_&&identity(device_.Get()).Get()!=identity(device).Get()))
-        return Error{ErrorCode::Conflict,"SDR DLAA device identity differs"};
+        return Error{ErrorCode::Conflict,"SDR DLSS device identity differs"};
     D3D11_TEXTURE2D_DESC back{};backbuffer->GetDesc(&back);
-    if(!back.Width||!back.Height||back.Width>8192||back.Height>8192)
-        return Error{ErrorCode::InvalidInput,"SDR DLAA target extent is invalid"};
-    if(initialized_&&(back.Width!=width_||back.Height!=height_))
-        return Error{ErrorCode::Unsupported,"SDR DLAA display extent changed"};
-    if(const auto valid=validateSources(device,backbuffer,motion,depth,back.Width,back.Height);
+    D3D11_TEXTURE2D_DESC input{};scene->GetDesc(&input);
+    Microsoft::WRL::ComPtr<ID3D11Device> backOwner;
+    backbuffer->GetDevice(&backOwner);
+    if(!backOwner||identity(backOwner.Get()).Get()!=identity(device).Get())
+        return Error{ErrorCode::Conflict,"SDR DLSS destination belongs to another device"};
+    if(!back.Width||!back.Height||back.Width>8192||back.Height>8192||
+       !input.Width||!input.Height||input.Width>back.Width||input.Height>back.Height||
+       (reduced?input.Width==back.Width&&input.Height==back.Height:
+            input.Width!=back.Width||input.Height!=back.Height)||
+       back.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||back.SampleDesc.Count!=1||
+       back.MipLevels!=1||back.ArraySize!=1||back.Usage!=D3D11_USAGE_DEFAULT||
+       !(back.BindFlags&D3D11_BIND_RENDER_TARGET))
+        return Error{ErrorCode::InvalidInput,"SDR DLSS render/display extents or target format differ"};
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> activeView;
+    Microsoft::WRL::ComPtr<ID3D11Resource> activeTarget;
+    context->OMGetRenderTargets(1,activeView.GetAddressOf(),nullptr);
+    if(activeView)activeView->GetResource(&activeTarget);
+    if(!activeTarget||identity(activeTarget.Get()).Get()!=identity(backbuffer).Get())
+        return Error{ErrorCode::Conflict,"SDR DLSS destination is not active RTV0"};
+    if(initialized_&&(input.Width!=width_||input.Height!=height_||
+       back.Width!=displayWidth_||back.Height!=displayHeight_||reduced!=reduced_))
+        return Error{ErrorCode::Unsupported,"SDR DLSS mode or extent changed"};
+    if(const auto valid=validateSources(device,scene,motion,depth,input.Width,input.Height);
        const auto error=std::get_if<Error>(&valid))return *error;
     if(!initialized_) {
-        const auto ready=initialize(device,context,back.Width,back.Height);
+        const auto ready=initialize(device,context,input.Width,input.Height,
+            back.Width,back.Height,reduced);
         if(const auto error=std::get_if<Error>(&ready))return *error;
     }
     auto& slot=slots_[nextSlot_++%slots_.size()];
@@ -142,19 +179,20 @@ Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
             D3D11_ASYNC_GETDATA_DONOTFLUSH);
         if(done==S_FALSE)return false;
         if(FAILED(done)||FAILED(device->GetDeviceRemovedReason()))
-            return Error{ErrorCode::DeviceRemoved,"SDR DLAA frame retirement failed"};
+            return Error{ErrorCode::DeviceRemoved,"SDR DLSS frame retirement failed"};
         slot.inFlight=false;
     }
     if(!slot.frame) {
-        const std::array<ID3D11Texture2D*,3> sources{backbuffer,motion,depth};
-        auto prepared=prepareSdrSrInputs(context,sources);
+        const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
+        auto prepared=reduced?prepareSdrSrInputsForDisplay(context,sources,
+            back.Width,back.Height):prepareSdrSrInputs(context,sources);
         if(const auto error=std::get_if<Error>(&prepared))return *error;
         slot.frame.emplace(std::move(std::get<PreparedSrInputs>(prepared)));
         const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
         if(FAILED(device->CreateQuery(&query,&slot.completion)))
-            return Error{ErrorCode::Unavailable,"SDR DLAA completion query unavailable"};
+            return Error{ErrorCode::Unavailable,"SDR DLSS completion query unavailable"};
     } else {
-        context->CopyResource(slot.frame->color(),backbuffer);
+        context->CopyResource(slot.frame->color(),scene);
         context->CopyResource(slot.frame->motion(),motion);
         context->CopyResource(slot.frame->depth(),depth);
     }
@@ -174,7 +212,7 @@ Result<bool> SdrDlssPresenter::render(ID3D11Device* device,
     eval.InMVScaleY=static_cast<float>(height_);
     eval.InPreExposure=eval.InExposureScale=1.0f;
     if(!success(NGX_D3D11_EVALUATE_DLSS_EXT(context,feature_,parameters_,&eval)))
-        return Error{ErrorCode::Unavailable,"NVIDIA SDR DLAA evaluation failed"};
+        return Error{ErrorCode::Unavailable,"NVIDIA SDR DLSS evaluation failed"};
     scope.reset();
     const auto copied=copySdrDisplayFrame(context,backbuffer,slot.frame->output());
     if(const auto error=std::get_if<Error>(&copied))return *error;
@@ -217,7 +255,8 @@ Result<bool> SdrDlssPresenter::stop(ID3D11DeviceContext* context) {
     }
     device_.Reset();
     CloseHandle(runtimeFile_);runtimeFile_=INVALID_HANDLE_VALUE;
-    width_=height_=0;initialized_=false;
+    width_=height_=displayWidth_=displayHeight_=0;
+    reduced_=false;initialized_=false;
     return true;
 }
 }
