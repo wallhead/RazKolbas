@@ -236,7 +236,7 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto mapped=snapshotModule(game,profile.imageSize);
         const auto checked=validateCreationImport(mapped,identity.hash,identity.size,profile);
         if (const auto error=std::get_if<Error>(&checked)) return *error;
-        armFrameProbe(game,settings);
+        armFrameProbe(game,identity.hash,settings);
         auto** slot=reinterpret_cast<void**>(reinterpret_cast<std::uint8_t*>(game)+std::get<std::uint32_t>(checked));
         // Read without writing the IAT page. CAS in PointerPatch revalidates the
         // prior owner atomically after all identity/ABI checks are complete.

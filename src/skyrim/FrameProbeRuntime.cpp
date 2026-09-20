@@ -2,6 +2,8 @@
 #include "rk/FrameProbe.hpp"
 #include "rk/CaptureTrigger.hpp"
 #include "rk/PatchDescriptor.hpp"
+#include "rk/CallSite.hpp"
+#include "rk/RendererHook.hpp"
 #include <ShlObj.h>
 #include <wrl/client.h>
 #include <spdlog/spdlog.h>
@@ -22,7 +24,7 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied=0;
     return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),destination,size,&copied)&&copied==size;
 }
-void logReferenceSites(std::uintptr_t base) {
+void logReferenceSites(std::uintptr_t base,std::string_view verifiedGameHash) {
     // RVA/addends were recovered from the exact supplied SkyrimUpscaler.dll
     // and the exact Skyrim 1.6.1170 Address Library. Read-only: other mods may
     // already own these instructions. No signature or hook claim is made here.
@@ -45,6 +47,19 @@ void logReferenceSites(std::uintptr_t base) {
         }
         spdlog::info("Reference site observed: {} RVA=0x{:x} live16={}; read-only, owner/ABI not yet established",
             site.name,site.rva,hex.data());
+        if(site.rva==0xfa507a) {
+            const auto& game=skyrim1170CreationProfile();
+            const CallSiteDescriptor descriptor{"skyrim1170.world-draw.sr-v1",
+                std::string(game.gameSha256),game.imageSize,0xfa507a,0xe44850,
+                {0xe8,0xd1,0xf7,0xe9,0xff}};
+            const auto prepared=prepareCallSite(bytes,verifiedGameHash,game.imageSize,descriptor);
+            if(const auto* plan=std::get_if<CallSitePlan>(&prepared))
+                spdlog::info("Reference world-draw CALL contract verified: site RVA=0x{:x}; original target RVA=0x{:x}; no patch installed",
+                    plan->siteRva,plan->originalTargetRva);
+            else
+                spdlog::warn("Reference world-draw CALL contract rejected: {}; no patch installed",
+                    std::get<Error>(prepared).message);
+        }
     }
 }
 std::filesystem::path captureDirectory() {
@@ -58,7 +73,7 @@ std::filesystem::path captureDirectory() {
     return directory;
 }
 }
-void armFrameProbe(HMODULE verifiedGame,const Settings& settings) {
+void armFrameProbe(HMODULE verifiedGame,std::string_view verifiedGameHash,const Settings& settings) {
     const auto base=reinterpret_cast<std::uintptr_t>(verifiedGame);
     if(settings.get<Choice>("Diagnostics.CaptureHotkey").value!="CtrlShiftF10") {
         spdlog::info("Candidate capture disabled: Diagnostics.CaptureHotkey=Off; no automatic startup capture");return;
@@ -71,7 +86,7 @@ void armFrameProbe(HMODULE verifiedGame,const Settings& settings) {
        !read(base+0xe44570,actual.data(),actual.size())||actual!=unlock) {
         spdlog::warn("Candidate probe disabled: live renderer lock layout signature differs");return;
     }
-    logReferenceSites(base);
+    logReferenceSites(base,verifiedGameHash);
     gameBase.store(base,std::memory_order_release);
     spdlog::info("Candidate capture armed: Ctrl+Shift+F10 while Skyrim has focus; release between requests; 5s cooldown; six requests/session; 64MiB/bundle; no automatic capture; requires renderer lock ownership");
 }
@@ -136,7 +151,7 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.8 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.9 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"trigger=CtrlShiftF10 request="<<trigger.requests()<<" captureTickMs="<<now<<" attempt="<<attempts<<"\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);

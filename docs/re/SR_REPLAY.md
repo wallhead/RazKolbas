@@ -151,3 +151,18 @@ The user launched a second run at 00:47:26; its three site bytes were identical
 and it continued past 9,000 observed presentations without a RazKolbas error.
 Cause of the first-run crash is unresolved; the read-only site log and crash
 are separate evidence.
+
+## 0.1.9 owned call-site preparation
+
+`src/patch/CallSite.cpp` now turns that observed world-draw `CALL` into a
+versioned, read-only plan. It requires the independently verified game-file
+hash, exact image size and all five live instruction bytes, then decodes the
+signed relative operand and requires target RVA `0xe44850`. Any changed
+owner/bytes, target, identity or out-of-image location rejects the plan.
+The startup observer logs success or the rejection reason; it never rewrites
+this engine instruction. Unit regressions use the real 1.6.1170 bytes and
+failure cases, and both Debug and Release passed all 15 CTest groups. The
+next engineering step is a quiescent, lifetime-safe pass-through call-site
+detour with verified forwarding ABI, followed by attaching owned resource
+preparation and direct NGX evaluation. Neither pass-through detour nor
+in-game SR is claimed by this checkpoint.
