@@ -48,18 +48,20 @@ three-byte `mov r9,r14` at `0xe58be3`. This blocks transplanting the
 reference's patch sites into this executable. No camera/jitter patch was
 installed; exact runtime ownership and ABIs remain to be established.
 
-The decoded game code also suggests a narrower independent route. The valid
+The decoded game code suggests a narrower independent route. The valid
 Renderer Begin CALL invokes game routine `0xe58a10`, whose gated eight-phase
 path writes its own normalized jitter to the camera object's `+0x44/+0x48`.
-The separate game camera-builder function starts at `0xe58b80`; its branch
-at `0xe58d55` reads `+0x44/+0x48` when the game gate is enabled. An
-original-first observer at the verified Renderer Begin CALL could therefore
-read the jitter Skyrim actually applied and carry that sample toward the
-same frame's NGX evaluation without patching the incompatible camera site.
-This is an inference from code flow, not an implemented or runtime-tested
-hook. The camera object's identity, sample lifetime, frame pairing, units,
-and interaction with Skyrim TAA still require verification before changing
-NGX jitter or TAA behavior.
+The caller's `lea rcx` at `0xe44664` resolves to game RVA `0x328cc20`. The
+separate camera-builder function starts at `0xe58b80`; its branch at
+`0xe58d55` reads `+0x44/+0x48` when the game gate is enabled. RazKolbas can
+sample that exact camera object from its existing post-world callback without
+installing another patch. Source 0.1.21 now does a bounded read after the
+original world call on early and periodic frames, gated by the exact caller,
+CALL and target bytes. It logs the object's dimensions and projection offsets
+only; it does not change NGX jitter or Skyrim TAA. The source build and local
+tests pass, but this observation has not yet run in the game. Sample lifetime,
+frame pairing, units, and interaction with Skyrim TAA still require runtime
+verification before changing NGX inputs.
 
 At `0x157190`, the reference callback first calls its retained original
 target, then `PDPerfPlugin!GetJitterPhaseCount` and `GetJitterOffset`. It

@@ -16,6 +16,7 @@
 #include <ShlObj.h>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -30,6 +31,7 @@ struct WorldState {
     WorldDrawForwarder forwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::uintptr_t expectedRenderer{};
+    std::uintptr_t jitterCamera{};
     std::atomic_flag creationBound=ATOMIC_FLAG_INIT;
     std::atomic<std::uintptr_t> createdDevice{0},createdContext{0},createdSwap{0};
     enum class CopyStatus { NotAttempted, Pending, Complete, Failed };
@@ -59,6 +61,7 @@ struct WorldState {
 #endif
 };
 std::atomic<WorldState*> active{nullptr};
+bool read(std::uintptr_t address,void* destination,std::size_t size);
 struct WorldNumbers {
     std::uintptr_t device{},context{},swap{},colour{},motion{},depth{},lockOwner{};
     std::int32_t lockRecursion{};
@@ -325,6 +328,23 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     const bool sample=sequence<=3||sequence%600==0;
     const auto before=sample?readWorldNumbers(world,state->expectedRenderer):WorldNumbers{};
     state->forwarder.dispatch(world,flags);
+    if((sequence<=12||sequence%600==0)&&state->jitterCamera) {
+        std::array<std::uint8_t,0x4c> camera{};
+        if(read(state->jitterCamera,camera.data(),camera.size())) {
+            std::uint32_t width{},height{};
+            float jitterX{},jitterY{};
+            std::memcpy(&width,camera.data()+0x24,sizeof(width));
+            std::memcpy(&height,camera.data()+0x28,sizeof(height));
+            std::memcpy(&jitterX,camera.data()+0x44,sizeof(jitterX));
+            std::memcpy(&jitterY,camera.data()+0x48,sizeof(jitterY));
+            if(width&&height&&width<=8192&&height<=8192&&
+               std::isfinite(jitterX)&&std::isfinite(jitterY)&&
+               std::abs(jitterX)<=2.0f&&std::abs(jitterY)<=2.0f)
+                try { spdlog::info("World jitter observation: frame={} thread={} camera=0x{:x} extent={}x{} projection=({},{}); read-only; NGX jitter unchanged",
+                    sequence,GetCurrentThreadId(),state->jitterCamera,width,height,jitterX,jitterY); } catch(...) {}
+            else try { spdlog::warn("World jitter observation rejected: invalid camera dimensions or offsets; frame={}; NGX jitter unchanged",sequence); } catch(...) {}
+        } else try { spdlog::warn("World jitter observation unavailable: camera read failed; frame={}; NGX jitter unchanged",sequence); } catch(...) {}
+    }
     if(const auto status=state->copyStatus.load(std::memory_order_acquire);
        status==WorldState::CopyStatus::NotAttempted||status==WorldState::CopyStatus::Pending)
         copyWorldInputsOnce(state,readWorldNumbers(world,state->expectedRenderer));
@@ -566,6 +586,22 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     const auto& plan=std::get<CallSitePlan>(planned);
     auto pending=std::make_unique<WorldState>();
     pending->expectedRenderer=base+renderer1170Rva;
+    constexpr std::array<std::uint8_t,7> cameraLoad{0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02};
+    constexpr std::array<std::uint8_t,5> jitterCall{0xe8,0x99,0x43,0x01,0x00};
+    constexpr std::array<std::uint8_t,17> jitterEntry{
+        0x48,0x8b,0x05,0x89,0x1c,0x4d,0x02,0x0f,0x57,0xc0,
+        0x48,0x8b,0x90,0xf0,0x01,0x00,0x00};
+    std::array<std::uint8_t,7> liveCameraLoad{};
+    std::array<std::uint8_t,5> liveJitterCall{};
+    std::array<std::uint8_t,17> liveJitterEntry{};
+    if(read(base+0xe44664,liveCameraLoad.data(),liveCameraLoad.size())&&
+       read(base+0xe44672,liveJitterCall.data(),liveJitterCall.size())&&
+       read(base+0xe58a10,liveJitterEntry.data(),liveJitterEntry.size())&&
+       liveCameraLoad==cameraLoad&&liveJitterCall==jitterCall&&
+       liveJitterEntry==jitterEntry) {
+        pending->jitterCamera=base+0x328cc20;
+        spdlog::info("Read-only Skyrim camera jitter observation armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; NGX jitter unchanged");
+    } else spdlog::warn("Read-only Skyrim camera jitter observation unavailable: caller/CALL/target bytes differ; NGX jitter unchanged");
     const auto configured=pending->forwarder.configure(
         reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);
     if(const auto error=std::get_if<Error>(&configured))return *error;
