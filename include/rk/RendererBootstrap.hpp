@@ -13,4 +13,10 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
     OwnedSceneDomain& domain,ID3D11Texture2D* reducedScene,
     ID3D11RenderTargetView* nativeTarget,std::string_view disabledPatchIds);
 NativeUiRedirector* ownedUiRedirector() noexcept;
+// The verified Renderer::Begin CALL is installed pass-through at startup.
+// Logical reduction is enabled only after the complete owned scene route is
+// prepared at the device-creation boundary.
+Result<bool> installOwnedRendererRectHook(HMODULE game,
+    std::string_view verifiedGameHash,const Settings& settings);
+Result<bool> activateOwnedRendererRect(OwnedSceneDomain& domain,HWND gameWindow);
 }

@@ -11,6 +11,8 @@
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/OwnedSwapBufferRoute.hpp"
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/RendererLogicalSize.hpp"
+#include "rk/RipCall6.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -60,6 +62,27 @@ struct UiHookLease {
 };
 std::atomic<UiHookLease*> uiHook{nullptr};
 std::mutex uiInstallMutex;
+struct RectHookLease {
+    RendererLogicalSize::Prior prior{};
+    std::unique_ptr<NearRipCall6Cell> cell;
+    std::atomic<RendererLogicalSize*> logical{nullptr};
+    OwnedSceneDomain* domain{};
+    HWND gameWindow{};
+};
+std::atomic<RectHookLease*> rectHook{nullptr};
+BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
+    auto* state=rectHook.load(std::memory_order_acquire);
+    if(!state||!state->prior)return FALSE;
+    auto* logical=state->logical.load(std::memory_order_acquire);
+    if(!logical||window!=state->gameWindow)return state->prior(window,rect);
+    auto& domain=*state->domain;
+    const auto phase=domain.phase();
+    if(phase==ScenePhase::Dormant||phase==ScenePhase::NativeUi) {
+        const auto frame=worldDrawForwardedCalls()+1;
+        domain.begin(frame,domain.plan().generation,GetCurrentThreadId());
+    }
+    return logical->query(window,rect);
+}
 void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
     auto* state=uiHook.load(std::memory_order_acquire);
@@ -550,6 +573,78 @@ NativeUiRedirector* ownedUiRedirector() noexcept {
     auto* state=uiHook.load(std::memory_order_acquire);
     return state&&state->armed.load(std::memory_order_acquire)?&state->redirect:nullptr;
 }
+Result<bool> installOwnedRendererRectHook(HMODULE game,
+    std::string_view verifiedGameHash,const Settings& settings) {
+    constexpr std::string_view id="skyrim1170.renderer-client-rect-v1";
+    if(!settings.get<bool>("General.Enabled")||
+       settings.get<bool>("General.SafeMode")||
+       !settings.get<bool>("Patching.EnableVersionedPatches")||
+       !settings.get<bool>("Patching.ExperimentalPatches")||
+       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,id))return false;
+    if(rectHook.load(std::memory_order_acquire))return true;
+    const auto& profile=skyrim1170CreationProfile();
+    if(!game||verifiedGameHash!=profile.gameSha256)
+        return Error{ErrorCode::Unsupported,"Renderer rectangle executable identity differs"};
+    const RipCall6Descriptor descriptor{std::string(id),std::string(profile.gameSha256),
+        profile.imageSize,0xe4471b,0x174f928,{0xff,0x15,0x07,0xb2,0x90,0x00}};
+    const auto base=reinterpret_cast<std::uintptr_t>(game);
+    auto readExact=[](std::uintptr_t address,void* out,std::size_t size) {
+        SIZE_T copied{};
+        return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),
+            out,size,&copied)&&copied==size;
+    };
+    std::array<std::uint8_t,73> caller{};
+    std::array<std::uint8_t,6> instruction{};
+    void* prior{};
+    if(!readExact(base+0xe446d8,caller.data(),caller.size())||
+       !readExact(base+descriptor.siteRva,instruction.data(),instruction.size())||
+       !readExact(base+descriptor.originalCellRva,&prior,sizeof(prior)))
+        return Error{ErrorCode::Io,"Cannot read verified renderer rectangle CALL"};
+    if(const auto abi=verifySkyrim1170ClientRectAbi(caller);
+       const auto error=std::get_if<Error>(&abi))return *error;
+    const auto planned=prepareRipCall6(instruction,verifiedGameHash,
+        profile.imageSize,descriptor);
+    if(const auto error=std::get_if<Error>(&planned))return *error;
+    const auto user32=GetModuleHandleW(L"user32.dll");
+    if(!user32||prior!=reinterpret_cast<void*>(GetProcAddress(user32,"GetClientRect")))
+        return Error{ErrorCode::Conflict,"Renderer rectangle import no longer targets User32 GetClientRect"};
+    const auto& plan=std::get<RipCall6Plan>(planned);
+    auto prepared=prepareNearRipCall6Cell(plan,base,
+        reinterpret_cast<std::uintptr_t>(&rendererRectProxy));
+    if(const auto error=std::get_if<Error>(&prepared))return *error;
+    auto pending=std::make_unique<RectHookLease>();
+    pending->prior=reinterpret_cast<RendererLogicalSize::Prior>(prior);
+    pending->cell=std::make_unique<NearRipCall6Cell>(
+        std::move(std::get<NearRipCall6Cell>(prepared)));
+    HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
+    constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&rendererRectProxy),&pinnedSelf)||
+       !GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(prior),&pinnedOwner))
+        return Error{ErrorCode::Unavailable,"Cannot pin renderer rectangle callback chain"};
+    auto* published=pending.release();
+    rectHook.store(published,std::memory_order_release);
+    const auto applied=applyRipCall6(plan,base,*published->cell,
+        CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+    if(const auto error=std::get_if<Error>(&applied)) {
+        rectHook.store(nullptr,std::memory_order_release);
+        delete published;
+        return *error;
+    }
+    spdlog::info("Installed {} at RVA 0x{:x}; User32 forwarding until owned scene activation",
+        id,descriptor.siteRva);
+    return true;
+}
+Result<bool> activateOwnedRendererRect(OwnedSceneDomain& domain,HWND gameWindow) {
+    auto* state=rectHook.load(std::memory_order_acquire);
+    if(!state||!gameWindow||!domain.plan().valid())
+        return Error{ErrorCode::InvalidInput,"Owned renderer rectangle is not ready"};
+    if(state->logical.load(std::memory_order_acquire))return false;
+    auto logical=std::make_unique<RendererLogicalSize>(domain,state->prior,
+        gameWindow,GetCurrentThreadId());
+    state->domain=&domain;state->gameWindow=gameWindow;
+    state->logical.store(logical.release(),std::memory_order_release);
+    return true;
+}
 bool rendererObserverArmed() noexcept {
     const auto* state=lease.load(std::memory_order_acquire);
     return state && state->armed.load();
@@ -608,6 +703,10 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto world=installWorldDrawPassThrough(game,identity.hash,settings);
         if(const auto error=std::get_if<Error>(&world))
             spdlog::warn("World-draw pass-through not installed: {}",error->message);
+        const auto rect=installOwnedRendererRectHook(game,identity.hash,settings);
+        if(const auto error=std::get_if<Error>(&rect))
+            spdlog::warn("Owned renderer rectangle pass-through not installed: {}",
+                error->message);
         const auto drs=installDrsProbe(game,identity.hash,settings);
         if(const auto error=std::get_if<Error>(&drs))
             spdlog::warn("Experimental DRS probe not installed: {}",error->message);

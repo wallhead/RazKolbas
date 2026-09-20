@@ -537,3 +537,12 @@ the downstream chain, and leaves hooks pass-through until fully installed;
 the redirector itself remains dormant outside a published native-UI phase.
 The Release DLL builds. No caller activates this installer yet, and neither
 slot was modified in the installed 0.1.35 game build.
+
+The exact Skyrim `Renderer::Begin` `GetClientRect` call at RVA `0xE4471B`
+now has a source-level pass-through installer for the next candidate build.
+It checks the executable hash, 73-byte decoded caller, six original CALL
+bytes and User32 import pointer; `applyRipCall6` then targets a dedicated
+nearby read-only callback cell at the SKSE startup boundary. The callback
+continues to return the native rectangle until the complete owned route is
+activated. Its patch contract and the ENB UI slot contract are recorded in
+`patches/skyrim/`. The Release DLL builds; neither hook has run in Skyrim.

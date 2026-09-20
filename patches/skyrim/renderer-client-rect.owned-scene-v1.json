@@ -1,0 +1,27 @@
+{
+  "id": "skyrim1170.renderer-client-rect-v1",
+  "status": "SOURCE_PREPARED_RUNTIME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "Supply the verified world renderer a reduced logical client rectangle only after an owned reduced scene and native UI route are prepared",
+  "target": {
+    "module": "SkyrimSE.exe",
+    "architecture": "x64",
+    "version": "1.6.1170.0",
+    "sha256": "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+    "file_size": 37157144,
+    "image_size": "0x3870000"
+  },
+  "location": {
+    "call_rva": "0xE4471B",
+    "original_import_cell_rva": "0x174F928",
+    "original_import": "USER32.dll!GetClientRect"
+  },
+  "original_live_bytes": "ff1507b29000",
+  "replacement": "applyRipCall6 encodes FF 15 disp32 to a dedicated nearby sealed read-only pointer cell containing pinned rendererRectProxy",
+  "abi": "Win64 GetClientRect(HWND,RECT*); exact 73-byte caller from RVA 0xE446D8 validates RCX HWND and RDX stack RECT. Callback forwards the saved User32 function and changes only the verified game window during the owned World phase.",
+  "activation": "Pass-through CALL installed at SKSEPlugin_Load before renderer threads; reduced logical size activated only after full owned scene preparation at device creation",
+  "lifetime": "Pinned callback and prior owner, process-lifetime read-only callback cell and forwarding state; no hot unpatch",
+  "recovery": "Identity, ABI, import and original bytes must all match before write. Failed preparation writes nothing; failed bounded write follows applyRipCall6 rollback/termination rules. Disable this ID or SafeMode next launch.",
+  "evidence": ["docs/re/OWNED_SCENE_RECT_1170.md", "tests/unit/OwnedSceneDomainTests.cpp"],
+  "game_runtime": "NOT RUN"
+}

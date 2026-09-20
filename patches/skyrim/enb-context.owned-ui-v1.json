@@ -1,0 +1,28 @@
+{
+  "id": "enb20260508.context.owned-ui-v1",
+  "status": "SOURCE_PREPARED_RUNTIME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "After a valid reduced world image is upscaled into the current native buffer, route cached reduced RTV and viewport bindings to native resolution for UI",
+  "target": {
+    "module": "d3d11.dll",
+    "architecture": "x64",
+    "sha256": "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
+    "file_size": 4664320,
+    "image_size": "0xAAE000"
+  },
+  "location": {
+    "context_vtable_rva": "0x1A49F8",
+    "om_slot": 33,
+    "om_method_rva": "0x68F40",
+    "viewport_slot": 44,
+    "viewport_method_rva": "0x5D070"
+  },
+  "original_live_bytes": "Both eight-byte vtable pointers must equal loaded ENB base plus their specified method RVAs; the exact 16-byte method prologues are in OwnedRouteProfile.cpp",
+  "replacement": "PointerPatch CAS to pinned uiOmProxy and uiViewportProxy after both profiles validate; both callbacks preserve the ENB downstream chain",
+  "abi": "ID3D11DeviceContext COM slots 33 OMSetRenderTargets and 44 RSSetViewports with STDMETHODCALLTYPE/Win64 ABI. Other context instances and non-NativeUi phases forward unchanged.",
+  "activation": "Prepared at the game device-creation boundary only after a reduced scene, current native RTV and OwnedSceneDomain are configured; UI remapping begins only following a published same-frame native image",
+  "lifetime": "Pinned callback and ENB modules, process-lifetime hook state; both pointer leases remain reachable while callback code can execute",
+  "recovery": "If either profile differs, no slot is written. A second-slot CAS failure restores only the first slot if still owned; next-launch SafeMode or disabled patch ID keeps this route dormant.",
+  "evidence": ["docs/re/OWNED_SCENE_LIVE_CHAIN_1170.md", "tests/unit/OwnedRouteProfileTests.cpp", "tests/integration/NativeUiRedirectorTests.cpp"],
+  "game_runtime": "NOT RUN"
+}
