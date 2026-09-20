@@ -800,3 +800,18 @@ semantics and NGX in-flight lifetime remain open suspects. The focused gate
 test passed, the Release build passed, and all 35 CTest groups passed. Actual
 Skyrim DLSS stability, appearance and native UI separation are **NOT RUN** for
 this candidate.
+
+The guarded candidate is source commit `1b2abe5` and package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.41-depth-gate-1b2abe5.zip`
+(SHA-256 `5d1d4971a511e21ab4300afb3294afefa83771850719f4d3940da382c5f0f85b`).
+The ZIP contains only the four manifest-listed payloads plus manifest.
+Skyrim was stopped. The restored 0.1.35 mod passed hash verification and
+was backed up under ignored `artifacts/local/mo2-install-backup-0.1.41-1b2abe5`
+with all payload hashes checked. Only the MO2 DLL and manifest were replaced;
+all installed payloads match the new manifest. The installed DLL SHA-256 is
+`c1caa2ad32fb159415f905c96b9b748f6991f61ddf39d490731eda6937b6d3f0`.
+The user INI and signed NVIDIA runtime remain unchanged. The assistant did
+not start Skyrim. Actual-game NGX stability/appearance: **NOT RUN**. The next
+necessary action is a user-started menu and save-load test; inspect depth
+admission, NGX submissions, native output and any new crash. The assistant
+may close the game after collecting the result.
