@@ -32,6 +32,6 @@ if ($NvidiaSrRuntime) {
 $files = @(Get-ChildItem -LiteralPath $destinationPath -File -Recurse | ForEach-Object {
     @{ path=[IO.Path]::GetRelativePath($destinationPath,$_.FullName).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-@{ product='RazKolbas'; status=$(if ($NvidiaSrRuntime) { 'DEVELOPMENT_OFFSCREEN_DLSS_PROBE' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
+@{ product='RazKolbas'; status=$(if ($NvidiaSrRuntime) { 'DEVELOPMENT_OFFSCREEN_DLSS_STAGE_PAIR' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destinationPath 'install-manifest.json') -Encoding utf8
 Write-Output $destinationPath

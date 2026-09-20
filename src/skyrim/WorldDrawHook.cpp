@@ -5,17 +5,21 @@
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
 #include "rk/SrInput.hpp"
+#include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #endif
 #include <spdlog/spdlog.h>
+#include <ShlObj.h>
 #include <array>
 #include <atomic>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <filesystem>
 #include <wrl/client.h>
 
 namespace rk {
@@ -35,6 +39,9 @@ struct WorldState {
     std::atomic<bool> initialTargetMapDone{false};
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
+    std::mutex stagePairMutex;
+    std::optional<StagePairCapture> stagePair;
+    std::uint64_t stagePairFrame{};
 #ifdef RK_WITH_NGX
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
@@ -176,12 +183,36 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
                     logTargetBoundary("post-world",immediate,
                         reinterpret_cast<IDXGISwapChain*>(swap),colourIdentity);
                     state->worldColourIdentity.store(colourIdentity,std::memory_order_relaxed);
-                    state->presentTargetProbeDue.store(true,std::memory_order_release);
                 } catch(const std::exception& error) {
                     spdlog::warn("Post-world target map unavailable: {}; DLAA probe continues",error.what());
                 } catch(...) {
                     spdlog::warn("Post-world target map unavailable; DLAA probe continues");
                 }
+                try {
+                    Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+                    const auto got=reinterpret_cast<IDXGISwapChain*>(swap)->GetBuffer(0,
+                        IID_PPV_ARGS(&backbuffer));
+                    if(FAILED(got)||!backbuffer)
+                        spdlog::warn("Stage pair backbuffer unavailable: HRESULT=0x{:08x}",
+                            static_cast<std::uint32_t>(got));
+                    else {
+                        auto captured=StagePairCapture::capturePostWorld(immediate,
+                            reinterpret_cast<ID3D11Texture2D*>(numbers.colour),backbuffer.Get());
+                        if(const auto error=std::get_if<Error>(&captured))
+                            spdlog::warn("Stage pair post-world capture unavailable: {}",error->message);
+                        else {
+                            std::scoped_lock lock(state->stagePairMutex);
+                            state->stagePair.emplace(std::move(std::get<StagePairCapture>(captured)));
+                            state->stagePairFrame=state->forwarded.load(std::memory_order_relaxed);
+                            spdlog::info("Stage pair post-world captured at world frame {}; awaiting same-frame pre-ENB-Present",state->stagePairFrame);
+                        }
+                    }
+                } catch(const std::exception& error) {
+                    spdlog::warn("Stage pair post-world capture exception: {}",error.what());
+                } catch(...) {
+                    spdlog::warn("Stage pair post-world capture exception");
+                }
+                state->presentTargetProbeDue.store(true,std::memory_order_release);
             } catch(const std::exception& error) {
                 state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
                 try { spdlog::warn("Owned SR readiness diagnostic failed: {}; resources retained",error.what()); } catch(...) {}
@@ -360,9 +391,51 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
         if(!context)return;
         logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
             state->worldColourIdentity.load(std::memory_order_relaxed));
+        std::scoped_lock lock(state->stagePairMutex);
+        if(state->stagePair) {
+            if(state->stagePairFrame!=state->forwarded.load(std::memory_order_relaxed))
+                spdlog::warn("Stage pair discarded: another world frame arrived before Present");
+            else {
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+                const auto got=swap->GetBuffer(0,IID_PPV_ARGS(&backbuffer));
+                if(FAILED(got)||!backbuffer)
+                    spdlog::warn("Stage pair pre-Present backbuffer unavailable: HRESULT=0x{:08x}",
+                        static_cast<std::uint32_t>(got));
+                else {
+                    const auto captured=state->stagePair->captureBeforePresent(
+                        reinterpret_cast<ID3D11DeviceContext*>(context),backbuffer.Get());
+                    if(const auto error=std::get_if<Error>(&captured))
+                        spdlog::warn("Stage pair pre-Present capture unavailable: {}",error->message);
+                    else {
+                        PWSTR documents=nullptr;
+                        const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+                            KF_FLAG_DEFAULT,nullptr,&documents);
+                        struct FreeDocuments { PWSTR value;~FreeDocuments(){CoTaskMemFree(value);} } free{documents};
+                        if(FAILED(found)||!documents)
+                            spdlog::warn("Stage pair Documents directory unavailable");
+                        else {
+                            const auto directory=std::filesystem::path(documents)/"My Games"/
+                                "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+                                ("stage-pair-"+std::to_string(GetCurrentProcessId())+"-"+
+                                std::to_string(state->stagePairFrame)+"-"+
+                                std::to_string(GetTickCount64()));
+                            const auto saved=state->stagePair->save(directory);
+                            if(const auto saveError=std::get_if<Error>(&saved))
+                                spdlog::warn("Stage pair save unavailable: {}",saveError->message);
+                            else
+                                spdlog::info("Stage pair complete: world frame {}; HDR, post-world backbuffer and pre-ENB-Present backbuffer saved to {}",
+                                    state->stagePairFrame,directory.string());
+                        }
+                    }
+                }
+            }
+            state->stagePair.reset();
+        }
     } catch(const std::exception& error) {
+        { std::scoped_lock lock(state->stagePairMutex);state->stagePair.reset(); }
         try { spdlog::warn("Pre-Present target map unavailable: {}",error.what()); } catch(...) {}
     } catch(...) {
+        { std::scoped_lock lock(state->stagePairMutex);state->stagePair.reset(); }
         try { spdlog::warn("Pre-Present target map unavailable"); } catch(...) {}
     }
 }
