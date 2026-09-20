@@ -50,8 +50,6 @@ void updateMouse(HWND window,ImGuiIO& io) {
 }
 void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
     const char* hotkeyName) {
-    const auto renderWidth=status.renderWidth?status.renderWidth:width;
-    const auto renderHeight=status.renderHeight?status.renderHeight:height;
     const char* mode=status.mode==DisplayMode::Dlaa?"DLAA":
         status.mode==DisplayMode::DlssSr?"DLSS Super Resolution":"Native";
     ImGui::SetNextWindowPos(ImVec2(32,32),ImGuiCond_FirstUseEver);
@@ -65,10 +63,17 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
         ImGui::Text("DLAA: %s",status.mode==DisplayMode::Dlaa?"On":"Off");
         ImGui::Text("DLSS Super Resolution: %s",
             status.mode==DisplayMode::DlssSr?"On":"Off");
-        ImGui::Text("Render resolution: %u x %u",renderWidth,renderHeight);
         ImGui::Text("Native display: %u x %u",width,height);
-        ImGui::Text("Render scale: %.0f%%",
-            width?100.0f*static_cast<float>(renderWidth)/width:0.0f);
+        if(status.engineDrsKnown) {
+            ImGui::Text("Skyrim DRS target: %u x %u",
+                status.renderWidth,status.renderHeight);
+            ImGui::Text("Skyrim scale: %.1f%% x %.1f%%",
+                width?100.0f*static_cast<float>(status.renderWidth)/width:0.0f,
+                height?100.0f*static_cast<float>(status.renderHeight)/height:0.0f);
+        } else ImGui::TextDisabled("Skyrim DRS target: unavailable");
+        if(status.dlaaSuspendedByDrs)
+            ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
+                "RazKolbas DLAA suspended by Skyrim DRS transition");
         ImGui::Separator();
         ImGui::Text("World frames: %llu",
             static_cast<unsigned long long>(status.worldFrames));
@@ -81,7 +86,7 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
         ImGui::Separator();
         ImGui::TextDisabled("Skyrim TAA: %s",
             status.skyrimTaaActive?"still enabled":"off");
-        ImGui::TextDisabled("Reduced render size: not active in this build");
+        ImGui::TextDisabled("Reduced DLSS SR: not active in this build");
     }
     ImGui::End();
 }

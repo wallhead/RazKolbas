@@ -16,7 +16,7 @@ struct DiagnosticsSnapshot {
     std::uint32_t renderWidth{},renderHeight{};
     std::uint32_t displayWidth{},displayHeight{};
     std::uint64_t worldFrames{},dlssFrames{},skippedFrames{};
-    bool dlssDisabled{},skyrimTaaActive{true};
+    bool dlssDisabled{},skyrimTaaActive{true},engineDrsKnown{},dlaaSuspendedByDrs{};
 };
 
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept;

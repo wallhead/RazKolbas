@@ -502,3 +502,41 @@ depth descriptors plus the current D3D11 viewport. Pending input-copy
 retirement still polls. When native ratios return, the presenter resets
 history before resuming. This guard and one-time reduced-boundary log are
 build-tested but NOT RUN in game; they do not activate DRS or submit SR.
+
+## Native DRS console measurement, user run 17:43
+
+The user started installed 0.1.29 as PID 21428 and entered Skyrim's own
+`DynamicResolution width 0.666667` and `DynamicResolution height 0.666667`
+commands in a loaded world. A hash-gated read-only 12-second capture at
+`artifacts/local/skyrim-live-2026-09-20-1743/detours-drs-reduced.json` found
+display 2560x1440, stable current and previous ratios
+`0.665624976/0.666666687`, and world-sized viewport samples of 1704x960.
+Other samples were 512x512, 2048x2048 and 2560x1440 because the shared
+viewport is reused for other passes. The DRS enable byte remained zero:
+manual ratios took effect without enabling the automatic controller. The
+texture-creation entry still resolves into SKSE; the resize trampoline still
+points into SSE Display Tweaks. No memory write, game input or process control
+was sent by the assistant.
+
+RazKolbas logged `Native DLAA suspended` at 17:47:46 when only the width
+ratio had changed; its one-time boundary sample at that moment showed
+colour/motion/depth allocations and the then-current viewport all
+2560x1440. The second command subsequently reduced the height ratio, as the
+live sample confirms. Thus this run proves a quantized **native DRS viewport
+change inside full-size targets** and confirms DLAA suppression. It does not
+prove which colour, motion and depth pixels in the 1704x960 rectangle remain
+valid at the SR evaluation boundary. The one-time post-world sample occurred
+too early and the world hook is after the original draw. Reduced DLSS SR,
+NGX acceptance of converted depth, and correct pre-UI presentation remain
+NOT RUN.
+
+NVIDIA's [Streamline DLSS SR guide](https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS.md)
+documents D3D11 integration, separate render/output extents, same-frame
+colour/depth/motion tags and evaluation. Its
+[manual-hooking guide](https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideManualHooking.md)
+requires explicit swap-chain hook routing and warns about proxy ownership.
+The [DLSS-G guide](https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md)
+describes a D3D12/Vulkan-oriented path, so it is not a drop-in D3D11 FG
+solution for this modlist. Streamline is useful as an SR contract/reference;
+any integration must preserve the existing SKSE, SSE Display Tweaks, ENB and
+ReShade owners and capture a verified same-frame reduced source first.

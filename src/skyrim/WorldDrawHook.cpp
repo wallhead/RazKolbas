@@ -612,13 +612,23 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
     snapshot.mode=state->displayedMode.load(std::memory_order_acquire);
     snapshot.displayWidth=state->statusWidth.load(std::memory_order_relaxed);
     snapshot.displayHeight=state->statusHeight.load(std::memory_order_relaxed);
-    if(const auto reduced=drsProbeRenderExtent()) {
-        snapshot.renderWidth=reduced->width;
-        snapshot.renderHeight=reduced->height;
-    } else {
-        snapshot.renderWidth=snapshot.displayWidth;
-        snapshot.renderHeight=snapshot.displayHeight;
+    DXGI_SWAP_CHAIN_DESC swapDesc{};
+    if(SUCCEEDED(swap->GetDesc(&swapDesc))&&swapDesc.BufferDesc.Width&&
+       swapDesc.BufferDesc.Height) {
+        snapshot.displayWidth=swapDesc.BufferDesc.Width;
+        snapshot.displayHeight=swapDesc.BufferDesc.Height;
     }
+    std::array<float,4> drsRatios{};
+    if(state->jitterCamera&&snapshot.displayWidth&&snapshot.displayHeight&&
+       read(state->jitterCamera+0x104,drsRatios.data(),sizeof(drsRatios))) {
+        if(const auto target=engineDrsTarget(snapshot.displayWidth,
+            snapshot.displayHeight,drsRatios[0],drsRatios[1])) {
+            snapshot.renderWidth=target->width;
+            snapshot.renderHeight=target->height;
+            snapshot.engineDrsKnown=true;
+        }
+    }
+    snapshot.dlaaSuspendedByDrs=state->drsSuppressed.load(std::memory_order_acquire);
     snapshot.worldFrames=state->forwarded.load(std::memory_order_relaxed);
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
     snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);
