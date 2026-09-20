@@ -210,3 +210,13 @@ This is an ABI inference from the reference and live bytes, not a validated
 in-game pass-through hook. Static disassembly of the exact Skyrim executable
 cannot close the gap: its on-disk `.text` bytes at these RVAs are encoded and
 differ from the decoded live bytes. No game process was started for this work.
+
+## 0.1.10 read-only live-code snapshot
+
+The next installed diagnostic build records 0x200 decoded live bytes from
+AE ID 82084 base RVA `0xfa4f00` and 0x100 bytes from original target RVA
+`0xe44850`, only after the exact 1.6.1170 identity and five-byte CALL have
+passed validation. These two bounded log entries permit offline disassembly
+of the real caller and target, which the encoded on-disk executable cannot
+provide. It does not invoke, modify, or redirect either function. Debug and
+Release passed all 15 CTest groups; the game-run outcome is pending.

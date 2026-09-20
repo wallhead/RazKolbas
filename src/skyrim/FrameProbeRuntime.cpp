@@ -24,6 +24,20 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied=0;
     return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),destination,size,&copied)&&copied==size;
 }
+template<std::size_t N>
+void logLiveCode(std::uintptr_t base,std::uint32_t rva,const char* label) {
+    std::array<std::uint8_t,N> bytes{};
+    if(!read(base+rva,bytes.data(),bytes.size())) {
+        spdlog::warn("Live code snapshot unavailable: {} RVA=0x{:x}",label,rva);return;
+    }
+    constexpr char digits[]="0123456789abcdef";
+    std::array<char,N*2+1> hex{};
+    for(std::size_t i=0;i<N;++i) {
+        hex[i*2]=digits[bytes[i]>>4];hex[i*2+1]=digits[bytes[i]&15];
+    }
+    spdlog::info("Live code snapshot: {} RVA=0x{:x} size=0x{:x} bytes={}; read-only",
+        label,rva,N,hex.data());
+}
 void logReferenceSites(std::uintptr_t base,std::string_view verifiedGameHash) {
     // RVA/addends were recovered from the exact supplied SkyrimUpscaler.dll
     // and the exact Skyrim 1.6.1170 Address Library. Read-only: other mods may
@@ -53,10 +67,14 @@ void logReferenceSites(std::uintptr_t base,std::string_view verifiedGameHash) {
                 std::string(game.gameSha256),game.imageSize,0xfa507a,0xe44850,
                 {0xe8,0xd1,0xf7,0xe9,0xff}};
             const auto prepared=prepareCallSite(bytes,verifiedGameHash,game.imageSize,descriptor);
-            if(const auto* plan=std::get_if<CallSitePlan>(&prepared))
+            if(const auto* plan=std::get_if<CallSitePlan>(&prepared)) {
                 spdlog::info("Reference world-draw CALL contract verified: site RVA=0x{:x}; original target RVA=0x{:x}; no patch installed",
                     plan->siteRva,plan->originalTargetRva);
-            else
+                // The exact file's text is encoded on disk. Capture bounded
+                // decoded live bytes to recover the caller/callee ABI offline.
+                logLiveCode<0x200>(base,0xfa4f00,"Main_DrawWorld caller (AE ID 82084)");
+                logLiveCode<0x100>(base,plan->originalTargetRva,"Original world target (AE ID 77247)");
+            } else
                 spdlog::warn("Reference world-draw CALL contract rejected: {}; no patch installed",
                     std::get<Error>(prepared).message);
         }
@@ -151,7 +169,7 @@ void probePresentCandidates(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&result)) { spdlog::warn("Candidate readback failed: {}",error->message);return; }
     const auto directory=captureDirectory();
     std::ofstream manifest(directory/"manifest.txt");manifest.exceptions(std::ios::failbit|std::ios::badbit);
-    manifest<<"RazKolbas 0.1.9 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
+    manifest<<"RazKolbas 0.1.10 candidate-only capture; before ENB Present; no world/pre-UI/guide semantics proven\n";
     manifest<<"trigger=CtrlShiftF10 request="<<trigger.requests()<<" captureTickMs="<<now<<" attempt="<<attempts<<"\n";
     manifest<<"thread="<<GetCurrentThreadId()<<" rendererLockOwned=true\n";
     const auto& images=std::get<std::vector<ProbeImage>>(result);
