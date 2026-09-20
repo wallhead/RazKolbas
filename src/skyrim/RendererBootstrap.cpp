@@ -6,6 +6,7 @@
 #include "rk/FrameProbeRuntime.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/WorldDrawHook.hpp"
+#include "rk/DrsHook.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -201,6 +202,7 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
     const auto& snapshot=std::get<RendererSnapshot>(captured);
     bindFrameProbe(args);
     bindWorldDrawRenderer(*args.device,args.context?*args.context:nullptr,*args.swapChain);
+    bindDrsDisplay(snapshot.width,snapshot.height);
     spdlog::info("Creation pointer provenance: device=0x{:x}; context=0x{:x}; swap=0x{:x}",
         reinterpret_cast<std::uintptr_t>(*args.device),args.context?reinterpret_cast<std::uintptr_t>(*args.context):0,
         reinterpret_cast<std::uintptr_t>(*args.swapChain));
@@ -284,6 +286,9 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto world=installWorldDrawPassThrough(game,identity.hash,settings);
         if(const auto error=std::get_if<Error>(&world))
             spdlog::warn("World-draw pass-through not installed: {}",error->message);
+        const auto drs=installDrsProbe(game,identity.hash,settings);
+        if(const auto error=std::get_if<Error>(&drs))
+            spdlog::warn("Experimental DRS probe not installed: {}",error->message);
         try { spdlog::info("Renderer observation IAT installed; original chain preserved; SR/FG/NR inactive"); } catch (...) {}
         return true;
     } catch (const std::exception& error) {

@@ -56,6 +56,24 @@ Result<bool> verifySkyrim1170DrsAbi(std::span<const std::uint8_t> caller,
         return Error{ErrorCode::Conflict,"Decoded DRS call, policy or scissor ABI differs"};
     return true;
 }
+Result<bool> verifySkyrim1170JitterCallAbi(std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget) {
+    // Renderer Begin RVA e44664: LEA RCX, BSGraphics::State; set a byte;
+    // CALL e58a10; return value unused. The target uses that state pointer.
+    constexpr std::array<std::uint8_t,23> expectedCaller{
+        0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02,
+        0xc6,0x05,0x02,0x86,0x44,0x02,0x01,
+        0xe8,0x99,0x43,0x01,0x00,
+        0x48,0x8b,0x0d,0x32};
+    constexpr std::array<std::uint8_t,17> expectedTarget{
+        0x48,0x8b,0x05,0x89,0x1c,0x4d,0x02,0x0f,0x57,0xc0,
+        0x48,0x8b,0x90,0xf0,0x01,0x00,0x00};
+    if(caller.size()<expectedCaller.size()||originalTarget.size()<expectedTarget.size()||
+       !std::equal(expectedCaller.begin(),expectedCaller.end(),caller.begin())||
+       !std::equal(expectedTarget.begin(),expectedTarget.end(),originalTarget.begin()))
+        return Error{ErrorCode::Conflict,"Decoded Renderer Begin jitter argument or target differs"};
+    return true;
+}
 Result<CallSitePlan> prepareCallSite(std::span<const std::uint8_t> live,
     std::string_view verifiedGameHash,std::size_t imageSize,const CallSiteDescriptor& d) {
     const auto reject=[](const char* message)->Result<CallSitePlan> {

@@ -116,6 +116,8 @@ DumpCapabilitiesAtStartup = true
 LogResourceGenerations = false
 ; Validation is for a development build and can change timing/performance.
 GraphicsDebugValidation = false
+; Explicit one-run engine DRS extent probe. No DLSS SR claim; leave off in normal play.
+ProbeReducedWorld = false
 
 [Patching]
 ; These settings control product runtime behavior, not Codex's permission to RE.

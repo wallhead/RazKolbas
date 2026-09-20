@@ -90,6 +90,29 @@ TEST_CASE("Decoded Skyrim DRS and scissor sites require exact 1.6.1170 code", "[
         std::span(caller).first(18),callee,scissor)));
 }
 
+TEST_CASE("Renderer Begin jitter CALL has a verified state argument and original target", "[patch][call_site]") {
+    constexpr std::array<std::uint8_t,23> caller{
+        0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02,
+        0xc6,0x05,0x02,0x86,0x44,0x02,0x01,
+        0xe8,0x99,0x43,0x01,0x00,
+        0x48,0x8b,0x0d,0x32};
+    constexpr std::array<std::uint8_t,17> target{
+        0x48,0x8b,0x05,0x89,0x1c,0x4d,0x02,0x0f,0x57,0xc0,
+        0x48,0x8b,0x90,0xf0,0x01,0x00,0x00};
+    REQUIRE(std::get<bool>(rk::verifySkyrim1170JitterCallAbi(caller,target)));
+    const rk::CallSiteDescriptor descriptor{"skyrim1170.jitter-drs.sr-v1",
+        "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+        0x3870000,0xe44672,0xe58a10,{0xe8,0x99,0x43,0x01,0x00}};
+    REQUIRE(std::holds_alternative<rk::CallSitePlan>(rk::prepareCallSite(
+        std::span(caller).subspan(14,5),descriptor.gameSha256,descriptor.imageSize,descriptor)));
+    auto changed=caller;changed[0]=0x90;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170JitterCallAbi(changed,target)));
+    changed=caller;changed[14]=0xe9;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170JitterCallAbi(changed,target)));
+    auto changedTarget=target;changedTarget[0]=0x90;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::verifySkyrim1170JitterCallAbi(caller,changedTarget)));
+}
+
 TEST_CASE("Changed world call, identity, and expected target all reject before a code write", "[patch][call_site]") {
     auto d=worldDescriptor();
     auto changed=worldCall;

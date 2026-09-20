@@ -9,6 +9,7 @@
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
 #include "rk/DiagnosticsMenu.hpp"
+#include "rk/DrsHook.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/SdrDlssPresenter.hpp"
@@ -422,7 +423,9 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     }
 #endif
 #ifdef RK_WITH_NGX
-    if(state->completedOutput&&!state->sdrDisabled) {
+    if(drsProbeHasRun())
+        state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
+    if(state->completedOutput&&!state->sdrDisabled&&!drsProbeHasRun()) {
         const auto numbers=readWorldNumbers(world,state->expectedRenderer);
         if(numbers.valid&&numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
            numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
@@ -508,6 +511,21 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
 #endif
     if(!sample)return;
     const auto after=readWorldNumbers(world,state->expectedRenderer);
+    if(drsProbeHasRun()&&after.valid&&after.lockOwner==GetCurrentThreadId()&&
+       after.lockRecursion>0&&after.colour&&after.motion&&after.depth&&after.swap) {
+        D3D11_TEXTURE2D_DESC colour{},motion{},depth{},display{};
+        reinterpret_cast<ID3D11Texture2D*>(after.colour)->GetDesc(&colour);
+        reinterpret_cast<ID3D11Texture2D*>(after.motion)->GetDesc(&motion);
+        reinterpret_cast<ID3D11Texture2D*>(after.depth)->GetDesc(&depth);
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> backbuffer;
+        if(SUCCEEDED(reinterpret_cast<IDXGISwapChain*>(after.swap)->GetBuffer(0,
+            IID_PPV_ARGS(&backbuffer)))&&backbuffer)backbuffer->GetDesc(&display);
+        try { spdlog::info("Experimental DRS extent map: kMAIN={}x{} format={}; motion={}x{} format={}; depth={}x{} format={}; display={}x{} format={}; DLSS SR not submitted",
+            colour.Width,colour.Height,static_cast<unsigned>(colour.Format),
+            motion.Width,motion.Height,static_cast<unsigned>(motion.Format),
+            depth.Width,depth.Height,static_cast<unsigned>(depth.Format),
+            display.Width,display.Height,static_cast<unsigned>(display.Format)); } catch(...) {}
+    }
     try {
         spdlog::info("World stage #{}: thread={}; flags=0x{:x}; rendererMatch={}; beforeRead={}; afterRead={}; "
             "beforeLock={}/{}; afterLock={}/{}; device=0x{:x}; context=0x{:x}; swap=0x{:x}; "
@@ -536,8 +554,13 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
     snapshot.mode=state->displayedMode.load(std::memory_order_acquire);
     snapshot.displayWidth=state->statusWidth.load(std::memory_order_relaxed);
     snapshot.displayHeight=state->statusHeight.load(std::memory_order_relaxed);
-    snapshot.renderWidth=snapshot.displayWidth;
-    snapshot.renderHeight=snapshot.displayHeight;
+    if(const auto reduced=drsProbeRenderExtent()) {
+        snapshot.renderWidth=reduced->width;
+        snapshot.renderHeight=reduced->height;
+    } else {
+        snapshot.renderWidth=snapshot.displayWidth;
+        snapshot.renderHeight=snapshot.displayHeight;
+    }
     snapshot.worldFrames=state->forwarded.load(std::memory_order_relaxed);
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
     snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);

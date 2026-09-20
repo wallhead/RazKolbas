@@ -35,6 +35,10 @@ Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
 Result<bool> verifySkyrim1170DrsAbi(std::span<const std::uint8_t> caller,
     std::span<const std::uint8_t> originalTarget,
     std::span<const std::uint8_t> scissor);
+// Renderer Begin passes the graphics state to this direct CALL; its exact
+// caller and original jitter target must match before any forwarding hook.
+Result<bool> verifySkyrim1170JitterCallAbi(std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget);
 // Builds the complete direct-CALL instruction for a verified plan. This is
 // preparation only: the caller must separately establish exclusive execution
 // quiescence, recheck the live bytes, and own the target's lifetime before write.

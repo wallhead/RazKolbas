@@ -298,3 +298,27 @@ modlist. RazKolbas will use the DRS timing and ratios as a reference, keep
 its own post-world/UI placement, and activate a reduced ratio only with a
 verified smaller source plus display-sized fallback. No DynamicShaderFrameGen
 code or binaries have been copied into the product.
+
+## Experimental engine DRS probe, source 0.1.25
+
+RazKolbas now has its own exact-hash startup CALL hook for the Renderer Begin
+jitter site `0xe44672`. It forwards the original `0xe58a10` first and may
+then update state current/previous ratios and its lock under the verified
+`BSGraphics::State` layout. An independent pure policy rejects foreign locks,
+extent mismatch and changed ratio ownership; it can release only the exact
+ratio/lock it previously set. The callback requires an explicit
+`Diagnostics.ProbeReducedWorld=true`, an explicit manual scale in `[0.5,1)`,
+the verified display-sized creation output, a live game `kMAIN` texture
+pointer, and exact decoded caller/target bytes. The setting is **off by
+default**. On an eligible sampled world frame the hook logs the actual
+colour, motion, depth and display texture descriptors. Once the probe has
+run, the current full-resolution SDR DLAA copyback is suppressed for the
+rest of that process so a changed guide size is not submitted as DLAA.
+
+This tests whether Skyrim's own DRS really makes the scene inputs smaller
+while retaining the native display/UI path in this ENB/ReShade modlist. It
+does not call DLSS SR and is not the owned reduced SDR surface from the
+earlier WARP test. A separate exact patch descriptor is at
+`patches/skyrim/jitter-drs.probe-v1.json`. In-game probe and scissor/UI
+compatibility remain NOT RUN until the user starts Skyrim with a staged
+opt-in build. The existing 0.1.24 game process was not modified.
