@@ -150,11 +150,13 @@ the next two calls copy `[host + 0x228]` to `[host + 0x540]`
 and `[host + 0x280]` to `[host + 0x598]`. At `0x1f5092`, it copies the
 caller-supplied `[caller + 0x140]` into `[host + 0x4e8]`. Thus that fourth
 call is **not evidence of copying NGX output to a game/display resource**.
-The caller at `0x156d92..0x156dab` supplies game-side resource slots to
-`0x1f4ca0`, and `0x156e89` also copies from a game-side indexed slot into
-private `[host + 0x1d0]`. These are static observations of the exact-hash
-reference, not a proven output placement for RazKolbas. The actual display
-destination and UI/ENB order still need a live resource-identity trace.
+The caller at `0x156d92..0x156dab` supplies an indexed resource wrapper from
+the reference's swap-chain proxy to `0x1f4ca0`, and `0x156e89` also copies
+from that indexed slot into private `[host + 0x1d0]`. Later static tracing
+recovered a distinct post-evaluation shader draw into that proxy wrapper:
+see `SKYRIM_REFERENCE_OUTPUT_PATH.md`. The proxy is the reference's own
+presentation implementation, not a writable native Skyrim address for
+RazKolbas. Exact UI/ENB order remains unverified.
 
 The first MO2 run logged a `BSWin32KeyboardDevice::Process` access violation at
 00:45:23. The crash log has the same faulting instruction, call stack and
@@ -442,10 +444,11 @@ assistant did not launch or control Skyrim.
 
 ## 0.1.16 read-only display-target identity diagnostic
 
-The successful offscreen output does not establish the game texture that
-should receive SR before UI, ENB and ReShade processing. The exact-hash
-reference trace above shows input copies into private textures; it does not
-prove a copyback address. On the first world-like frame, the next diagnostic
+The successful offscreen output does not establish the RazKolbas-owned target
+that should receive SR before UI, ENB and ReShade processing. The exact-hash
+reference's private proxy output route is documented in
+`SKYRIM_REFERENCE_OUTPUT_PATH.md`; it cannot be transplanted as a game
+texture address. On the first world-like frame, the next diagnostic
 queries the current D3D11 OM render-target views, DSV, and swap backbuffer
 through COM, logs their canonical IUnknown identities, dimensions and formats,
 then repeats that bounded snapshot before the next eligible ENB Present. It
