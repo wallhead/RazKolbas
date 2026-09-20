@@ -26,6 +26,15 @@ the runtime package contains compiled code, not the community frame-generation
 reference source. The pinned community reference remains read-only evidence.
 
 Release `Build.ps1` passed all 22 CTest groups. A real on-screen menu test,
-End-key toggle test and ENB/ReShade visual verification are **NOT RUN** until
-the source DLL is installed and the user starts Skyrim. The assistant does
-not start or control the game.
+End-key toggle test and ENB/ReShade visual verification remain **NOT RUN**
+until the user starts Skyrim. The assistant does not start or control the game.
+
+The 0.1.23 build was staged and installed after the Release checks. Package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.23-menu-ef9570b.zip` has SHA-256
+`b6772ee4d4176441d1285711d3b2a260a90d5b76d88f9a3c373819ede746647e`.
+The installed DLL SHA-256 is
+`325c4f74d3ac8d725044bbdfc595fa295941b341bab3cf1395e64bf0fc502a32`.
+All four installed manifest payload hashes and all ZIP entries were checked.
+The user's INI and signed NVIDIA runtime retained their prior hashes. The
+prior DLL/manifest are backed up in ignored local artifacts; no reference
+host DLL, PDB or capture was packaged. The in-game result remains **NOT RUN**.
