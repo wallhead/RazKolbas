@@ -759,3 +759,18 @@ source-to-native publication and lets a visible menu reach a loaded world
 if the fallback is stable. A WARP two-frame owned-route regression and the
 Release build pass; all 35 CTest groups pass. This is a diagnostic, not a
 claim of DLSS SR. Runtime result is **NOT RUN** until a user-started game.
+
+The 0.1.40 spatial-isolation package is source commit `100d5b7` at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.40-spatial-isolation-100d5b7.zip`
+(SHA-256 `9a5781b73c1a1e4a0a435d3f7cf9e80c6e1a000e7a9773cd021d527b87ec0035`).
+It contains only the four manifest-listed payloads plus manifest. Skyrim
+was absent; the restored 0.1.35 mod passed hash verification and was backed
+up under ignored `artifacts/local/mo2-install-backup-0.1.40-100d5b7` with
+all payload hashes checked. Only the MO2 DLL and manifest were replaced.
+The installed diagnostic DLL SHA-256 is
+`baa011caa8e9458463a87d4534572aa6cbd3f9382a2d7b9f18699cb74fb33843`;
+all four installed payloads match its manifest. User INI and signed NVIDIA
+runtime remain unchanged. The assistant did not start Skyrim. Runtime
+stability/visibility and depth readiness: **NOT RUN**. If the user runs it,
+look for non-black native output, `providerSubmissions=0`, depth statistics
+and any crash before drawing further conclusions.
