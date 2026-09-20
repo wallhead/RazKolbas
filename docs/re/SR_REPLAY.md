@@ -402,3 +402,26 @@ varying, zero, NaN-sentinel counts and SHA-256. A depth readback is a bounded
 diagnostic frame stall. Debug/Release CTest results and game deployment are
 recorded separately in `../IMPLEMENTATION_STATUS.md`. **0.1.15 in-game
 evaluation is NOT RUN** until the user launches it.
+
+The user-run 0.1.15 launch at 10:36:57 on 2026-09-20 passed the complete
+offscreen game-device probe. Depth remained menu-like (one distinct sample,
+zero non-far) through attempt 18. Attempt 23 at 10:39:57 found 99 distinct
+depth samples and 98 non-far samples, then hashed the owned inputs:
+
+| Owned input | SHA-256 |
+|---|---|
+| Colour | `452f5fec83499de7d018914faacd10de71349039d8ddcbb94ab6663096fe6a50` |
+| Motion | `b8898cc54d0f3854cac67373608176e36cc3f2ba58588227ada4adb8e12b38b2` |
+| Native typeless depth | `aa72ead44e11dcfb6b40578e02cc5acf551ed6b445ef8c99b5c266a2e6b0946c` |
+
+NGX accepted the reset-frame DLAA evaluation at 10:39:58. Its completion
+query finished; the offscreen 2560x1440 readback passed finite, nonuniform RGB
+validation with SHA-256
+`1efc5d77fc9eadd9e805e6203fe3e00a2ceaba6f6b7e1a093b0a64c88298fd72`.
+The probe reported this only after successful feature release, parameter
+destruction and NGX shutdown. Present/worldForwarded counters matched through
+at least #14,400, `failed=0`, and the process remained responsive. No warning
+or error appeared in this launch slice. This is a **PASS for a single offscreen
+NGX DLAA frame on the actual Skyrim device**. It does not establish displayed
+SR, temporal stability, correct guide units/jitter, or image quality. The
+assistant did not launch or control Skyrim.
