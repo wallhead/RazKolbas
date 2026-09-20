@@ -891,3 +891,18 @@ actual game inputs before another live NGX attempt. The bundle writer has a
 targeted positive/duplicate-destination test. Release build and all 35 CTest
 groups passed. Game capture and subsequent replay are **NOT RUN** for this
 source candidate. Captures remain outside Git.
+
+The capture-only diagnostic is source commit `0575f6e` and package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.43-input-capture-0575f6e.zip`
+(SHA-256 `c9102f0c6aeaeff1123e1dcb772cb202d8d73bba1066235027b0b241b8fb63c8`).
+Its manifest explicitly says `DIAGNOSTIC_CAPTURE_ONLY_NO_NGX_EVALUATION`.
+The ZIP contains only the four manifest-listed payloads plus manifest.
+Skyrim was stopped. The restored 0.1.35 mod passed hash verification and
+was backed up under ignored `artifacts/local/mo2-install-backup-0.1.43-0575f6e`.
+Only the MO2 DLL and manifest were replaced, and all four installed hashes
+match the new manifest. The installed DLL SHA-256 is
+`4545d3da99987503e9414a365fded5c722f5e948a5e60292817552008ec37911`.
+The user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim. Actual-game capture result is **NOT RUN** until the user starts
+the game and loads a save; inspect the one-shot capture path and manifest,
+then close the game and replay the exact input bundle outside Skyrim.
