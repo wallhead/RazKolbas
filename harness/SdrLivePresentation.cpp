@@ -1,4 +1,5 @@
 #include "rk/SdrDlssPresenter.hpp"
+#include "rk/SdrSrPresentation.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include <Windows.h>
@@ -24,9 +25,10 @@ constexpr UINT width=2560,height=1440;
 void checked(HRESULT result,const char* step) { if(FAILED(result))stop(step); }
 }
 int wmain(int argc,wchar_t** argv) {
-    const bool sr=argc==3&&std::wstring_view(argv[1])==L"--sr";
+    const bool injectFailure=argc==3&&std::wstring_view(argv[1])==L"--sr-fallback";
+    const bool sr=injectFailure||(argc==3&&std::wstring_view(argv[1])==L"--sr");
     if(argc!=2&&!sr) {
-        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr] <stage-pair directory>\n";
+        std::cerr<<"Usage: RazKolbasSdrLivePresentation [--sr|--sr-fallback] <stage-pair directory>\n";
         return 2;
     }
     try {
@@ -75,6 +77,7 @@ int wmain(int argc,wchar_t** argv) {
         ComPtr<ID3D11Texture2D> sceneInput;
         if(sr) {
             auto sourceDesc=desc;sourceDesc.Width=inputWidth;sourceDesc.Height=inputHeight;
+            sourceDesc.BindFlags|=D3D11_BIND_SHADER_RESOURCE;
             const D3D11_SUBRESOURCE_DATA reducedPixels{reduced.data(),inputWidth*4,0};
             checked(device->CreateTexture2D(&sourceDesc,&reducedPixels,&sceneInput),"SCENE_INPUT");
         }
@@ -100,18 +103,45 @@ int wmain(int argc,wchar_t** argv) {
             {-0.375f,1.0f/18.0f},{0.125f,-5.0f/18.0f},
             {-0.125f,5.0f/18.0f},{0.375f,-1.0f/18.0f},
             {-0.4375f,-7.0f/18.0f},{0.0f,1.0f/6.0f}}};
-        unsigned rendered=0;
+        unsigned rendered=0,fallbackFrames=0;
+        bool injected=false;
+        std::string fallbackHash;
+        std::vector<rk::SdrSrFrameResult> retainedFallbacks;
         const auto started=GetTickCount64();
         while(rendered<30) {
             context->UpdateSubresource(backbuffer.Get(),0,nullptr,scene.data(),width*4,0);
             if(sr)context->UpdateSubresource(sceneInput.Get(),0,nullptr,reduced.data(),inputWidth*4,0);
-            const auto result=sr?
-                presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),motion.Get(),
-                    depth.Get(),backbuffer.Get(),observedGameCycle[rendered%observedGameCycle.size()]):
-                presenter.render(device.Get(),context.Get(),backbuffer.Get(),motion.Get(),
-                    depth.Get(),observedGameCycle[rendered%observedGameCycle.size()]);
-            if(const auto error=std::get_if<rk::Error>(&result))stop(error->message);
-            if(std::get<bool>(result))++rendered;
+            if(sr) {
+                auto presented=rk::presentSdrSrFrame(context.Get(),sceneInput.Get(),
+                    backbuffer.Get(),[&]()->rk::Result<bool> {
+                        if(injectFailure&&rendered==10&&!injected) {
+                            injected=true;
+                            return rk::Error{rk::ErrorCode::Unavailable,"Injected SR failure"};
+                        }
+                        return presenter.renderSr(device.Get(),context.Get(),sceneInput.Get(),
+                            motion.Get(),depth.Get(),backbuffer.Get(),
+                            observedGameCycle[rendered%observedGameCycle.size()]);
+                    });
+                if(const auto error=std::get_if<rk::Error>(&presented))stop(error->message);
+                auto frame=std::move(std::get<rk::SdrSrFrameResult>(presented));
+                if(frame.mode()==rk::SdrSrFrameMode::SpatialFallback) {
+                    ++fallbackFrames;
+                    presenter.requestReset();
+                    if(injected&&fallbackHash.empty()) {
+                        const std::array<ID3D11Texture2D*,1> target{backbuffer.Get()};
+                        const auto readback=rk::readbackCandidates(context.Get(),target);
+                        if(const auto error=std::get_if<rk::Error>(&readback))stop(error->message);
+                        fallbackHash=rk::sha256(std::get<std::vector<rk::ProbeImage>>(readback)[0].pixels);
+                    }
+                    retainedFallbacks.push_back(std::move(frame));
+                }
+                ++rendered;
+            } else {
+                const auto result=presenter.render(device.Get(),context.Get(),backbuffer.Get(),
+                    motion.Get(),depth.Get(),observedGameCycle[rendered%observedGameCycle.size()]);
+                if(const auto error=std::get_if<rk::Error>(&result))stop(error->message);
+                if(std::get<bool>(result))++rendered;
+            }
             context->Flush();
             if(GetTickCount64()-started>20000)stop("TIMEOUT");
             Sleep(1);
@@ -124,6 +154,14 @@ int wmain(int argc,wchar_t** argv) {
         if(hash==inputHash)stop("OUTPUT_UNCHANGED");
         context->Flush();
         const auto deadline=GetTickCount64()+20000;
+        for(const auto& frame:retainedFallbacks)for(;;) {
+            const auto complete=frame.complete(context.Get());
+            if(const auto error=std::get_if<rk::Error>(&complete))stop(error->message);
+            if(std::get<bool>(complete))break;
+            if(GetTickCount64()>deadline)stop("FALLBACK_RETIRE_TIMEOUT");
+            Sleep(1);
+        }
+        retainedFallbacks.clear();
         for(;;) {
             const auto stopped=presenter.stop(context.Get());
             if(const auto error=std::get_if<rk::Error>(&stopped))stop(error->message);
@@ -131,9 +169,14 @@ int wmain(int argc,wchar_t** argv) {
             if(GetTickCount64()>deadline)stop("SHUTDOWN_TIMEOUT");
             Sleep(1);
         }
-        std::cout<<"SDR_PRESENT_MODE="<<(sr?"SR":"DLAA")
+        if(injectFailure&&(!injected||!fallbackFrames||fallbackHash.empty()))
+            stop("FALLBACK_NOT_OBSERVED");
+        std::cout<<"SDR_PRESENT_MODE="<<(sr?(injectFailure?"SR_WITH_FALLBACK":"SR"):"DLAA")
             <<"\nSDR_PRESENT_RENDER="<<inputWidth<<"x"<<inputHeight
             <<"\nSDR_PRESENT_DISPLAY="<<width<<"x"<<height
+            <<"\nSDR_PRESENT_DLSS_FRAMES="<<presenter.submittedFrames()
+            <<"\nSDR_PRESENT_FALLBACK_FRAMES="<<fallbackFrames
+            <<"\nSDR_PRESENT_FALLBACK_SHA256="<<fallbackHash
             <<"\nSDR_PRESENT_FRAMES="<<rendered<<"\nSDR_PRESENT_SHA256="<<hash
             <<"\nSDR_PRESENT_REPLAY=PASS"<<std::endl;
         return 0;

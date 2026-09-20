@@ -150,4 +150,57 @@ Result<SpatialFallbackFrame> produceSdrSpatialFallback(ID3D11DeviceContext* cont
     return produceFallback(context,source,displayWidth,displayHeight,
         DXGI_FORMAT_R8G8B8A8_UNORM);
 }
+Result<SpatialFallbackFrame> produceSdrSpatialFallbackToDisplay(
+    ID3D11DeviceContext* context,ID3D11Texture2D* source,
+    ID3D11Texture2D* display) {
+    if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
+       !source||!display||source==display)
+        return Error{ErrorCode::InvalidInput,"SDR fallback needs distinct scene and active display"};
+    ComPtr<ID3D11Device> device,sourceDevice,displayDevice;
+    context->GetDevice(&device);
+    source->GetDevice(&sourceDevice);
+    display->GetDevice(&displayDevice);
+    ComPtr<IUnknown> deviceId,sourceId,displayId;
+    if(!device||!sourceDevice||!displayDevice||FAILED(device.As(&deviceId))||
+       FAILED(sourceDevice.As(&sourceId))||FAILED(displayDevice.As(&displayId))||
+       deviceId.Get()!=sourceId.Get()||deviceId.Get()!=displayId.Get())
+        return Error{ErrorCode::Conflict,"SDR fallback resources belong to different devices"};
+    ComPtr<IUnknown> displayResourceId,sourceResourceId;
+    if(FAILED(display->QueryInterface(IID_PPV_ARGS(&displayResourceId)))||
+       FAILED(source->QueryInterface(IID_PPV_ARGS(&sourceResourceId)))||
+       displayResourceId.Get()==sourceResourceId.Get())
+        return Error{ErrorCode::Conflict,"SDR fallback source aliases display"};
+    D3D11_TEXTURE2D_DESC input{},output{};
+    source->GetDesc(&input);display->GetDesc(&output);
+    if(input.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||output.Format!=input.Format||
+       !input.Width||!input.Height||!output.Width||!output.Height||
+       output.Width<input.Width||output.Height<input.Height||
+       output.Width>8192||output.Height>8192||
+       input.MipLevels!=1||output.MipLevels!=1||
+       input.ArraySize!=1||output.ArraySize!=1||
+       input.SampleDesc.Count!=1||output.SampleDesc.Count!=1||
+       input.Usage!=D3D11_USAGE_DEFAULT||output.Usage!=D3D11_USAGE_DEFAULT||
+       !(input.BindFlags&D3D11_BIND_SHADER_RESOURCE)||
+       !(output.BindFlags&D3D11_BIND_RENDER_TARGET))
+        return Error{ErrorCode::Unsupported,"SDR fallback source/display format or extent differs"};
+    ComPtr<ID3D11RenderTargetView> currentView;
+    ComPtr<ID3D11Resource> currentResource;
+    ComPtr<IUnknown> currentId;
+    context->OMGetRenderTargets(1,currentView.GetAddressOf(),nullptr);
+    if(currentView)currentView->GetResource(&currentResource);
+    if(!currentResource||FAILED(currentResource.As(&currentId))||
+       currentId.Get()!=displayResourceId.Get())
+        return Error{ErrorCode::Conflict,"SDR fallback display is not active RTV0"};
+    const D3D11_QUERY_DESC queryDescription{D3D11_QUERY_EVENT,0};
+    ComPtr<ID3D11Query> completion;
+    if(FAILED(device->CreateQuery(&queryDescription,&completion)))
+        return Error{ErrorCode::Unavailable,"Cannot allocate SDR fallback completion event"};
+    if(const auto rendered=draw(device.Get(),context,source,display,
+            output.Width,output.Height);const auto error=std::get_if<Error>(&rendered))
+        return *error;
+    context->End(completion.Get());
+    return SpatialFallbackFrame{ComPtr<ID3D11Texture2D>(source),
+        ComPtr<ID3D11Texture2D>(display),std::move(completion),
+        output.Width,output.Height};
+}
 }

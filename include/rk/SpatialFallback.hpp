@@ -4,8 +4,8 @@
 #include <wrl/client.h>
 
 namespace rk {
-// Owns both sides of an asynchronous HDR spatial fallback until its GPU event
-// completes. The image retains the source's linear RGBA16F encoding.
+// Owns both sides of an asynchronous spatial fallback until its GPU event
+// completes. HDR retains linear RGBA16F; SDR retains RGBA8 UNORM encoding.
 class SpatialFallbackFrame final {
 public:
     SpatialFallbackFrame(Microsoft::WRL::ComPtr<ID3D11Texture2D> source,
@@ -27,4 +27,9 @@ Result<SpatialFallbackFrame> produceSpatialFallback(ID3D11DeviceContext* context
 // a reduced-render SR evaluation cannot be published.
 Result<SpatialFallbackFrame> produceSdrSpatialFallback(ID3D11DeviceContext* context,
     ID3D11Texture2D* source,UINT displayWidth,UINT displayHeight);
+// Draws a reduced SDR scene directly into the currently bound display target,
+// retaining both resources until the draw has completed.
+Result<SpatialFallbackFrame> produceSdrSpatialFallbackToDisplay(
+    ID3D11DeviceContext* context,ID3D11Texture2D* source,
+    ID3D11Texture2D* display);
 }

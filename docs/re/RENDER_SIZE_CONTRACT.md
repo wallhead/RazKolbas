@@ -49,8 +49,24 @@ with output SHA-256
 `8de9edf807257eb7efce05a646a05cdc6f09eeb3594c300b7fbd1cdc00fcb788`.
 Release `tools/Build.ps1 -Preset win-release` passed all 22 CTest groups.
 These results validate repeated NGX calls and destination copy in isolation;
-Skyrim still supplies no genuinely reduced scene to this path, and SR failure
-is not yet connected to the spatial fallback.
+Skyrim still supplies no genuinely reduced scene to this path.
+
+The source-only SDR SR presentation stage now treats a busy or recoverably
+failed provider as a real failure and draws a display-sized RGBA8 fallback
+directly from preserved scene colour to the bound backbuffer. It keeps the
+source and display resources through a GPU completion query, preserves the
+caller graphics state, and propagates device removal without pretending a
+fallback repaired the device. Its WARP regression read back a 2x2-to-4x4
+failed-SR image and verified the bound RTV was unchanged. Release
+`tools/Build.ps1 -Preset win-release` passed all 23 CTest groups. The
+standalone NVIDIA 30-frame replay with one injected SR failure produced 29
+Quality SR frames and one 2560x1440 spatial fallback (fallback SHA-256
+`3106a5bfc949e2e522cbdc15a983ecd06b4a94da42b6f64de674453ad2299791`),
+then resumed SR with a history reset and retired cleanly. Final output SHA-256
+was `0d65cd3d050a3a433ad4a3c612dd4f22f893012204bc246fe704a7503ca2c773`.
+The no-failure SR and DLAA regressions still produced the hashes above.
+This does **not** validate fallback under Skyrim's real reduced-render source
+or ENB/ReShade/UI composition; the MO2 plugin has not been updated.
 
 ## Exact Skyrim AE 1.6.1170 address map
 
