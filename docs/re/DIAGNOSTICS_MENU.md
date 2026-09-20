@@ -59,3 +59,13 @@ is open and focused, resets the flag on close/focus loss, and logs a bounded
 sample of ImGui mouse position/button/capture state. The exact mouse-drag
 result is **NOT RUN** until the user starts the updated build. The code does
 not yet suppress Skyrim's own gameplay input while the panel is open.
+
+The 0.1.24 package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.24-cursor-6b3cc05.zip` has SHA-256
+`7573897e9e2e8c8c204d6701388dc78d055c538fba76f4cded2690cba67c353c`.
+Its ZIP entries and four payload hashes were independently verified. Skyrim
+was closed; the old 0.1.23 DLL/manifest were verified and backed up before
+installing the new DLL SHA-256
+`7494c13238712bfe5595ba8c7b1cb60d0656d1381d92c1ad713b80f22be772ee`.
+Installed manifest verification passed; user INI, signed NVIDIA SR runtime and
+MIT notice were preserved. Live cursor behavior remains **NOT RUN**.
