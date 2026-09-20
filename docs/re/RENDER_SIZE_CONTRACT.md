@@ -242,3 +242,20 @@ copied input. A separate test rejects invalid extents and proves an old
 surface stays distinct when a new extent is allocated. Debug and Release
 builds passed 25/25 CTest groups. This proves the offscreen resource and
 fallback handoff; genuine in-game reduced world rendering remains NOT RUN.
+
+## Renderer target-binding method capture prepared
+
+The saved decoded world-draw function calls a renderer interface at game RVA
+`0xe449f8` through virtual slot `+0x108`. Its object pointer is loaded from
+static game RVA `0x32887b0`, which starts 16 bytes before the old renderer
+data snapshot. The same pointer is used for a `+0x190` call earlier in the
+function. The object, vtable and method code were not retained in that
+snapshot, and the executable's on-disk text cannot supply decoded method
+bytes. `tools/re/inspect_live_renderer.py` now follows this one pointer during
+a user-started, loaded-world session, saves its first 0x1b0 vtable bytes and
+up to 0x300 bytes from each method only if the table and methods fall within
+the exact hash-verified game image. If a pointer is null or foreign, the
+manifest records the condition instead of following it. This is read-only
+inspection, not hook installation, reduced rendering or another DLSS test.
+The exact target-binding implementation and any later UI rebinding remain
+NOT RUN until that bounded capture.
