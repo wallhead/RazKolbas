@@ -33,4 +33,28 @@ Result<std::array<std::uint8_t,5>> encodeCallSiteReplacement(const CallSitePlan&
 // registers and flags when a process-lifetime relay is needed within rel32
 // reach of the CALL. Allocation and executable lifetime remain the caller's.
 Result<std::array<std::uint8_t,14>> encodeRegisterPreservingJump(std::uintptr_t target);
+
+// Owns a prepared W^X relay. Destruction is valid only while no installed
+// CALL or in-flight callback can reach it; a future game patch lease must
+// retain it until safe removal and quiescence are proven.
+class NearCallRelay {
+public:
+    ~NearCallRelay();
+    NearCallRelay(const NearCallRelay&)=delete;
+    NearCallRelay& operator=(const NearCallRelay&)=delete;
+    NearCallRelay(NearCallRelay&& other) noexcept;
+    NearCallRelay& operator=(NearCallRelay&&)=delete;
+    void* entry() const noexcept { return memory_; }
+    const std::array<std::uint8_t,5>& callBytes() const noexcept { return callBytes_; }
+private:
+    friend Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan&,std::uintptr_t,std::uintptr_t);
+    NearCallRelay(void* memory,std::array<std::uint8_t,5> callBytes) noexcept:
+        memory_(memory),callBytes_(callBytes) {}
+    void* memory_{};
+    std::array<std::uint8_t,5> callBytes_{};
+};
+// Allocates and seals a relay within CALL rel32 reach. It never changes the
+// game instruction; activation requires a separate safe patch transaction.
+Result<NearCallRelay> prepareNearCallRelay(const CallSitePlan& plan,
+    std::uintptr_t imageBase,std::uintptr_t target);
 }

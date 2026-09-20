@@ -136,3 +136,64 @@ TEST_CASE("Absolute relay preserves argument registers and return address", "[pa
     REQUIRE(relayVisits==2);
     REQUIRE(std::holds_alternative<rk::Error>(rk::encodeRegisterPreservingJump(0)));
 }
+
+TEST_CASE("Near relay allocation reaches an owned CALL and retires after restore", "[patch][call_site][patch_execution]") {
+    // Reserve the Win64 shadow space and align RSP before invoking a C++
+    // callee. The original callee is a small integer-add assembly fixture.
+    const std::array<std::uint8_t,18> code{
+        0x48,0x83,0xec,0x28, 0xe8,5,0,0,0,
+        0x48,0x83,0xc4,0x28, 0xc3, 0x8d,0x04,0x11,0xc3};
+    struct Page {
+        void* address=VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+        ~Page() { if(address)VirtualFree(address,0,MEM_RELEASE); }
+    } page;
+    REQUIRE(page.address!=nullptr);
+    std::memcpy(page.address,code.data(),code.size());
+    const rk::CallSiteDescriptor descriptor{"fixture.near-relay",rk::sha256(code),code.size(),4,14,
+        {0xe8,5,0,0,0}};
+    const auto prepared=rk::prepareCallSite(std::span(code).subspan(4),descriptor.gameSha256,code.size(),descriptor);
+    REQUIRE(std::holds_alternative<rk::CallSitePlan>(prepared));
+    auto relayResult=rk::prepareNearCallRelay(std::get<rk::CallSitePlan>(prepared),
+        reinterpret_cast<std::uintptr_t>(page.address),reinterpret_cast<std::uintptr_t>(&relayTarget));
+    REQUIRE(std::holds_alternative<rk::NearCallRelay>(relayResult));
+    auto& relay=std::get<rk::NearCallRelay>(relayResult);
+    REQUIRE(relay.entry()!=nullptr);
+    MEMORY_BASIC_INFORMATION information{};
+    REQUIRE(VirtualQuery(relay.entry(),&information,sizeof(information))==sizeof(information));
+    REQUIRE(information.Protect==PAGE_EXECUTE_READ);
+    const auto jump=rk::encodeRegisterPreservingJump(reinterpret_cast<std::uintptr_t>(&relayTarget));
+    REQUIRE(std::memcmp(relay.entry(),std::get<std::array<std::uint8_t,14>>(jump).data(),14)==0);
+    DWORD old{};
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&old));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),page.address,code.size()));
+    const auto call=reinterpret_cast<int(*)(int,int)>(page.address);
+    relayVisits=0;
+    REQUIRE(call(7,11)==18);
+    REQUIRE(relayVisits==0);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&old));
+    std::memcpy(static_cast<std::uint8_t*>(page.address)+4,relay.callBytes().data(),5);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&old));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),static_cast<std::uint8_t*>(page.address)+4,5));
+    std::int32_t relative{};
+    std::memcpy(&relative,static_cast<std::uint8_t*>(page.address)+5,4);
+    REQUIRE(static_cast<std::uint8_t*>(page.address)+9+relative==relay.entry());
+    REQUIRE(call(7,11)==32);
+    REQUIRE(relayVisits==1);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_READWRITE,&old));
+    std::memcpy(static_cast<std::uint8_t*>(page.address)+4,code.data()+4,5);
+    REQUIRE(VirtualProtect(page.address,4096,PAGE_EXECUTE_READ,&old));
+    REQUIRE(FlushInstructionCache(GetCurrentProcess(),static_cast<std::uint8_t*>(page.address)+4,5));
+    REQUIRE(call(7,11)==18);
+    REQUIRE(relayVisits==1);
+}
+
+TEST_CASE("Near relay rejects invalid ownership before allocation", "[patch][call_site]") {
+    auto plan=rk::CallSitePlan{"fixture.invalid",0,6,{0xe8,1,0,0,0}};
+    plan.originalTargetRva=7;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareNearCallRelay(plan,0x100000000ULL,
+        reinterpret_cast<std::uintptr_t>(&relayTarget))));
+    plan.originalTargetRva=6;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareNearCallRelay(plan,0,
+        reinterpret_cast<std::uintptr_t>(&relayTarget))));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::prepareNearCallRelay(plan,0x100000000ULL,0)));
+}

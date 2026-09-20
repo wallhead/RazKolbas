@@ -181,3 +181,32 @@ nearby thunk allocation, or an in-game hook. A separate 14-byte RIP-indirect
 absolute jump relay ran in an executable fixture and preserved two Win64
 integer arguments and the caller's return path; no relay is installed in
 Skyrim. The game was not started for this change at the user's request.
+
+## Near relay and inferred world-call ABI, offline
+
+`prepareNearCallRelay` now reserves a page inside signed rel32 reach of a
+validated CALL, emits the 14-byte RIP-indirect absolute jump, changes its page
+from read/write to execute/read, flushes and reads it back, and returns the
+matching five-byte CALL. The relay is owned until callers are quiescent and
+the CALL has been restored; it is not installed in Skyrim. An executable
+fixture exercised allocation, two integer arguments, output, restore and
+retirement in both build configurations. Its first form crashed because the
+synthetic caller omitted Win64 stack alignment and shadow space; correcting
+the fixture resolved the crash. The branch displacement had already matched
+the allocated relay address.
+
+The exact-hash `SkyrimUpscaler.dll` callback at RVA `0x156830` saves incoming
+`RCX` to `RSI` and `EDX` to `EDI`, then at `0x15691d` restores those two values
+and calls the stored original game target at `0x156922`. It does not preserve
+incoming `R8` or `R9` across intervening calls. The 0.1.8 live game bytes
+immediately after the world CALL start `48 8b 05`, overwriting `RAX`; the
+reference continues with further calls without preserving that return.
+These observations support a two-argument Win64 forwarding shape with an
+unused integer return at this call site. The meaning of each argument and
+the target's internal behavior remain unverified. `WorldDrawForwarder` now
+models that shape as pointer plus 32-bit value, calls the original exactly
+once before an optional observer, and fixes the owner before activation.
+This is an ABI inference from the reference and live bytes, not a validated
+in-game pass-through hook. Static disassembly of the exact Skyrim executable
+cannot close the gap: its on-disk `.text` bytes at these RVAs are encoded and
+differ from the decoded live bytes. No game process was started for this work.
