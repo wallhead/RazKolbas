@@ -1386,3 +1386,19 @@ frames with zero fallbacks and output SHA-256
 `3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
 Actual-game boundary admission, native-resolution UI, ENB/ReShade appearance
 and stability are **NOT RUN**.
+
+Source commit `4321251` is packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.53-pre-ui-dlss-4321251.zip`
+(SHA-256 `0aa5a114ba0ab90d4255e08f925e7cecb432d0bf35daf21b45c2c040bad9554f`).
+The archive contains exactly the four manifest-listed payloads plus the
+manifest; extraction and all payload hashes passed. With Skyrim stopped, the
+installed 0.1.52 payloads first matched their manifest and the full mod was
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.53-4321251`. Only the DLL and manifest
+were replaced. Installed DLL SHA-256 is
+`3f1f7721d16baacb09c4fbf135839481b5840457123c1e92b36e532cb8554ed8`;
+the user INI and signed NVIDIA SR runtime remain unchanged. Manifest status is
+`EXPERIMENTAL_GUARDED_PRE_UI_DLSS_SR_PENDING_GAME_TEST`. The assistant did not
+start Skyrim. The next required step is a user-started save-load run and
+inspection for the `Owned pre-UI boundary admitted` log before assessing UI
+sharpness, ENB/ReShade appearance and stability.
