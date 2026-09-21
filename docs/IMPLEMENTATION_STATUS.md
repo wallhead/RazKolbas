@@ -1116,3 +1116,23 @@ were replaced. All installed payloads match the 0.1.47 manifest; DLL SHA-256
 is `9067b95c1609d58346d971cb7ec44981561d666d353a7ca63a2f34568a1d2072`.
 The user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim. The next required evidence is a user-started save-load run.
+
+## 0.1.47 first-evaluation crash and serialized follow-up
+
+The user started Skyrim and loaded a save with 0.1.47. The populated-scene
+gate admitted frame 6391 (`colorNonBlack=222`, `colorDistinct=206`,
+`depthDistinct=98`, `depthNonFar=97`). Reduced feature creation completed and
+the 120-frame startup interval passed. At frame 6511 the prepared inputs and
+first NGX evaluation call returned, but no publication completed. CrashLogger
+then recorded the same null read at `nvwgf2umx.dll+0x1B61A4` on an NVIDIA
+worker thread. No second DLSS submission occurred, so the 300-frame limit is
+not implicated. The crash remains localized to asynchronous work triggered by
+the first live evaluation or the immediately following publication commands.
+
+The next diagnostic ends and flushes the evaluation event while the isolated
+NGX context state is still active, waits up to five seconds for confirmed GPU
+completion, and only then restores Skyrim's context state and publishes the
+native-size result. It serializes the bounded 300-frame test deliberately to
+remove overlap with the ENB/ReShade command stream. A timeout or device error
+falls back without destroying in-flight resources. This is a diagnostic
+workaround and actual-game behavior is **NOT RUN**.

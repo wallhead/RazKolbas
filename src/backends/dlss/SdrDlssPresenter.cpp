@@ -5,9 +5,11 @@
 #include <nvsdk_ngx_helpers_d3d.h>
 #include <nvsdk_ngx_helpers.h>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <vector>
 
 namespace rk {
@@ -16,6 +18,24 @@ namespace fs=std::filesystem;
 using Microsoft::WRL::ComPtr;
 constexpr std::string_view runtimeHash="c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e";
 bool success(NVSDK_NGX_Result result) { return result==NVSDK_NGX_Result_Success; }
+Result<bool> waitForGpuEvent(ID3D11Device* device,ID3D11DeviceContext* context,
+    ID3D11Query* event) {
+    if(!device||!context||!event)
+        return Error{ErrorCode::InvalidInput,"GPU completion wait is missing its device, context or event"};
+    context->Flush();
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    for(;;) {
+        BOOL complete=FALSE;
+        const auto status=context->GetData(event,&complete,sizeof(complete),
+            D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        if(status==S_OK&&complete)return true;
+        if(FAILED(status)||FAILED(device->GetDeviceRemovedReason()))
+            return Error{ErrorCode::DeviceRemoved,"Prepared SR GPU completion failed"};
+        if(std::chrono::steady_clock::now()>=deadline)
+            return Error{ErrorCode::Unavailable,"Prepared SR GPU completion timed out"};
+        std::this_thread::yield();
+    }
+}
 std::optional<NVSDK_NGX_PerfQuality_Value> ngxQuality(UpscaleQuality quality) noexcept {
     switch(quality) {
     case UpscaleQuality::NativeAA:return NVSDK_NGX_PerfQuality_Value_DLAA;
@@ -370,6 +390,8 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePrepared(
     slot.evaluated=slot.published=false;
     const bool reset=metadata.resetHistory||resetPending_||!lastPreparedFrameId_;
     Result<bool> evaluated=Error{ErrorCode::Unavailable,"Prepared SR state isolation unavailable"};
+    Result<bool> completed=Error{ErrorCode::Unavailable,"Prepared SR GPU completion unavailable"};
+    bool completionIssued=false;
     {
         auto isolated=D3D11StateScope::begin(context);
         if(const auto error=std::get_if<Error>(&isolated))evaluated=*error;
@@ -390,12 +412,19 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePrepared(
                 if(std::holds_alternative<bool>(evaluated)&&std::get<bool>(evaluated))
                     evaluated=submitPreparedNgx(context,*slot.frame,jitter,reset);
             }
+            context->End(slot.completion.Get());
+            completionIssued=true;
+            completed=waitForGpuEvent(device,context,slot.completion.Get());
         }
     }
-    context->End(slot.completion.Get());
+    if(!completionIssued) {
+        context->End(slot.completion.Get());
+        completed=waitForGpuEvent(device,context,slot.completion.Get());
+    }
     slot.inFlight=true;
     preparedGeneration_=metadata.generation;
     lastPreparedFrameId_=metadata.frameId;
+    if(const auto error=std::get_if<Error>(&completed))return *error;
     if(const auto error=std::get_if<Error>(&evaluated))return *error;
     if(!std::get<bool>(evaluated))return std::optional<SrEvaluationToken>{};
     slot.evaluated=true;
