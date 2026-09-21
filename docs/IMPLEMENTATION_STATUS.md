@@ -1136,3 +1136,17 @@ native-size result. It serializes the bounded 300-frame test deliberately to
 remove overlap with the ENB/ReShade command stream. A timeout or device error
 falls back without destroying in-flight resources. This is a diagnostic
 workaround and actual-game behavior is **NOT RUN**.
+
+The serialized candidate is source commit `eac9f17`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.48-serialized-300-frames-eac9f17.zip`
+(SHA-256 `091b0dcd18dc0cc928a40456f8939e4a070480885584a89bbf9a8b2b2925ed01`).
+Release build and all 35 CTest groups passed. Exact captured-input evaluation
+and publication passed on the RTX 4080 SUPER with output SHA-256
+`ec7bbf14b71e507de649dec13844d0368b6180de8acaa2787c8e46298a4a4329`.
+With Skyrim stopped, 0.1.47 passed manifest verification and the complete mod
+was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.48-eac9f17`. Only the DLL and manifest
+were replaced. All installed payloads match the new manifest; DLL SHA-256 is
+`f1a9f1c3744407ac2ddbb57ddeea9859f0ad27d91bb56a0cb2ebe87166de2d85`.
+The user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim.
