@@ -1074,3 +1074,19 @@ all subsequent frames through the current spatial fallback. This bounded
 diagnostic tests whether the populated colour gate plus owned depth snapshot
 removes the first-evaluation driver crash before continuous SR is attempted.
 It remains a diagnostic and can still crash; actual-game result is **NOT RUN**.
+
+The bounded diagnostic is source commit `6c1a1f5`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.46-single-live-eval-6c1a1f5.zip`
+(SHA-256 `df7c6365b24c57ca95d67281b791f1f9920929542f4704c0dd528235b43b6ac6`).
+The ZIP contains exactly the four manifest-listed payloads plus manifest;
+status is `DIAGNOSTIC_SINGLE_LIVE_DLSS_EVALUATION_AFTER_COLOR_DEPTH_GATE`.
+With Skyrim stopped, 0.1.45 passed manifest verification and the complete mod
+was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.46-6c1a1f5`. Only the MO2 DLL and
+manifest were replaced. All installed payloads match the new manifest; DLL
+SHA-256 is
+`1093eea7f7bc77bc170823a159030e5b8af0355b82812e920cda799d6f8b7e3b`.
+The user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim. One user-started save-load run is required; inspect the feature
+creation boundary, one evaluation/publication record, later fallback frames,
+and any new CrashLogger entry. Restore 0.1.45 or 0.1.35 after a crash.
