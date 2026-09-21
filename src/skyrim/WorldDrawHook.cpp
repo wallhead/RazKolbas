@@ -83,7 +83,7 @@ struct WorldState {
     bool srDisabled{};
     OwnedSceneAdmissionGate ownedSceneGate;
     bool ownedInputCaptureOnly{};
-    bool ownedSingleEvaluationOnly{true};
+    std::uint64_t ownedEvaluationLimit{300};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
@@ -548,8 +548,9 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     }
                     return Error{ErrorCode::Unavailable,"Owned SR input capture only; NGX not submitted"};
                 }
-                if(state->ownedSingleEvaluationOnly&&state->srPresenter.submittedFrames()!=0)
-                    return Error{ErrorCode::Unavailable,"Owned single-evaluation diagnostic complete"};
+                if(state->ownedEvaluationLimit&&
+                   state->srPresenter.submittedFrames()>=state->ownedEvaluationLimit)
+                    return Error{ErrorCode::Unavailable,"Owned bounded-evaluation diagnostic complete"};
                 if(state->ownedNgxInitFailed)
                     return Error{ErrorCode::Unavailable,"Owned NGX feature creation previously failed"};
                 if(!state->ownedNgxCreatedAt) {
@@ -603,10 +604,11 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
                 if(!token)return false;
                 const auto published=state->srPresenter.publishEvaluated(context,*token,display);
-                if(state->ownedSingleEvaluationOnly&&
+                if(state->ownedEvaluationLimit&&
+                   state->srPresenter.submittedFrames()==state->ownedEvaluationLimit&&
                    std::holds_alternative<bool>(published)&&std::get<bool>(published))
-                    spdlog::info("Owned single-evaluation diagnostic frame {} published; subsequent frames use spatial fallback",
-                        sequence);
+                    spdlog::info("Owned bounded-evaluation diagnostic reached {} DLSS frames at world frame {}; subsequent frames use spatial fallback",
+                        state->ownedEvaluationLimit,sequence);
                 return published;
             });
         if(const auto error=std::get_if<Error>(&presented))

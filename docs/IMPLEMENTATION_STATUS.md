@@ -1090,3 +1090,16 @@ The user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim. One user-started save-load run is required; inspect the feature
 creation boundary, one evaluation/publication record, later fallback frames,
 and any new CrashLogger entry. Restore 0.1.45 or 0.1.35 after a crash.
+
+## 300-frame live-evaluation candidate
+
+The user requested a longer live test before starting the installed 0.1.46
+single-frame candidate, so 0.1.46 remains **NOT RUN**. The diagnostic limit is
+now 300 successful live DLSS evaluations after the same combined populated
+colour/world-depth gate and existing 120-frame feature-start interval. Once
+300 frames have been submitted, later frames return to the spatial fallback.
+This run is intended to exercise sustained resource and command lifetime and
+to make reconstructed output visible long enough to inspect. It remains a
+bounded diagnostic rather than a continuous-SR release and can still crash.
+Release build and all 35 CTest groups passed; actual-game testing is **NOT
+RUN** until the user starts Skyrim and loads a save.
