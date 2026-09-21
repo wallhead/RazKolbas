@@ -1103,3 +1103,16 @@ to make reconstructed output visible long enough to inspect. It remains a
 bounded diagnostic rather than a continuous-SR release and can still crash.
 Release build and all 35 CTest groups passed; actual-game testing is **NOT
 RUN** until the user starts Skyrim and loads a save.
+
+The 300-frame candidate is source commit `4c9c122`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.47-300-live-frames-4c9c122.zip`
+(SHA-256 `8f1974f54d5d32a9abdddce0c2d66c490b3f07d32e7986926e6be1f84edb8815`).
+The ZIP contains exactly the four manifest-listed payloads plus manifest;
+status is `DIAGNOSTIC_300_LIVE_DLSS_FRAMES_AFTER_COLOR_DEPTH_GATE`. With
+Skyrim stopped, the installed 0.1.46 files passed manifest verification and
+the complete mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.47-4c9c122`. Only the DLL and manifest
+were replaced. All installed payloads match the 0.1.47 manifest; DLL SHA-256
+is `9067b95c1609d58346d971cb7ec44981561d666d353a7ca63a2f34568a1d2072`.
+The user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim. The next required evidence is a user-started save-load run.
