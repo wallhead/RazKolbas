@@ -1335,3 +1335,23 @@ and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
 The assistant did not start Skyrim. The next required evidence is a
 user-started save-load run held beyond the previous five-second failure
 window.
+
+## User-started 0.1.52 pooled-resource result
+
+The user started Skyrim and loaded a save with the installed 0.1.52 build.
+The process remained responsive and no new CrashLogger file appeared. The
+combined scene gate admitted world frame 9541, the reduced NGX feature was
+created, and the first pooled evaluation returned at frame 9661. Continuous
+provider publication then reached 4,140 DLSS frames at world frame 13800,
+with `fallbacksInFlight=0`. World-forwarded and Present counts matched, every
+reported Present HRESULT was zero, and the Present failure count remained
+zero.
+
+This actual-game run sustained the pooled route for roughly 69 seconds after
+the first evaluation, well beyond the five-second 0.1.51 failure window and
+the earlier 300-frame boundary. It is an actual-game **PASS** for continuous
+serialized evaluation/publication and the three-slot lifetime correction on
+this RTX 4080 SUPER, Skyrim 1.6.1170, ENB and ReShade configuration. It does
+not by itself validate temporal image quality or native-resolution UI
+separation. After collecting the authorized evidence, the assistant sent a
+normal window-close request; Skyrim exited without creating a crash log.
