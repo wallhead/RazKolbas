@@ -1355,3 +1355,34 @@ this RTX 4080 SUPER, Skyrim 1.6.1170, ENB and ReShade configuration. It does
 not by itself validate temporal image quality or native-resolution UI
 separation. After collecting the authorized evidence, the assistant sent a
 normal window-close request; Skyrim exited without creating a crash log.
+
+## Guarded pre-UI publication candidate
+
+Exact-game RE ruled out the second apparent Skyrim swap-buffer caller at
+`0xe48f0a`: its sole direct caller is the screenshot/export function at
+`0x6532a9`, and the returned resource is passed to image serialization at
+`0xe4d750`. The apparent reference-proxy flag stores at `0x1f0ebb`,
+`0x1a05bf` and `0x1a1857` belong to separate font/UI backend objects, so they
+do not provide a transferable native-UI state switch. The evidence and limits
+are recorded in `re/SKYRIM_REFERENCE_OUTPUT_PATH.md`.
+
+The source candidate now recognizes the verified ENB context transition where
+the owned reduced surface is rebound as exactly one colour target with no
+depth after the matching world callback. MRT/depth binds remain ordinary scene
+work. A separate admission gate requires two populated colour/depth samples
+at this exact transition. Until it admits, or if the transition never appears,
+the 0.1.52 pre-Present publication path remains active. After admission, the
+same pooled DLSS path publishes to the native flip target before forwarding
+the bind; the existing UI redirector then routes that bind and matching full
+viewport to the native target. The domain stays in `NativeUi` through Present,
+where it closes for the next frame. Any incompatible later reduced MRT/depth
+bind suspends the route instead of assuming unknown semantics.
+
+The boundary classifier regression first failed because the API was absent,
+then passed with checks for phase, exact reduced identity, single RTV and no
+depth. Fresh Debug and Release builds each passed all 35 CTest groups. The
+Release NVIDIA harness also completed 600 pooled 1707x960 to 2560x1440 DLSS
+frames with zero fallbacks and output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
+Actual-game boundary admission, native-resolution UI, ENB/ReShade appearance
+and stability are **NOT RUN**.

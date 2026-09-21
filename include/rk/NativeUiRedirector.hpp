@@ -35,6 +35,12 @@ public:
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
+    // Identifies the exact reduced colour-only bind that can begin the UI
+    // pass. The caller may publish the reconstructed scene before forwarding
+    // this bind, then onOMSetRenderTargets will redirect it to native output.
+    bool isSceneUiBoundary(ID3D11DeviceContext* context,UINT count,
+        ID3D11RenderTargetView* const* views,
+        ID3D11DepthStencilView* depth) const noexcept;
     void onOMSetRenderTargets(ID3D11DeviceContext* context,UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,

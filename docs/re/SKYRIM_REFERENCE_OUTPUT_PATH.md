@@ -87,6 +87,36 @@ how the reference composes the final full-size image, or compatibility with
 the existing ReShade/ENB swap-chain ownership. The tested RazKolbas path
 continues to use native 2560x1440 DLAA; reduced SR is not activated.
 
+## Additional exact-game caller classification (2026-09-21)
+
+The decoded Skyrim 1.6.1170 `.text` image was rescanned for direct callers and
+for the other apparent swap-chain `GetBuffer` at game RVA `0xe48f0a`. That
+call is inside function `0xe48ed0`, whose only direct caller is `0x6532a9`.
+The caller constructs a filename/path buffer and passes format value `0x4c`;
+`0xe48ed0` forwards the returned texture to `0xe4d750`, which builds image
+metadata and dispatches format-specific serialization helpers. This is the
+game screenshot/export path, not a render-target acquisition path. Routing
+that return site to the owned reduced texture would only change screenshot
+input and cannot establish a pre-UI SR boundary.
+
+The apparent proxy flag stores found outside `GetBuffer`/`Present` were also
+classified. RVA `0x1f0ebb` belongs to font/UI initialization (the same
+function references Windows CJK font files), while `0x1a05bf` and `0x1a1857`
+operate on a separate large UI/backend object. They are not demonstrated
+writes to the swap proxy created at `0x1ea890`. Static reference code therefore
+still does not expose a transferable native-UI switch.
+
+RazKolbas instead has a measured boundary in its verified ENB immediate
+context: after the world callback, continued scene work can bind the reduced
+surface with MRT/depth, while the later UI candidate binds that same surface
+as exactly one colour target with no depth. The guarded implementation treats
+only the latter shape, on the verified render thread and after the matching
+world callback, as a candidate. It requires two populated colour/depth samples
+before moving publication there; otherwise the stable pre-Present path remains
+active. This is source/build evidence until an actual-game run confirms the
+candidate contains a complete UI-free scene and later UI appears at native
+resolution.
+
 The reference's private offsets are not a drop-in contract for RazKolbas.
 RazKolbas 0.1.24 has a D3D11 creation/swap observer and user-tested
 full-resolution SDR DLAA copyback before UI; it does not own a reduced
