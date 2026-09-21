@@ -1191,3 +1191,35 @@ and manifest were replaced. The new installed DLL SHA-256 is
 `63b28cc3a7b6f652d0e9c34db4a57e511331cdbc2b3f443a814367167d4d5ff6`;
 the user INI and signed NVIDIA runtime retain their prior hashes. The assistant
 did not start Skyrim.
+
+## User-started 0.1.49 result
+
+The user started Skyrim and loaded a save with 0.1.49. The exact ReShade
+nested Present observer installed alongside the owned GetBuffer route. At
+world frame 10171 the populated-scene gate accepted colour and depth, and the
+paired snapshots then measured two complete fallback frames across the outer
+ENB Present implementation. In both pairs the reduced source stayed byte
+identical while the native output changed:
+
+- frame 1 native SHA-256 changed from `effd8f495b3a7cccc1afd6e0d4e0095c6b98e7e49ed551ca361e01201d967820`
+  to `71ae393a5d01ad8f2ed6f1b2cd7e18b53997f9ab2fa07001d239e96508776b91`;
+- frame 2 native SHA-256 changed from `64f38b030c85d1d2beb81d594362efe81e9a8ffcb88c22dd0e9a20143e303cc7`
+  to `b4dd201016201dfa26c85fb305e0837ca75c655d810771c0bf1c49835beb090d`.
+
+This proves ENB modifies the native target in the selected fallback path; the
+reported visual difference is not explained by ENB Present being skipped.
+It does not yet prove that the first DLSS-published image receives the same
+transformation or that ENB receives every auxiliary resource it expects.
+
+The serialized live evaluation also removed the prior driver crash in this
+run. The first evaluation returned at world frame 10291, all 300 bounded DLSS
+frames completed by frame 10590, and Skyrim continued beyond 12,000 world and
+Present calls with zero Present failures. No new CrashLogger file appeared.
+The assistant closed the user-started game through a normal window-close
+request after collecting the authorized evidence.
+
+The next source candidate rearms the same two pre/post-ENB snapshots when the
+first provider frame is published. It changes no render ordering or DLSS
+parameters and will distinguish ENB processing of actual DLSS output from the
+already-proven fallback behavior. Actual-game DLSS-stage hashes are **NOT
+RUN**.
