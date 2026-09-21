@@ -1278,3 +1278,60 @@ DLL and manifest were replaced. Installed DLL SHA-256 is
 `288d0ade48acac5337334b78a3e9878ba119a285aecdc8f2c0222e10644aa9c7`;
 the user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim.
+
+## User-started 0.1.51 crash and pooled-resource candidate
+
+The user started Skyrim and loaded a save with 0.1.51. The combined populated
+colour/depth gate admitted world frame 18811 at 21:08:15, reduced feature
+creation completed, and the first serialized evaluation returned at frame
+18931 at 21:08:17. CrashLogger recorded an access violation five seconds
+later at 21:08:22 on NVIDIA worker thread 28056. The fault is the same null
+read at `nvwgf2umx.dll+0x1B61A4` seen in earlier failures. The last plugin log
+entry is the first-evaluation return, so the exact failing DLSS frame was not
+recorded. At the observed roughly 60 Hz cadence, the five-second interval is
+consistent with reaching the old 300-frame boundary, but this is an inference
+and not an exact submission count.
+
+Code inspection found that the 0.1.51 owned route allocated and retired four
+prepared textures, a full-size depth snapshot, depth SRV/UAV, crop constant
+buffer and two D3D11 event queries for every successful frame. The 0.1.49
+run had previously completed exactly 300 serialized evaluations, while the
+unbounded 0.1.51 run crashed only after a similar interval. This supports a
+resource/query lifetime or driver-object churn hypothesis; the in-game crash
+does not yet prove that hypothesis.
+
+Source commit `2df3b97` replaces that per-frame path with three persistent
+prepared slots. Each slot retains its colour, motion, normalized depth,
+output, full-size depth snapshot, crop shader/views/constants and one reusable
+event query. A completed publication fence gates slot refresh, so input and
+output resources are not overwritten while the GPU can still consume them.
+Shutdown explicitly drains the three slots before releasing NGX and their
+resources.
+
+The new WARP regression observed the expected compile failure before the API
+was implemented, then passed 360 evaluate/publish cycles while seeing exactly
+three stable prepared resource sets. Debug and Release builds passed all 35
+CTest groups. The production pooled route then completed 600 serialized DLSS
+SR evaluations on the RTX 4080 SUPER using the captured 1707x960 owned-scene
+shape and 2560x1440 output, with zero fallback frames, output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`,
+and clean NGX shutdown. This crosses the preceding 300-frame isolated limit;
+actual Skyrim/ENB/ReShade stability remains **NOT RUN** for this build.
+
+The installed candidate is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.52-pooled-continuous-dlss-2df3b97.zip`
+(SHA-256 `466447c14bf691b785cf006b1cdbdbd7a894237433f924486bbc9033fe4873bc`).
+Its manifest status is
+`EXPERIMENTAL_POOLED_CONTINUOUS_DLSS_SR_PENDING_GAME_TEST`; the archive has
+exactly the four manifest-listed payloads plus the manifest and every hash
+matches. With Skyrim stopped, all installed 0.1.51 payloads first matched
+their manifest and the complete mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.52-2df3b97`. Only the installed DLL
+and manifest were replaced. Installed DLL SHA-256 is
+`124570410a1c8b69d8b23f18754042f578d0f59e0beab756d001176f78b740a0`;
+the user INI and signed NVIDIA runtime retain hashes
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The assistant did not start Skyrim. The next required evidence is a
+user-started save-load run held beyond the previous five-second failure
+window.
