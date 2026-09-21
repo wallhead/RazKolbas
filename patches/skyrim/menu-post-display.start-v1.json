@@ -1,0 +1,36 @@
+{
+  "id": "skyrim1170.menu-post-display.start-v1",
+  "status": "EXPERIMENTAL_SEMANTIC_PRE_UI_RUNTIME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "Publish the completed owned world reconstruction once immediately before Skyrim begins each menu PostDisplay sequence, leaving subsequent Scaleform UI on the native target until Present",
+  "target": {
+    "module": "SkyrimSE.exe",
+    "architecture": "x64",
+    "version": "1.6.1170.0",
+    "sha256": "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+    "file_size": 37157144,
+    "image_size": "0x3870000"
+  },
+  "location": {
+    "rva": "0xfa51cb",
+    "address_library_id": 82084,
+    "address_library_addend": "0x2cb",
+    "original_target_rva": "0xe441c0",
+    "original_target_address_library_id": 77240,
+    "post_display_continuation_rva": "0xfa51d0",
+    "post_display_virtual_call_rva": "0xfa51d6"
+  },
+  "original_live_bytes": "e8f0efe9ff",
+  "replacement": "encodeCallSiteReplacement to a process-lifetime near relay ending in the pinned RazKolbas menuDisplayProxy; the proxy preserves RCX, EDX, R8D and R9D, invokes the owned publication boundary, then calls the original target exactly once",
+  "abi": "Exact bytes from RVA 0xfa51b4 materialize R9D=0, R8D and EDX from globals, and RCX from a global address before the direct CALL. The exact e441c0 prefix consumes EDX, R8D and R9B. The continuation loads the current menu vtable and calls slot +0x30, CommonLibSSE IMenu::PostDisplay.",
+  "activation": "Installed with the world-draw CALL only at SKSEPlugin_Load after exact executable hash, image size, caller, target, continuation and five-byte CALL validation. Both relays are prepared before either write; failure of the second write restores the first before startup resumes.",
+  "lifetime": "Callback DLL is pinned; both near relays and forwarding state remain reachable for process lifetime. No hot unpatch.",
+  "recovery": "Any processing, context or subsequent reduced MRT/depth compatibility failure suspends owned SR. The original game target is always forwarded. SafeMode or either disabled patch ID prevents both coupled hooks on the next launch.",
+  "evidence": [
+    "docs/re/SKYRIM_MENU_DISPLAY_BOUNDARY.md",
+    "tests/unit/CallSiteTests.cpp",
+    "tests/unit/MenuDisplayTests.cpp",
+    "tests/integration/NativeUiRedirectorTests.cpp"
+  ],
+  "game_runtime": "NOT RUN"
+}

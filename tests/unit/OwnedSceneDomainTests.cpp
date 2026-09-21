@@ -188,6 +188,8 @@ TEST_CASE("Owned scene moves its render-thread lease between real frames", "[own
     REQUIRE(workerRect.bottom==960);
     REQUIRE(route.startProcessing(1,11));
     REQUIRE(route.enterUi(1,11,true));
+    REQUIRE_FALSE(route.begin(2,11,GetCurrentThreadId()));
+    REQUIRE(route.closePublishedFrame(1,11));
     REQUIRE(route.begin(2,11,GetCurrentThreadId()));
     REQUIRE(route.renderThread()==GetCurrentThreadId());
     RECT nextRect{};

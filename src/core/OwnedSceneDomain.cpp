@@ -15,7 +15,7 @@ bool OwnedSceneDomain::configure(OwnedScenePlan plan) noexcept {
 bool OwnedSceneDomain::begin(std::uint64_t frame,std::uint64_t generation,
     std::uint32_t renderThread) noexcept {
     if(!plan_.valid()||generation!=plan_.generation||!frame||frame<=frame_||
-       phase_==ScenePhase::Suspended||phase_==ScenePhase::Processing||phase_==ScenePhase::World)
+       phase_!=ScenePhase::Dormant)
         return false;
     frame_=frame;renderThread_=renderThread;phase_=ScenePhase::World;return true;
 }

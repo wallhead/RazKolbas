@@ -89,7 +89,7 @@ BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
     if(!logical||window!=state->gameWindow)return state->prior(window,rect);
     auto& domain=*state->domain;
     const auto phase=domain.phase();
-    if(phase==ScenePhase::Dormant||phase==ScenePhase::NativeUi) {
+    if(phase==ScenePhase::Dormant) {
         const auto frame=worldDrawForwardedCalls()+1;
         if(domain.begin(frame,domain.plan().generation,GetCurrentThreadId()))
             ownedFrameThread.store(GetCurrentThreadId(),std::memory_order_release);

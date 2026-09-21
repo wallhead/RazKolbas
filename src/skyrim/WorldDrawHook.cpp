@@ -9,6 +9,7 @@
 #include "rk/SdrSrPresentation.hpp"
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
+#include "rk/MenuDisplay.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
@@ -38,6 +39,7 @@ namespace rk {
 namespace {
 struct WorldState {
     WorldDrawForwarder forwarder;
+    MenuDisplayForwarder menuForwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
@@ -99,6 +101,7 @@ struct WorldState {
 std::atomic<WorldState*> active{nullptr};
 bool read(std::uintptr_t address,void* destination,std::size_t size);
 #ifdef RK_WITH_NGX
+enum class OwnedPublicationBoundary { MenuDisplay, PrePresentFallback };
 Result<NgxJitter> readNgxJitter(std::uintptr_t camera,
     std::uint32_t targetWidth,std::uint32_t targetHeight) {
     if(!camera)return Error{ErrorCode::Unavailable,"Verified game camera is unavailable"};
@@ -459,7 +462,7 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
     }
 }
 bool processOwnedWorldFrame(WorldState* state,void* world,
-    std::uint64_t sequence) noexcept {
+    std::uint64_t sequence,OwnedPublicationBoundary boundary) noexcept {
     auto* domain=activeOwnedSceneDomain();
     if(!domain)return ownedScenePreviouslyActive();
     if(domain->phase()==ScenePhase::Suspended)return true;
@@ -632,14 +635,18 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
-        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault()||
-           !domain->closePublishedFrame(sequence,domain->plan().generation))
+        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native publication or context compatibility failed");
+        if(boundary==OwnedPublicationBoundary::PrePresentFallback&&
+           !domain->closePublishedFrame(sequence,domain->plan().generation))
+            throw std::runtime_error("Owned pre-Present fallback did not close its frame");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
         state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
         state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
         if(sequence<=3||sequence%600==0)
-            spdlog::info("Owned pre-Present frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; reduced full frame including game UI",
+            spdlog::info("Owned {} frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}",
+                boundary==OwnedPublicationBoundary::MenuDisplay?
+                    "pre-menu-display":"pre-Present fallback",
                 sequence,domain->plan().render.width,domain->plan().render.height,
                 domain->plan().display.width,domain->plan().display.height,
                 std::get<NativeFlipTarget>(native).index,
@@ -660,6 +667,22 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
     return true;
 }
 #endif
+void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    auto* domain=activeOwnedSceneDomain();
+    if(state&&domain&&domain->phase()==ScenePhase::World)
+        processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
+            state->forwarded.load(std::memory_order_relaxed),
+            OwnedPublicationBoundary::MenuDisplay);
+#endif
+}
+void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
+    std::uint32_t fourth) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state)std::terminate();
+    state->menuForwarder.dispatch(first,second,third,fourth);
+}
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     const auto sequence=state->forwarded.load(std::memory_order_relaxed)+1;
@@ -1206,7 +1229,22 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
 #ifdef RK_WITH_NGX
     if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World)
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-            state->forwarded.load(std::memory_order_relaxed));
+            state->forwarded.load(std::memory_order_relaxed),
+            OwnedPublicationBoundary::PrePresentFallback);
+    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::NativeUi) {
+        auto* ui=ownedUiRedirector();
+        if(!ui||ui->compatibilityFault()||
+           !domain->closePublishedFrame(domain->frame(),domain->plan().generation)) {
+            state->srDisabled=true;
+            state->statusDlssDisabled.store(true,std::memory_order_release);
+            domain->suspend();
+            try {spdlog::warn("Owned native UI phase failed before Present; SR suspended");}
+            catch(...) {}
+        } else if(domain->frame()<=3||domain->frame()%600==0) {
+            try {spdlog::info("Owned native UI frame {} closed at pre-Present",
+                domain->frame());} catch(...) {}
+        }
+    }
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
@@ -1326,7 +1364,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(!settings.get<bool>("General.Enabled")||settings.get<bool>("General.SafeMode")||
        !settings.get<bool>("Patching.EnableVersionedPatches")||
        !settings.get<bool>("Patching.ExperimentalPatches")||
-       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,worldDrawPatchId)) {
+       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,worldDrawPatchId)||
+       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,menuDisplayPatchId)) {
         spdlog::info("World-draw pass-through disabled by configuration");
         return false;
     }
@@ -1349,6 +1388,21 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         profile.imageSize,descriptor);
     if(const auto error=std::get_if<Error>(&planned))return *error;
     const auto& plan=std::get<CallSitePlan>(planned);
+    constexpr std::array<std::uint8_t,5> menuExpected{0xe8,0xf0,0xef,0xe9,0xff};
+    const CallSiteDescriptor menuDescriptor{std::string(menuDisplayPatchId),
+        std::string(profile.gameSha256),profile.imageSize,0xfa51cb,0xe441c0,
+        menuExpected};
+    std::array<std::uint8_t,38> menuCaller{};
+    std::array<std::uint8_t,66> menuTarget{};
+    if(!read(base+0xfa51b4,menuCaller.data(),menuCaller.size())||
+       !read(base+menuDescriptor.originalTargetRva,menuTarget.data(),menuTarget.size()))
+        return Error{ErrorCode::Io,"Cannot read decoded menu-display ABI"};
+    if(const auto abi=verifySkyrim1170MenuDisplayCallAbi(menuCaller,menuTarget);
+       const auto error=std::get_if<Error>(&abi))return *error;
+    const auto menuPlanned=prepareCallSite(std::span(menuCaller).subspan(23,5),
+        verifiedGameHash,profile.imageSize,menuDescriptor);
+    if(const auto error=std::get_if<Error>(&menuPlanned))return *error;
+    const auto& menuPlan=std::get<CallSitePlan>(menuPlanned);
     auto pending=std::make_unique<WorldState>();
 #ifdef RK_WITH_NGX
     const auto provider=settings.get<Choice>("Upscaling.Provider").value;
@@ -1380,9 +1434,18 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     const auto configured=pending->forwarder.configure(
         reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);
     if(const auto error=std::get_if<Error>(&configured))return *error;
+    const auto menuConfigured=pending->menuForwarder.configure(
+        reinterpret_cast<MenuDisplayFn>(base+menuPlan.originalTargetRva),
+        &beforeMenuDisplay);
+    if(const auto error=std::get_if<Error>(&menuConfigured))return *error;
     auto relayResult=prepareNearCallRelay(plan,base,reinterpret_cast<std::uintptr_t>(&worldDrawProxy));
     if(const auto error=std::get_if<Error>(&relayResult))return *error;
     auto relay=std::make_unique<NearCallRelay>(std::move(std::get<NearCallRelay>(relayResult)));
+    auto menuRelayResult=prepareNearCallRelay(menuPlan,base,
+        reinterpret_cast<std::uintptr_t>(&menuDisplayProxy));
+    if(const auto error=std::get_if<Error>(&menuRelayResult))return *error;
+    auto menuRelay=std::make_unique<NearCallRelay>(
+        std::move(std::get<NearCallRelay>(menuRelayResult)));
     HMODULE pinnedSelf{};
     constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(&worldDrawProxy),&pinnedSelf))
@@ -1390,18 +1453,32 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     spdlog::info("Preparing {}: CALL RVA=0x{:x}, original RVA=0x{:x}, relay=0x{:x}; SKSEPlugin_Load startup boundary; thread={}",
         worldDrawPatchId,plan.siteRva,plan.originalTargetRva,
         reinterpret_cast<std::uintptr_t>(relay->entry()),GetCurrentThreadId());
+    spdlog::info("Preparing {}: CALL RVA=0x{:x}, original RVA=0x{:x}, relay=0x{:x}; immediately before IMenu::PostDisplay",
+        menuDisplayPatchId,menuPlan.siteRva,menuPlan.originalTargetRva,
+        reinterpret_cast<std::uintptr_t>(menuRelay->entry()));
     auto* published=pending.release();
     active.store(published,std::memory_order_release);
+    const auto menuApplied=applyCallInstruction(menuPlan,base,*menuRelay,
+        CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+    if(const auto error=std::get_if<Error>(&menuApplied)) {
+        active.store(nullptr,std::memory_order_release);
+        delete published;
+        return *error;
+    }
     const auto applied=applyCallInstruction(plan,base,*relay,
         CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
     if(const auto error=std::get_if<Error>(&applied)) {
+        const auto restored=restoreCallInstruction(menuPlan,base,*menuRelay,
+            CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+        if(std::holds_alternative<Error>(restored))std::terminate();
         active.store(nullptr,std::memory_order_release);
         delete published;
         return *error;
     }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
+    menuRelay.release();
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; SDR DLAA armed; guarded native-DRS SR requested={}; configuredQuality={}",worldDrawPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
+    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; owned SR publishes once before menu PostDisplay and closes at Present; requested={}; configuredQuality={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

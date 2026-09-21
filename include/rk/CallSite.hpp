@@ -29,6 +29,11 @@ Result<CallSitePlan> prepareCallSite(std::span<const std::uint8_t> live,
 // forwarding ABI. Does not infer the semantic type of the game pointer.
 Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
     std::span<const std::uint8_t> originalTarget);
+// Exact call immediately before IMenu::PostDisplay in Skyrim 1.6.1170.
+// The four Win64 arguments are already materialized at this boundary.
+Result<bool> verifySkyrim1170MenuDisplayCallAbi(
+    std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget);
 // Read-only exact-code gate for the decoded DRS update CALL and scissor
 // function. A successful check does not activate reduced rendering or grant
 // permission to modify either site during an active game session.

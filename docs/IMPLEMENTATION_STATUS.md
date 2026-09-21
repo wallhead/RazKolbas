@@ -1384,6 +1384,7 @@ depth. Fresh Debug and Release builds each passed all 35 CTest groups. The
 Release NVIDIA harness also completed 600 pooled 1707x960 to 2560x1440 DLSS
 frames with zero fallbacks and output SHA-256
 `3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
+
 Actual-game boundary admission, native-resolution UI, ENB/ReShade appearance
 and stability are **NOT RUN**.
 
@@ -1430,3 +1431,26 @@ CTest groups passed in each configuration. The release NVIDIA presentation
 harness completed 600 pooled DLSS frames with zero fallbacks and retained
 output SHA-256
 `3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
+
+## Semantic menu-display publication candidate
+
+Exact Skyrim 1.6.1170 analysis identifies the menu-stack loop at Address
+Library AE ID 82084. Its direct CALL at RVA `0xfa51cb` (ID plus `0x2cb`) runs
+immediately before the loop invokes `IMenu::PostDisplay` through vtable slot
+`+0x30`. Source now installs a coupled exact-byte relay there and preserves
+all four Win64 arguments to original target RVA `0xe441c0`. The first call in
+an owned World phase publishes DLSS/spatial output to the native flip target;
+the `NativeUi` phase remains open while Skyrim draws menus and closes only at
+pre-Present. Frames without a menu-display call retain the stable pre-Present
+fallback. The domain rejects a new frame until the prior native-UI phase has
+closed.
+
+The caller, continuation, original target and CALL are exact-byte gated, and
+both relays are prepared before the startup transaction writes either site.
+Forwarding/order and phase-lifetime tests were added. Debug and Release each
+pass all 35 CTest groups. The Release NVIDIA harness completed 600 pooled
+1707x960 to 2560x1440 DLSS frames with zero fallbacks and output SHA-256
+`9e24bc310a96dbeb827811488e7712457da160d242bd12370dbbdd05cdb65d37`.
+Game runtime, native UI separation and ENB/ReShade appearance are **NOT RUN**
+for this candidate. The installed MO2 mod remains verified stable 0.1.52 until
+the new package is committed, staged and installed with Skyrim stopped.

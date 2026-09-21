@@ -85,6 +85,7 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(farPixel[2]==255);
     context->Unmap(staging.Get(),0);
     REQUIRE_FALSE(redirect.compatibilityFault());
+    REQUIRE(route.closePublishedFrame(1,1));
     REQUIRE(route.begin(2,1));
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     bound.Reset();context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
