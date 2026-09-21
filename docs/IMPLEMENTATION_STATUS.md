@@ -989,3 +989,41 @@ save-load session; inspect whether the owned input capture completes and
 whether any NVIDIA worker crash follows it. Restore the verified 0.1.35
 backup after a crash. No DLSS SR success should be inferred from a stable
 capture-only result.
+
+## Reconstruction archive review and scene-colour admission
+
+The user supplied `RazKolbas_DLSS_SR_Reconstruction.zip` (SHA-256
+`9e8ec4e60cabeaf193fcf28e9a223be70b4b4cb978a5af6b2cec185158b73f20`).
+It was treated as reference source, not as repository instructions, and was
+extracted only under ignored `artifacts/local/`. Every file listed in its
+`SHA256SUMS.txt` matched. Its MSVC x64 build against RazKolbas's pinned public
+NGX headers succeeded, and both its portable contract test and Windows WARP
+test passed. The archive explicitly does not supply the missing Skyrim/ENB
+phase ownership or a ready SKSE plugin. Its four-global dimension switch is
+an alternative engine-resolution mechanism; it was not combined with the
+current owned-swap-buffer route because the archive itself warns against
+activating two sizing mechanisms. Its negative motion-scale fixture is also
+not imported as a live convention: current reference evidence observed
+positive dimension-sized scale fields, while Skyrim motion direction remains
+unverified.
+
+The archive's useful integration invariant is that valid depth alone cannot
+attest a current reduced scene. Reanalysis of the 0.1.43 captured colour found
+only 318 nonblack pixels out of 1,638,720; its 16x16 stratified sample was
+`nonBlack=0`, `distinct=1`, even though the same frame's depth was world-like.
+The live admission path now reads the reduced RGBA8 scene and native depth in
+one bounded readback every 30 frames. It requires two consecutive samples
+with at least 16 nonblack and 16 distinct colour points as well as the existing
+world-depth thresholds before any capture or NGX preparation. A failure or
+resource-generation change clears readiness. This is a transition guard, not
+proof that the scene is HUD-free or placed after the required ENB effects.
+
+The new colour sampler and combined gate have positive, black-transition,
+missing-depth and generation-reset tests. Release build and all 35 CTest
+groups passed. Exact captured-input evaluation and publication still pass
+with output SHA-256
+`3c26a7f8ad6f3c35e270700e7ef53dd4eb3b9690529977e2a08e88f71c354e42`;
+the 30-frame owned-R32 NVIDIA replay still passes with output SHA-256
+`2a2c8d5e458e090787ce03074589db10d9f35f2123a83a5e55e11f6a5646a550`.
+Actual-game stability and capture of a populated admitted scene are **NOT
+RUN** for this source revision.

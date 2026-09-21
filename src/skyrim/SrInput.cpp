@@ -35,6 +35,26 @@ Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
     }
     return stats;
 }
+Result<ColorSampleStats> sampleWorldColor(std::span<const std::uint8_t> pixels,
+    UINT width,UINT height,std::size_t rowBytes) {
+    if(!width||!height||width>8192||height>8192||
+       rowBytes<static_cast<std::size_t>(width)*4||rowBytes>pixels.size()/height)
+        return Error{ErrorCode::InvalidInput,"Raw colour sample extent differs"};
+    std::array<std::uint32_t,256> seen{};
+    ColorSampleStats stats{};
+    for(UINT y=0;y<16;++y)for(UINT x=0;x<16;++x) {
+        const auto sx=static_cast<UINT>((2*x+1)*static_cast<std::uint64_t>(width)/32);
+        const auto sy=static_cast<UINT>((2*y+1)*static_cast<std::uint64_t>(height)/32);
+        const auto* pixel=pixels.data()+static_cast<std::size_t>(sy)*rowBytes+sx*4;
+        stats.nonBlack+=pixel[0]>4||pixel[1]>4||pixel[2]>4;
+        std::uint32_t color{};
+        std::memcpy(&color,pixel,sizeof(color));
+        bool known=false;
+        for(unsigned i=0;i<stats.distinct;++i)known|=seen[i]==color;
+        if(!known)seen[stats.distinct++]=color;
+    }
+    return stats;
+}
 
 namespace {
 constexpr char depthCropShader[]=R"(

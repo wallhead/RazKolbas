@@ -45,6 +45,35 @@ struct DepthSampleStats {
     unsigned distinct{},nonFar{};
     bool worldLike() const noexcept { return distinct>=16&&nonFar>=16; }
 };
+struct ColorSampleStats {
+    unsigned nonBlack{},distinct{};
+    bool sceneLike() const noexcept { return nonBlack>=16&&distinct>=16; }
+};
+// Requires two recent samples where both the current colour and depth look
+// populated. This avoids treating a black loading/fade frame with stale or
+// already-populated depth as a valid temporal-SR source.
+class OwnedSceneAdmissionGate {
+public:
+    bool needsSample(std::uint64_t frame,std::uint64_t generation) noexcept {
+        if(generation_!=generation||frame<=lastSample_) {
+            generation_=generation;
+            lastSample_=0;
+            consecutiveSceneSamples_=0;
+        }
+        return !lastSample_||frame-lastSample_>=30;
+    }
+    void record(std::uint64_t frame,std::optional<ColorSampleStats> color,
+        std::optional<DepthSampleStats> depth) noexcept {
+        lastSample_=frame;
+        if(color&&depth&&color->sceneLike()&&depth->worldLike()) {
+            if(consecutiveSceneSamples_<2)++consecutiveSceneSamples_;
+        } else consecutiveSceneSamples_=0;
+    }
+    bool ready() const noexcept { return consecutiveSceneSamples_>=2; }
+private:
+    std::uint64_t generation_{},lastSample_{};
+    unsigned consecutiveSceneSamples_{};
+};
 // A conservative admission gate for the owned reduced-scene route. Depth
 // readiness is sampled periodically and reset on a new resource generation.
 class WorldDepthGate {
@@ -71,6 +100,10 @@ private:
 // Samples a fixed 10x10 grid of raw Skyrim R24G8 depth words. This is only a
 // bounded scene-readiness gate: it does not infer linearization or guide units.
 Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
+    UINT width,UINT height,std::size_t rowBytes);
+// Samples a 16x16 grid from an RGBA8 scene. This is a bounded transition gate,
+// not an assertion that the source is HUD-free or at the final SR boundary.
+Result<ColorSampleStats> sampleWorldColor(std::span<const std::uint8_t> pixels,
     UINT width,UINT height,std::size_t rowBytes);
 
 // The caller proves exclusive access to the actual immediate context and

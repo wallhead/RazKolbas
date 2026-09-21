@@ -93,6 +93,46 @@ TEST_CASE("Raw depth sample gate distinguishes a menu clear from world geometry"
     REQUIRE(std::holds_alternative<rk::Error>(rk::sampleWorldDepth(bytes,width,height,width*4-1)));
 }
 
+TEST_CASE("Owned scene admission rejects a black transition despite world depth", "[sr_input]") {
+    constexpr UINT width=64,height=64;
+    std::vector<std::uint8_t> pixels(width*height*4,0);
+    for(std::size_t i=3;i<pixels.size();i+=4)pixels[i]=255;
+    auto black=rk::sampleWorldColor(pixels,width,height,width*4);
+    REQUIRE(std::holds_alternative<rk::ColorSampleStats>(black));
+    REQUIRE_FALSE(std::get<rk::ColorSampleStats>(black).sceneLike());
+    for(UINT y=0;y<16;++y)for(UINT x=0;x<16;++x) {
+        const auto sx=static_cast<UINT>((2*x+1)*static_cast<std::uint64_t>(width)/32);
+        const auto sy=static_cast<UINT>((2*y+1)*static_cast<std::uint64_t>(height)/32);
+        auto* pixel=pixels.data()+(static_cast<std::size_t>(sy)*width+sx)*4;
+        pixel[0]=static_cast<std::uint8_t>(10+x);
+        pixel[1]=static_cast<std::uint8_t>(20+y);
+    }
+    auto scene=rk::sampleWorldColor(pixels,width,height,width*4);
+    REQUIRE(std::holds_alternative<rk::ColorSampleStats>(scene));
+    const auto color=std::get<rk::ColorSampleStats>(scene);
+    REQUIRE(color.nonBlack==256);
+    REQUIRE(color.distinct==256);
+    REQUIRE(color.sceneLike());
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::sampleWorldColor(pixels,width,height,width*4-1)));
+
+    rk::OwnedSceneAdmissionGate gate;
+    const rk::DepthSampleStats worldDepth{95,94};
+    const rk::ColorSampleStats blackColor{0,1};
+    REQUIRE(gate.needsSample(1,4));
+    gate.record(1,blackColor,worldDepth);
+    gate.record(31,blackColor,worldDepth);
+    REQUIRE_FALSE(gate.ready());
+    gate.record(61,color,worldDepth);
+    REQUIRE_FALSE(gate.ready());
+    gate.record(91,color,worldDepth);
+    REQUIRE(gate.ready());
+    gate.record(121,color,std::nullopt);
+    REQUIRE_FALSE(gate.ready());
+    REQUIRE(gate.needsSample(122,5));
+    REQUIRE_FALSE(gate.ready());
+}
+
 TEST_CASE("Owned SR waits for two recent world depth samples and falls back when depth clears", "[sr_input]") {
     rk::WorldDepthGate gate;
     const rk::DepthSampleStats menu{1,0};

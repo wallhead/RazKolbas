@@ -81,7 +81,7 @@ struct WorldState {
     std::vector<SdrSrFrameResult> ownedFallbacks;
     bool srRequested{};
     bool srDisabled{};
-    WorldDepthGate ownedDepthGate;
+    OwnedSceneAdmissionGate ownedSceneGate;
     bool ownedInputCaptureOnly{true};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
@@ -396,16 +396,31 @@ void probeOwnedPixels(const char* stage,ID3D11DeviceContext* context,
             image.descriptor.Width,image.descriptor.Height,nonBlack,distinct);
     }
 }
-Result<DepthSampleStats> probeOwnedDepth(ID3D11DeviceContext* context,ID3D11Texture2D* depth,
-    Extent render) {
-    const std::array<ID3D11Texture2D*,1> texture{depth};
-    const auto readback=readbackCandidates(context,texture,16*1024*1024);
+struct OwnedSceneSample {
+    ColorSampleStats color;
+    DepthSampleStats depth;
+};
+Result<OwnedSceneSample> probeOwnedScene(ID3D11DeviceContext* context,
+    ID3D11Texture2D* scene,ID3D11Texture2D* depth,Extent render) {
+    const std::array<ID3D11Texture2D*,2> textures{scene,depth};
+    const auto readback=readbackCandidates(context,textures,24*1024*1024);
     if(const auto error=std::get_if<Error>(&readback))return *error;
-    const auto& image=std::get<std::vector<ProbeImage>>(readback).at(0);
-    if(image.descriptor.Width<render.width||image.descriptor.Height<render.height)
-        return Error{ErrorCode::InvalidInput,"Owned depth extent is smaller than render extent"};
-    return sampleWorldDepth(image.pixels,render.width,render.height,
-        image.rowBytes);
+    const auto& images=std::get<std::vector<ProbeImage>>(readback);
+    const auto& colorImage=images.at(0);
+    const auto& depthImage=images.at(1);
+    if(colorImage.descriptor.Width!=render.width||
+       colorImage.descriptor.Height!=render.height||
+       depthImage.descriptor.Width<render.width||
+       depthImage.descriptor.Height<render.height)
+        return Error{ErrorCode::InvalidInput,"Owned scene/depth extent differs from render extent"};
+    const auto color=sampleWorldColor(colorImage.pixels,render.width,render.height,
+        colorImage.rowBytes);
+    if(const auto error=std::get_if<Error>(&color))return *error;
+    const auto depthStats=sampleWorldDepth(depthImage.pixels,render.width,render.height,
+        depthImage.rowBytes);
+    if(const auto error=std::get_if<Error>(&depthStats))return *error;
+    return OwnedSceneSample{std::get<ColorSampleStats>(color),
+        std::get<DepthSampleStats>(depthStats)};
 }
 Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
     ID3D11Texture2D* scene,ID3D11Texture2D* motion,ID3D11Texture2D* depth,
@@ -491,28 +506,31 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     domain->plan().display.width,domain->plan().display.height);
             }
         }
-        if(state->ownedDepthGate.needsSample(sequence,domain->plan().generation)) {
-            const bool wasReady=state->ownedDepthGate.ready();
-            const auto depth=probeOwnedDepth(context,
+        if(state->ownedSceneGate.needsSample(sequence,domain->plan().generation)) {
+            const bool wasReady=state->ownedSceneGate.ready();
+            const auto sample=probeOwnedScene(context,scene,
                 reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
                 domain->plan().render);
-            const auto* stats=std::get_if<DepthSampleStats>(&depth);
-            state->ownedDepthGate.record(sequence,
-                stats?std::optional<DepthSampleStats>{*stats}:std::nullopt);
-            const bool ready=state->ownedDepthGate.ready();
+            const auto* stats=std::get_if<OwnedSceneSample>(&sample);
+            state->ownedSceneGate.record(sequence,
+                stats?std::optional<ColorSampleStats>{stats->color}:std::nullopt,
+                stats?std::optional<DepthSampleStats>{stats->depth}:std::nullopt);
+            const bool ready=state->ownedSceneGate.ready();
             if(sequence==1||sequence%600==0||ready!=wasReady) {
                 if(stats)
-                    spdlog::info("Owned depth admission frame {}: distinct={} nonFar={} worldLike={} NGX-ready={}",
-                        sequence,stats->distinct,stats->nonFar,stats->worldLike(),ready);
+                    spdlog::info("Owned scene admission frame {}: colorNonBlack={} colorDistinct={} sceneLike={} depthDistinct={} depthNonFar={} worldLike={} NGX-ready={}",
+                        sequence,stats->color.nonBlack,stats->color.distinct,
+                        stats->color.sceneLike(),stats->depth.distinct,
+                        stats->depth.nonFar,stats->depth.worldLike(),ready);
                 else
-                    spdlog::warn("Owned depth admission frame {} unavailable: {}; NGX-ready=false",
-                        sequence,std::get<Error>(depth).message);
+                    spdlog::warn("Owned scene admission frame {} unavailable: {}; NGX-ready=false",
+                        sequence,std::get<Error>(sample).message);
             }
         }
         const auto presented=presentSdrSrFrame(context,scene,display,
             [&]()->Result<bool> {
-                if(!state->ownedDepthGate.ready())
-                    return Error{ErrorCode::Unavailable,"World depth has not passed the owned NGX admission gate"};
+                if(!state->ownedSceneGate.ready())
+                    return Error{ErrorCode::Unavailable,"World colour and depth have not passed the owned NGX admission gate"};
                 if(state->ownedInputCaptureOnly) {
                     if(!state->ownedInputCaptureAttempted) {
                         state->ownedInputCaptureAttempted=true;
