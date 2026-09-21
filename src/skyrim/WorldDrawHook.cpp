@@ -585,20 +585,16 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 const std::array<ID3D11Texture2D*,3> sources{
                     scene,reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
                     reinterpret_cast<ID3D11Texture2D*>(numbers.depth)};
-                auto prepared=prepareSdrSrInputsFromOwnedScene(context,sources,
-                    domain->plan().display.width,domain->plan().display.height);
-                if(const auto error=std::get_if<Error>(&prepared))
-                    return Error{ErrorCode::Unavailable,error->message};
                 state->srSourceVerified.store(true,std::memory_order_release);
                 const auto renderJitter=readNgxJitter(state->jitterCamera,
                     domain->plan().render.width,domain->plan().render.height);
                 if(const auto error=std::get_if<Error>(&renderJitter))
                     return Error{ErrorCode::Unavailable,error->message};
                 if(firstAttempt)
-                    spdlog::info("Owned NGX stage frame {}: first inputs prepared; before evaluation",
+                    spdlog::info("Owned NGX stage frame {}: before pooled evaluation",
                         sequence);
-                auto evaluated=state->srPresenter.evaluatePrepared(device,context,
-                    std::move(std::get<PreparedSrInputs>(prepared)),
+                auto evaluated=state->srPresenter.evaluateOwnedScene(device,context,sources,
+                    domain->plan().display.width,domain->plan().display.height,
                     SrFrameMetadata{sequence,domain->plan().generation,false},
                     std::get<NgxJitter>(renderJitter));
                 if(firstAttempt)

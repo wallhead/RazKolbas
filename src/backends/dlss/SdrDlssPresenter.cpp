@@ -314,7 +314,6 @@ Result<bool> SdrDlssPresenter::retirePrepared(ID3D11DeviceContext* context) {
         if(done==S_FALSE)pending=true;
         else if(FAILED(done))return Error{ErrorCode::DeviceRemoved,"Prepared SR slot retirement failed"};
         else {
-            slot.frame.reset();slot.completion.Reset();
             slot.inFlight=slot.evaluated=slot.published=false;
         }
     }
@@ -362,17 +361,6 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePrepared(
     context->GetDevice(&contextDevice);
     if(!contextDevice||identity(contextDevice.Get()).Get()!=identity(device).Get())
         return reject({ErrorCode::Conflict,"Prepared SR context device differs"});
-    if(const auto checked=validatePrepared(device,prepared,metadata,jitter);
-       const auto error=std::get_if<Error>(&checked))return reject(*error);
-    if(preparedGeneration_&&
-       (metadata.generation!=preparedGeneration_||
-        metadata.frameId<=lastPreparedFrameId_||
-        prepared.width()!=width_||prepared.height()!=height_||
-        prepared.outputWidth()!=displayWidth_||
-        prepared.outputHeight()!=displayHeight_))
-        return reject({ErrorCode::Conflict,"Prepared SR frame generation, order or extent changed"});
-    if(initialized_&&(!reduced_||identity(device_.Get()).Get()!=identity(device).Get()))
-        return reject({ErrorCode::Conflict,"Existing DLSS feature mode or device differs"});
     const auto retired=retirePrepared(context);
     if(const auto error=std::get_if<Error>(&retired))return reject(*error);
     auto& slot=preparedSlots_[nextPreparedSlot_++%preparedSlots_.size()];
@@ -380,12 +368,57 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePrepared(
         retainUnsubmitted(context,std::move(prepared));
         return std::optional<SrEvaluationToken>{};
     }
-    ComPtr<ID3D11Query> event;
-    const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
-    if(FAILED(device->CreateQuery(&query,&event)))
-        return reject({ErrorCode::Unavailable,"Prepared SR completion query unavailable"});
     slot.frame.emplace(std::move(prepared));
-    slot.completion=std::move(event);
+    return evaluatePreparedSlot(device,context,slot,metadata,jitter);
+}
+
+Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluateOwnedScene(
+    ID3D11Device* device,ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight,
+    SrFrameMetadata metadata,NgxJitter jitter) {
+    if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||!device)
+        return Error{ErrorCode::InvalidInput,"Owned SR needs a device and immediate context"};
+    ComPtr<ID3D11Device> contextDevice;
+    context->GetDevice(&contextDevice);
+    if(!contextDevice||identity(contextDevice.Get()).Get()!=identity(device).Get())
+        return Error{ErrorCode::Conflict,"Owned SR context device differs"};
+    const auto retired=retirePrepared(context);
+    if(const auto error=std::get_if<Error>(&retired))return *error;
+    auto& slot=preparedSlots_[nextPreparedSlot_++%preparedSlots_.size()];
+    if(slot.inFlight)return std::optional<SrEvaluationToken>{};
+    if(slot.frame) {
+        const auto refreshed=slot.frame->refreshOwnedScene(context,sources);
+        if(const auto error=std::get_if<Error>(&refreshed))return *error;
+    } else {
+        auto prepared=prepareSdrSrInputsFromOwnedScene(context,sources,
+            outputWidth,outputHeight);
+        if(const auto error=std::get_if<Error>(&prepared))return *error;
+        slot.frame.emplace(std::move(std::get<PreparedSrInputs>(prepared)));
+    }
+    return evaluatePreparedSlot(device,context,slot,metadata,jitter);
+}
+
+Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
+    ID3D11Device* device,ID3D11DeviceContext* context,PreparedSlot& slot,
+    SrFrameMetadata metadata,NgxJitter jitter) {
+    if(!slot.frame)
+        return Error{ErrorCode::Conflict,"Prepared SR slot has no frame"};
+    if(const auto checked=validatePrepared(device,*slot.frame,metadata,jitter);
+       const auto error=std::get_if<Error>(&checked))return *error;
+    if(preparedGeneration_&&
+       (metadata.generation!=preparedGeneration_||
+        metadata.frameId<=lastPreparedFrameId_||
+        slot.frame->width()!=width_||slot.frame->height()!=height_||
+        slot.frame->outputWidth()!=displayWidth_||
+        slot.frame->outputHeight()!=displayHeight_))
+        return Error{ErrorCode::Conflict,"Prepared SR frame generation, order or extent changed"};
+    if(initialized_&&(!reduced_||identity(device_.Get()).Get()!=identity(device).Get()))
+        return Error{ErrorCode::Conflict,"Existing DLSS feature mode or device differs"};
+    if(!slot.completion) {
+        const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
+        if(FAILED(device->CreateQuery(&query,&slot.completion)))
+            return Error{ErrorCode::Unavailable,"Prepared SR completion query unavailable"};
+    }
     slot.metadata=metadata;
     slot.evaluated=slot.published=false;
     const bool reset=metadata.resetHistory||resetPending_||!lastPreparedFrameId_;
@@ -463,13 +496,8 @@ Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     if(activeView)activeView->GetResource(&activeTarget);
     if(!activeTarget||identity(activeTarget.Get()).Get()!=identity(destination).Get())
         return Error{ErrorCode::Conflict,"Prepared SR publication target is not active RTV0"};
-    ComPtr<ID3D11Query> event;
-    const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
-    if(FAILED(contextDevice->CreateQuery(&query,&event)))
-        return Error{ErrorCode::Unavailable,"Prepared SR publication completion query unavailable"};
     const auto copied=copySdrDisplayFrame(context,destination,slot.frame->output());
-    context->End(event.Get());
-    slot.completion=std::move(event);
+    context->End(slot.completion.Get());
     slot.inFlight=true;
     if(const auto error=std::get_if<Error>(&copied))return *error;
     slot.published=true;
@@ -610,6 +638,12 @@ Result<bool> SdrDlssPresenter::stop(ID3D11DeviceContext* context) {
     for(auto& slot:slots_) {
         slot.frame.reset();slot.completion.Reset();slot.inFlight=false;
     }
+    for(auto& slot:preparedSlots_) {
+        slot.frame.reset();slot.completion.Reset();
+        slot.inFlight=slot.evaluated=slot.published=false;
+    }
+    retiredPrepared_.clear();
+    unfencedPrepared_.clear();
     device_.Reset();
     if(runtimeFile_!=INVALID_HANDLE_VALUE)CloseHandle(runtimeFile_);
     runtimeFile_=INVALID_HANDLE_VALUE;

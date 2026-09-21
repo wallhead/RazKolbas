@@ -282,7 +282,9 @@ int wmain(int argc,wchar_t** argv) {
         std::string fallbackHash;
         std::vector<rk::SdrSrFrameResult> retainedFallbacks;
         const auto started=GetTickCount64();
-        while(rendered<30) {
+        const unsigned targetFrames=ngxPlanOwned?600:30;
+        const ULONGLONG timeoutMilliseconds=ngxPlanOwned?120000:20000;
+        while(rendered<targetFrames) {
             context->UpdateSubresource(backbuffer.Get(),0,nullptr,scene.data(),width*4,0);
             if(sr)context->UpdateSubresource(sceneInput.Get(),0,nullptr,reduced.data(),inputWidth*4,0);
             if(sr) {
@@ -298,14 +300,18 @@ int wmain(int argc,wchar_t** argv) {
                                 motion.Get(),depth.Get(),backbuffer.Get(),jitter);
                         const std::array<ID3D11Texture2D*,3> sources{
                             sceneInput.Get(),motion.Get(),depth.Get()};
-                        auto inputs=ngxPlanOwned?
-                            rk::prepareSdrSrInputsFromOwnedScene(context.Get(),sources,width,height):
-                            rk::prepareSdrSrInputsFromRegion(context.Get(),sources,
+                        rk::Result<std::optional<rk::SrEvaluationToken>> evaluated;
+                        if(ngxPlanOwned)
+                            evaluated=presenter.evaluateOwnedScene(device.Get(),context.Get(),
+                                sources,width,height,{rendered+1,1,rendered==0},jitter);
+                        else {
+                            auto inputs=rk::prepareSdrSrInputsFromRegion(context.Get(),sources,
                                 rk::SrSourceRegion{0,0,inputWidth,inputHeight},width,height);
-                        if(const auto error=std::get_if<rk::Error>(&inputs))return *error;
-                        const auto evaluated=presenter.evaluatePrepared(device.Get(),context.Get(),
-                            std::move(std::get<rk::PreparedSrInputs>(inputs)),
-                            {rendered+1,1,rendered==0},jitter);
+                            if(const auto error=std::get_if<rk::Error>(&inputs))return *error;
+                            evaluated=presenter.evaluatePrepared(device.Get(),context.Get(),
+                                std::move(std::get<rk::PreparedSrInputs>(inputs)),
+                                {rendered+1,1,rendered==0},jitter);
+                        }
                         if(const auto error=std::get_if<rk::Error>(&evaluated))return *error;
                         const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
                         if(!token)return false;
@@ -337,7 +343,7 @@ int wmain(int argc,wchar_t** argv) {
                 if(std::get<bool>(result))++rendered;
             }
             context->Flush();
-            if(GetTickCount64()-started>20000)stop("TIMEOUT");
+            if(GetTickCount64()-started>timeoutMilliseconds)stop("TIMEOUT");
             Sleep(1);
         }
         const std::array<ID3D11Texture2D*,1> target{backbuffer.Get()};

@@ -58,6 +58,11 @@ public:
     Result<std::optional<SrEvaluationToken>> evaluatePrepared(ID3D11Device* device,
         ID3D11DeviceContext* context,PreparedSrInputs prepared,
         SrFrameMetadata metadata,NgxJitter jitter);
+    // Refreshes and evaluates one of three persistent owned-scene slots. Slot
+    // textures, crop views/buffers and completion queries are allocated once.
+    Result<std::optional<SrEvaluationToken>> evaluateOwnedScene(ID3D11Device* device,
+        ID3D11DeviceContext* context,std::span<ID3D11Texture2D* const> sources,
+        UINT outputWidth,UINT outputHeight,SrFrameMetadata metadata,NgxJitter jitter);
     Result<bool> publishEvaluated(ID3D11DeviceContext* context,
         SrEvaluationToken token,ID3D11Texture2D* destination);
     std::size_t retainedPreparedFrames() const noexcept;
@@ -90,6 +95,9 @@ private:
     Result<bool> beginSession(ID3D11Device* device,ID3D11DeviceContext* context,bool reduced);
     Result<bool> submitPreparedNgx(ID3D11DeviceContext* context,
         const PreparedSrInputs& prepared,NgxJitter jitter,bool reset);
+    Result<std::optional<SrEvaluationToken>> evaluatePreparedSlot(ID3D11Device* device,
+        ID3D11DeviceContext* context,PreparedSlot& slot,
+        SrFrameMetadata metadata,NgxJitter jitter);
     void retainUnsubmitted(ID3D11DeviceContext* context,PreparedSrInputs frame);
     Result<bool> retirePrepared(ID3D11DeviceContext* context);
     std::array<Slot,3> slots_;

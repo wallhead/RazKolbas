@@ -10,10 +10,75 @@ using Microsoft::WRL::ComPtr;
 PreparedSrInputs::PreparedSrInputs(ComPtr<ID3D11Texture2D> color,
     ComPtr<ID3D11Texture2D> motion,ComPtr<ID3D11Texture2D> depth,
     ComPtr<ID3D11Texture2D> output,UINT width,UINT height,
-    UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion) noexcept:
+    UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion,
+    ComPtr<ID3D11ComputeShader> depthCropShader,
+    ComPtr<ID3D11Texture2D> depthSnapshot,
+    ComPtr<ID3D11ShaderResourceView> depthView,
+    ComPtr<ID3D11UnorderedAccessView> depthTarget,
+    ComPtr<ID3D11Buffer> cropConstants) noexcept:
     color_(std::move(color)),motion_(std::move(motion)),depth_(std::move(depth)),
-    output_(std::move(output)),width_(width),height_(height),
+    output_(std::move(output)),depthCropShader_(std::move(depthCropShader)),
+    depthSnapshot_(std::move(depthSnapshot)),depthView_(std::move(depthView)),
+    depthTarget_(std::move(depthTarget)),cropConstants_(std::move(cropConstants)),
+    width_(width),height_(height),
     outputWidth_(outputWidth),outputHeight_(outputHeight),sourceRegion_(sourceRegion) {}
+
+Result<bool> PreparedSrInputs::refreshOwnedScene(ID3D11DeviceContext* context,
+    std::span<ID3D11Texture2D* const> sources) {
+    if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
+        return Error{ErrorCode::InvalidInput,"Owned SR refresh needs an immediate context and three textures"};
+    if(!color_||!motion_||!depth_||!output_||!depthCropShader_||!depthSnapshot_||
+       !depthView_||!depthTarget_||!cropConstants_||sourceRegion_.left||
+       sourceRegion_.top||sourceRegion_.width!=width_||sourceRegion_.height!=height_||
+       (width_==outputWidth_&&height_==outputHeight_))
+        return Error{ErrorCode::Conflict,"Prepared SR slot is not an owned reduced scene"};
+    ComPtr<ID3D11Device> device,slotOwner;
+    context->GetDevice(&device);color_->GetDevice(&slotOwner);
+    ComPtr<IUnknown> deviceIdentity,slotIdentity;
+    if(!device||!slotOwner||FAILED(device.As(&deviceIdentity))||
+       FAILED(slotOwner.As(&slotIdentity))||deviceIdentity.Get()!=slotIdentity.Get())
+        return Error{ErrorCode::Conflict,"Owned SR refresh device differs"};
+    const std::array expected{DXGI_FORMAT_R8G8B8A8_UNORM,
+        DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R24G8_TYPELESS};
+    std::array<D3D11_TEXTURE2D_DESC,3> descriptions{};
+    for(std::size_t i=0;i<sources.size();++i) {
+        if(!sources[i])return Error{ErrorCode::InvalidInput,"Owned SR refresh source is null"};
+        ComPtr<ID3D11Device> owner;
+        ComPtr<IUnknown> ownerIdentity;
+        sources[i]->GetDevice(&owner);
+        if(!owner||FAILED(owner.As(&ownerIdentity))||ownerIdentity.Get()!=deviceIdentity.Get())
+            return Error{ErrorCode::Conflict,"Owned SR refresh source device differs"};
+        sources[i]->GetDesc(&descriptions[i]);
+        const auto& d=descriptions[i];
+        if(d.Format!=expected[i]||d.MipLevels!=1||d.ArraySize!=1||
+           d.SampleDesc.Count!=1||d.Usage!=D3D11_USAGE_DEFAULT)
+            return Error{ErrorCode::Unsupported,"Owned SR refresh source format or geometry differs"};
+    }
+    if(descriptions[0].Width!=width_||descriptions[0].Height!=height_||
+       descriptions[1].Width!=descriptions[2].Width||
+       descriptions[1].Height!=descriptions[2].Height||
+       !((descriptions[1].Width==width_&&descriptions[1].Height==height_)||
+         (descriptions[1].Width==outputWidth_&&descriptions[1].Height==outputHeight_)))
+        return Error{ErrorCode::Conflict,"Owned SR refresh source extents differ"};
+    D3D11_TEXTURE2D_DESC snapshot{};
+    depthSnapshot_->GetDesc(&snapshot);
+    if(snapshot.Width!=descriptions[2].Width||snapshot.Height!=descriptions[2].Height||
+       snapshot.Format!=descriptions[2].Format)
+        return Error{ErrorCode::Conflict,"Owned SR refresh depth snapshot extent differs"};
+    auto isolated=D3D11StateScope::begin(context);
+    if(const auto error=std::get_if<Error>(&isolated))return *error;
+    auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
+    context->CopyResource(depthSnapshot_.Get(),sources[2]);
+    const D3D11_BOX box{0,0,0,width_,height_,1};
+    context->CopySubresourceRegion(color_.Get(),0,0,0,0,sources[0],0,&box);
+    context->CopySubresourceRegion(motion_.Get(),0,0,0,0,sources[1],0,&box);
+    context->CSSetShader(depthCropShader_.Get(),nullptr,0);
+    context->CSSetShaderResources(0,1,depthView_.GetAddressOf());
+    context->CSSetUnorderedAccessViews(0,1,depthTarget_.GetAddressOf(),nullptr);
+    context->CSSetConstantBuffers(0,1,cropConstants_.GetAddressOf());
+    context->Dispatch((width_+7)/8,(height_+7)/8,1);
+    return true;
+}
 
 Result<DepthSampleStats> sampleWorldDepth(std::span<const std::uint8_t> pixels,
     UINT width,UINT height,std::size_t rowBytes) {
@@ -230,7 +295,9 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         context->Dispatch((renderWidth+7)/8,(renderHeight+7)/8,1);
     }
     return PreparedSrInputs{std::move(copies[0]),std::move(copies[1]),std::move(copies[2]),
-        std::move(output),renderWidth,renderHeight,d.Width,d.Height,region};
+        std::move(output),renderWidth,renderHeight,d.Width,d.Height,region,
+        std::move(depthShader),std::move(depthSnapshot),std::move(depthView),
+        std::move(depthTarget),std::move(cropConstants)};
 }
 }
 Result<PreparedSrInputs> prepareSrInputs(ID3D11DeviceContext* context,

@@ -20,7 +20,12 @@ public:
         Microsoft::WRL::ComPtr<ID3D11Texture2D> motion,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> depth,
         Microsoft::WRL::ComPtr<ID3D11Texture2D> output,UINT width,UINT height,
-        UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion) noexcept;
+        UINT outputWidth,UINT outputHeight,SrSourceRegion sourceRegion,
+        Microsoft::WRL::ComPtr<ID3D11ComputeShader> depthCropShader={},
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> depthSnapshot={},
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthView={},
+        Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> depthTarget={},
+        Microsoft::WRL::ComPtr<ID3D11Buffer> cropConstants={}) noexcept;
     PreparedSrInputs(const PreparedSrInputs&)=delete;
     PreparedSrInputs& operator=(const PreparedSrInputs&)=delete;
     PreparedSrInputs(PreparedSrInputs&&) noexcept=default;
@@ -35,8 +40,18 @@ public:
     UINT outputWidth() const noexcept { return outputWidth_; }
     UINT outputHeight() const noexcept { return outputHeight_; }
     SrSourceRegion sourceRegion() const noexcept { return sourceRegion_; }
+    // Refreshes a slot allocated by prepareSdrSrInputsFromOwnedScene without
+    // creating any new D3D11 resources. The three source identities may vary,
+    // but their device, formats and extents must remain compatible.
+    Result<bool> refreshOwnedScene(ID3D11DeviceContext* context,
+        std::span<ID3D11Texture2D* const> sources);
 private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> color_,motion_,depth_,output_;
+    Microsoft::WRL::ComPtr<ID3D11ComputeShader> depthCropShader_;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> depthSnapshot_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthView_;
+    Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> depthTarget_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> cropConstants_;
     UINT width_{},height_{},outputWidth_{},outputHeight_{};
     SrSourceRegion sourceRegion_{};
 };

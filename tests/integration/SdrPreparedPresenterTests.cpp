@@ -5,6 +5,7 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#include <set>
 #include <thread>
 
 using Microsoft::WRL::ComPtr;
@@ -185,4 +186,47 @@ TEST_CASE("A newer prepared frame invalidates the previous publication token",
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     FAIL("Superseded frames did not retire");
+}
+
+TEST_CASE("Owned scene evaluation reuses three prepared resource slots",
+    "[sdr_prepared_presenter]") {
+    Scene scene;
+    ComPtr<ID3D11Texture2D> reducedColour;
+    D3D11_TEXTURE2D_DESC reduced{};
+    reduced.Width=4;reduced.Height=3;
+    reduced.MipLevels=reduced.ArraySize=reduced.SampleDesc.Count=1;
+    reduced.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    reduced.Usage=D3D11_USAGE_DEFAULT;
+    reduced.BindFlags=D3D11_BIND_RENDER_TARGET;
+    REQUIRE(SUCCEEDED(scene.device->CreateTexture2D(&reduced,nullptr,&reducedColour)));
+    const std::array<ID3D11Texture2D*,3> sources{
+        reducedColour.Get(),scene.source[1].Get(),scene.source[2].Get()};
+    std::set<std::array<std::uintptr_t,4>> resourceSets;
+    rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext*,
+        const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata&,
+        rk::NgxJitter,bool)->rk::Result<bool> {
+        resourceSets.insert({reinterpret_cast<std::uintptr_t>(frame.color()),
+            reinterpret_cast<std::uintptr_t>(frame.motion()),
+            reinterpret_cast<std::uintptr_t>(frame.depth()),
+            reinterpret_cast<std::uintptr_t>(frame.output())});
+        return true;
+    }};
+    for(std::uint64_t frame=1;frame<=360;++frame) {
+        auto evaluated=presenter.evaluateOwnedScene(scene.device.Get(),scene.context.Get(),
+            sources,8,6,{frame,42,frame==1},{0,0});
+        REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
+        const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
+        REQUIRE(token.has_value());
+        scene.context->OMSetRenderTargets(1,scene.displayView.GetAddressOf(),nullptr);
+        const auto published=presenter.publishEvaluated(scene.context.Get(),*token,
+            scene.display.Get());
+        REQUIRE(std::holds_alternative<bool>(published));
+        REQUIRE(std::get<bool>(published));
+        const std::array<ID3D11Texture2D*,1> target{scene.display.Get()};
+        REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(
+            rk::readbackCandidates(scene.context.Get(),target)));
+    }
+    REQUIRE(presenter.submittedFrames()==360);
+    REQUIRE(resourceSets.size()==3);
+    REQUIRE(presenter.retainedPreparedFrames()==3);
 }
