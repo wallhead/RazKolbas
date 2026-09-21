@@ -1027,3 +1027,20 @@ the 30-frame owned-R32 NVIDIA replay still passes with output SHA-256
 `2a2c8d5e458e090787ce03074589db10d9f35f2123a83a5e55e11f6a5646a550`.
 Actual-game stability and capture of a populated admitted scene are **NOT
 RUN** for this source revision.
+
+The capture-only diagnostic is source commit `81cc331`, packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.45-color-depth-gate-81cc331.zip`
+(SHA-256 `d1c8ac7c390279aef505a7f3e72b1a18228f21ed5ffce6e6e84554f4a188ffd8`).
+The ZIP contains exactly the four manifest-listed payloads plus manifest; its
+status is `DIAGNOSTIC_CAPTURE_ONLY_COLOR_DEPTH_GATE_NO_NGX_EVALUATION`.
+With Skyrim stopped, the installed 0.1.44 mod passed manifest verification
+and was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.45-81cc331`. Only the DLL and manifest
+were replaced. All four installed payloads match the 0.1.45 manifest; DLL
+SHA-256 is
+`2ac5ce6490459d808ac294029ee968ecdeb890da5370645f9fed2be8bdfac477`.
+The user INI and signed NVIDIA runtime are unchanged, and the assistant did
+not start Skyrim. The next required evidence is one user-started save-load
+run: confirm that black transition samples remain gated, that a later
+populated scene produces one capture, and whether the NVIDIA worker crash
+recurs even without NGX evaluation.
