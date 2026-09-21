@@ -1177,3 +1177,17 @@ changed the native target. The samples are armed only when the populated
 colour/world-depth gate transitions ready. No evaluation, publication, UI,
 or Present ordering is changed. Release build and all 35 CTest groups pass;
 actual-game stage hashes are **NOT RUN**.
+
+The stage-trace candidate is source commit `044398b`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.49-enb-stage-trace-044398b.zip`
+(SHA-256 `1762423af7cb96b5013f09f0a08df801660eb394b68bf4891bf645fb2e17a94d`).
+The archive contains exactly the four manifest-listed payloads plus manifest;
+all extracted hashes match and its status is
+`DIAGNOSTIC_ENB_RESHADE_STAGE_TRACE_SERIALIZED_300_FRAMES`. With Skyrim
+stopped, every installed 0.1.48 payload matched its manifest and the complete
+mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.49-044398b`. Only the installed DLL
+and manifest were replaced. The new installed DLL SHA-256 is
+`63b28cc3a7b6f652d0e9c34db4a57e511331cdbc2b3f443a814367167d4d5ff6`;
+the user INI and signed NVIDIA runtime retain their prior hashes. The assistant
+did not start Skyrim.
