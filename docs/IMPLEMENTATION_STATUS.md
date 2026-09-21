@@ -1235,3 +1235,33 @@ were replaced. The installed DLL SHA-256 is
 `c2935750db83cfdb76a336c0aad1b9191792d316bc57431ea9fbe909fb012817`;
 the user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim.
+
+## User-started 0.1.50 result and continuous candidate
+
+The user started Skyrim and loaded a save with 0.1.50. The populated-scene
+gate admitted world frame 6871 and the first serialized evaluation returned
+at frame 6991. The newly rearmed provider snapshots completed around that
+first DLSS frame. The reduced source remained byte-identical across ENB with
+SHA-256 `107bdae4e6c5385961bd0b7473107403cabffacba44097190b76243676525dda`,
+while the native DLSS output changed from
+`1966e90b3e577620e2960515e3d9e6e8494e6cd3e4d9d760a0ad994b93996ec0`
+to `8633a54826fe57512235dd18027133709ead53cc7d9e15441ef3453ab2df0801`.
+This proves the outer ENB implementation transforms the first actual
+DLSS-published native image in this route.
+
+Immediately after that post-ENB readback, CrashLogger recorded a null read at
+`nvwgf2umx.dll+0x1B61A4` on NVIDIA worker thread 22172. This is the same fault
+bucket as the earlier un-serialized evaluation crashes. No second DLSS frame
+or bounded-completion record occurred. The only render-path difference from
+the preceding 0.1.49 run, which completed all 300 serialized evaluations and
+continued stably, was rearming the two synchronous full-image snapshot pairs
+on the first provider frame. The evidence therefore isolates the added
+provider-frame readback as the new trigger; the snapshots must not remain in
+the running DLSS path.
+
+The next source candidate removes provider-frame snapshot rearming and keeps
+the serialized GPU-completion boundary that passed 300 live evaluations. It
+also removes the 300-frame ceiling so successful DLSS SR remains active
+continuously instead of returning to spatial fallback. The earlier bounded
+gate-transition ENB snapshots remain dormant after their two samples. Actual
+continuous in-game stability and performance are **NOT RUN**.

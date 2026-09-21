@@ -84,7 +84,7 @@ struct WorldState {
     bool srDisabled{};
     OwnedSceneAdmissionGate ownedSceneGate;
     bool ownedInputCaptureOnly{};
-    std::uint64_t ownedEvaluationLimit{300};
+    std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
@@ -627,10 +627,6 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->displayedMode.store(DisplayMode::DlssSr,std::memory_order_release);
             state->statusDlssFrames.store(state->srPresenter.submittedFrames(),
                 std::memory_order_relaxed);
-            if(state->srPresenter.submittedFrames()==1) {
-                state->ownedPrePresentProbes.store(2,std::memory_order_release);
-                state->ownedPostEnbProbes.store(2,std::memory_order_release);
-            }
         } else {
             state->displayedMode.store(DisplayMode::SpatialFallback,std::memory_order_release);
             state->ownedFallbacks.emplace_back(std::move(outcome));
