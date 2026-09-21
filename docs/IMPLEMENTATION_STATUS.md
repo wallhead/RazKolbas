@@ -1044,3 +1044,33 @@ not start Skyrim. The next required evidence is one user-started save-load
 run: confirm that black transition samples remain gated, that a later
 populated scene produces one capture, and whether the NVIDIA worker crash
 recurs even without NGX evaluation.
+
+## 0.1.45 populated capture and bounded live-evaluation candidate
+
+The user started Skyrim with 0.1.45 and loaded a save. The combined gate
+initially rejected menu/loading depth while colour was already nonuniform.
+At frame 12601 it observed `colorNonBlack=219`, `colorDistinct=211`,
+`depthDistinct=98` and `depthNonFar=97`, admitted the scene, and saved exactly
+one input bundle without NGX evaluation. The process continued through more
+than 15,000 world/Present frames with zero Present failures and no new crash
+log. The assistant then closed the user-started game normally as previously
+authorized. This is an actual-game PASS for the capture-only colour/depth
+gate and depth-snapshot preparation in this run; DLSS was not submitted.
+
+The captured colour is materially populated: 1,480,329 of 1,638,720 pixels
+are nonblack. All colour, motion and R32 depth files match their manifest
+sizes and hashes; all motion/depth values are finite. Both exact-input
+standalone modes passed one NVIDIA evaluation, output readback, clean
+retirement and optional native-size publication. Evaluation and publication
+produced identical SHA-256
+`ec7bbf14b71e507de649dec13844d0368b6180de8acaa2787c8e46298a4a4329`.
+This validates the captured bytes on a separate D3D11 device, not the live
+Skyrim/ENB/ReShade context.
+
+The next candidate disables capture-only mode only after the combined gate.
+It creates the planned feature, retains the existing 120-frame startup
+interval, evaluates and publishes at most one live DLSS frame, then forces
+all subsequent frames through the current spatial fallback. This bounded
+diagnostic tests whether the populated colour gate plus owned depth snapshot
+removes the first-evaluation driver crash before continuous SR is attempted.
+It remains a diagnostic and can still crash; actual-game result is **NOT RUN**.

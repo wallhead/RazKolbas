@@ -82,7 +82,8 @@ struct WorldState {
     bool srRequested{};
     bool srDisabled{};
     OwnedSceneAdmissionGate ownedSceneGate;
-    bool ownedInputCaptureOnly{true};
+    bool ownedInputCaptureOnly{};
+    bool ownedSingleEvaluationOnly{true};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
@@ -547,6 +548,8 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     }
                     return Error{ErrorCode::Unavailable,"Owned SR input capture only; NGX not submitted"};
                 }
+                if(state->ownedSingleEvaluationOnly&&state->srPresenter.submittedFrames()!=0)
+                    return Error{ErrorCode::Unavailable,"Owned single-evaluation diagnostic complete"};
                 if(state->ownedNgxInitFailed)
                     return Error{ErrorCode::Unavailable,"Owned NGX feature creation previously failed"};
                 if(!state->ownedNgxCreatedAt) {
@@ -599,7 +602,12 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 }
                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
                 if(!token)return false;
-                return state->srPresenter.publishEvaluated(context,*token,display);
+                const auto published=state->srPresenter.publishEvaluated(context,*token,display);
+                if(state->ownedSingleEvaluationOnly&&
+                   std::holds_alternative<bool>(published)&&std::get<bool>(published))
+                    spdlog::info("Owned single-evaluation diagnostic frame {} published; subsequent frames use spatial fallback",
+                        sequence);
+                return published;
             });
         if(const auto error=std::get_if<Error>(&presented))
             throw std::runtime_error(error->message);
