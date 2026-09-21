@@ -1470,3 +1470,33 @@ the user INI and signed NVIDIA runtime retain hashes
 and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
 All installed payloads match the 0.1.54 manifest. The assistant did not start
 Skyrim. The next required evidence is a user-started save-load run.
+
+## Live AIO and PDPerf reference inspection
+
+The user enabled the preserved SkyrimUpscalerAIO Build16-Hotfix1 reference,
+disabled RazKolbas, started Skyrim 1.6.1170 and loaded a save. Read-only live
+inspection confirmed that the reference patches the same world-draw CALL at
+game RVA `0xfa507a` and the renderer jitter CALL at `0xe44672`, then installs
+resource-aware OM and viewport hooks into the loaded ENB immediate-context
+chain. Its live state stored display 2560x1440 and render 1706x960 while the
+sampled Skyrim DRS ratio tuple stayed entirely at 1.0. The reference therefore
+owns reduced resources and viewport routing independently of the engine DRS
+tuple.
+
+Exact decompilation of the loaded binaries showed that the world callback
+forwards Skyrim first, evaluates SR from explicit color, motion and depth
+wrappers, publishes to a selected native proxy target, and enables a
+resource-identity state used by the OM/viewport hooks. `PDPerfPlugin.dll`
+provides a 176-byte evaluation descriptor ABI for both SR and frame
+generation, along with swap-chain proxy, camera and Streamline/D3D12 interop
+services. It remains a reference only and will not be packaged, loaded or
+required by RazKolbas. Full evidence and the fallback implementation boundary
+are recorded in `docs/re/AIO_LIVE_ROUTING.md`.
+
+Skyrim was closed normally after capture. No RazKolbas code changed at this
+checkpoint because the installed 0.1.54 semantic menu-display candidate has
+not yet received its first runtime test. The next step is to disable the AIO
+reference, re-enable RazKolbas in MO2, start Skyrim, load a save and observe
+0.1.54. If that semantic boundary fails, the next source change will replace
+bind-shape inference with explicit resource-role routing derived from this
+live evidence.
