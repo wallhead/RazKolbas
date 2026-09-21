@@ -1452,5 +1452,21 @@ pass all 35 CTest groups. The Release NVIDIA harness completed 600 pooled
 1707x960 to 2560x1440 DLSS frames with zero fallbacks and output SHA-256
 `9e24bc310a96dbeb827811488e7712457da160d242bd12370dbbdd05cdb65d37`.
 Game runtime, native UI separation and ENB/ReShade appearance are **NOT RUN**
-for this candidate. The installed MO2 mod remains verified stable 0.1.52 until
-the new package is committed, staged and installed with Skyrim stopped.
+for this candidate.
+
+Source commit `4d96fc0` is packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.54-menu-display-dlss-4d96fc0.zip`
+with SHA-256
+`b66861a11d0fd917075b499d1464aba32d0b5a2be880fddc9886c2fcf5a9c78f`.
+Independent staging and ZIP inspection found exactly the four
+manifest-listed payloads plus the manifest, and every payload hash matches.
+With Skyrim stopped, all installed stable 0.1.52 payloads first matched their
+manifest and the complete mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.54-4d96fc0`. Only the DLL and manifest
+were replaced. Installed DLL SHA-256 is
+`a17ddd13943e62faeedd0b2481323f6e29fb05418765a01fc11e0f5d0de95ac7`;
+the user INI and signed NVIDIA runtime retain hashes
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the 0.1.54 manifest. The assistant did not start
+Skyrim. The next required evidence is a user-started save-load run.
