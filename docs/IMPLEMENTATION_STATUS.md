@@ -1223,3 +1223,15 @@ first provider frame is published. It changes no render ordering or DLSS
 parameters and will distinguish ENB processing of actual DLSS output from the
 already-proven fallback behavior. Actual-game DLSS-stage hashes are **NOT
 RUN**.
+
+The first-DLSS-frame trace is source commit `0aa85ba`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.50-first-dlss-enb-trace-0aa85ba.zip`
+(SHA-256 `478d8cfc21940533be4287b0d1ddce943db7686d9b5f85203bf67151b8880257`).
+The archive contains exactly the four manifest-listed payloads plus manifest,
+and all extracted hashes match. With Skyrim stopped, every 0.1.49 payload
+matched its manifest before the complete mod was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.50-0aa85ba`. Only the DLL and manifest
+were replaced. The installed DLL SHA-256 is
+`c2935750db83cfdb76a336c0aad1b9191792d316bc57431ea9fbe909fb012817`;
+the user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim.
