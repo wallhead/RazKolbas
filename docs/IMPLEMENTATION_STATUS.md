@@ -1265,3 +1265,16 @@ also removes the 300-frame ceiling so successful DLSS SR remains active
 continuously instead of returning to spatial fallback. The earlier bounded
 gate-transition ENB snapshots remain dormant after their two samples. Actual
 continuous in-game stability and performance are **NOT RUN**.
+
+The continuous candidate is source commit `04854c1`, packaged at
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.51-continuous-serialized-dlss-04854c1.zip`
+(SHA-256 `2003ccc47d05933dae66de5a816a93a6799f93a49189c36a331dca5d5c6f4baf`).
+The archive contains exactly the four manifest-listed payloads plus manifest,
+all extracted hashes match, and its status is
+`EXPERIMENTAL_CONTINUOUS_SERIALIZED_DLSS_SR_ENB_VERIFIED`. With Skyrim
+stopped, the 0.1.50 installation matched its manifest and was fully backed up
+under ignored `artifacts/local/mo2-install-backup-0.1.51-04854c1`. Only the
+DLL and manifest were replaced. Installed DLL SHA-256 is
+`288d0ade48acac5337334b78a3e9878ba119a285aecdc8f2c0222e10644aa9c7`;
+the user INI and signed NVIDIA runtime are unchanged. The assistant did not
+start Skyrim.
