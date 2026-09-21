@@ -1150,3 +1150,30 @@ were replaced. All installed payloads match the new manifest; DLL SHA-256 is
 `f1a9f1c3744407ac2ddbb57ddeea9859f0ad27d91bb56a0cb2ebe87166de2d85`.
 The user INI and signed NVIDIA runtime are unchanged. The assistant did not
 start Skyrim.
+
+## ENB/ReShade stage verification candidate
+
+The user's visual assessment of the short 0.1.47 interval before its NVIDIA
+worker crash is that the modified image looked as though ENB was not working.
+This is a material integration failure report, but it is subjective and no
+matched screenshot or pixel capture exists. The installed 0.1.48 serialized
+candidate has not produced a new game session, so its runtime status remains
+**NOT RUN**.
+
+The source history confirms that the owned route currently evaluates at the
+outer ENB swap chain's Present entry because the earlier post-world callback
+observed an unfinished black reduced image. It publishes the complete reduced
+frame, including game UI, to the native buffer before calling ENB's original
+Present. Whether ENB then transforms that native image in this exact proxy
+chain has not previously been measured.
+
+The next diagnostic also patches slot 8 on the already hash-, size-, table-
+and prologue-verified ReShade 6.7.3 nested swap chain. Its pass-through
+callback records two bounded pixel snapshots at nested Present entry, after
+the outer ENB Present has entered its downstream ReShade call and before
+ReShade processes/presents. Matching pre-ENB and nested-stage full-image
+hashes would support the reported bypass; differing hashes quantify that ENB
+changed the native target. The samples are armed only when the populated
+colour/world-depth gate transitions ready. No evaluation, publication, UI,
+or Present ordering is changed. Release build and all 35 CTest groups pass;
+actual-game stage hashes are **NOT RUN**.

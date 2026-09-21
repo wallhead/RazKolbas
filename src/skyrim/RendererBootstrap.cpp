@@ -48,8 +48,9 @@ struct FactoryTraceLease {
 std::atomic<FactoryTraceLease*> factoryTrace{nullptr};
 std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
 struct BufferTraceLease {
-    PointerPatch patch;
+    PointerPatch getBufferPatch,presentPatch;
     SwapGetBufferFn next{};
+    PresentFn nextPresent{};
     IDXGISwapChain* selectedSwap{}; // retained by the route before activation
     IDXGISwapChain* outerSwap{}; // identity only; renderer owns the swap
     std::unique_ptr<OwnedSwapBufferRoute> route;
@@ -237,6 +238,12 @@ HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
     }
     return result;
 }
+HRESULT WINAPI swapPresentTrace(IDXGISwapChain* swap,UINT interval,UINT flags) noexcept {
+    auto* state=bufferTrace.load(std::memory_order_acquire);
+    if(!state||!state->nextPresent)return E_UNEXPECTED;
+    if(!(flags&DXGI_PRESENT_TEST))probePostEnbPresentationTarget(swap);
+    return state->nextPresent(swap,interval,flags);
+}
 Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     if(!swap||bufferTraceAttempted.test(std::memory_order_acquire))return false;
     auto** table=*reinterpret_cast<void***>(swap);
@@ -252,25 +259,38 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     if(tableAddress<base||tableAddress-base!=site.tableRva)
         return Error{ErrorCode::Unsupported,"Returned swap is not the verified ReShade table"};
     const auto mapped=snapshotModule(owner,site.imageSize);
+    const auto& swapProfile=reshade673SwapProfile();
+    const auto swapValidated=validateSwapTable(mapped,base,id.hash,id.size,
+        static_cast<std::uint32_t>(tableAddress-base),swapProfile);
+    if(const auto error=std::get_if<Error>(&swapValidated))return *error;
     const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(tableAddress-base),site);
     if(const auto error=std::get_if<Error>(&validated))return *error;
     if(bufferTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     auto pending=std::make_unique<BufferTraceLease>();
     pending->next=reinterpret_cast<SwapGetBufferFn>(base+site.methodRva);
+    pending->nextPresent=reinterpret_cast<PresentFn>(base+swapProfile.methods[1].rva);
     pending->selectedSwap=swap;
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&swapGetBufferTrace),&pinnedSelf)||
        !GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(table),&pinnedOwner))
-        return Error{ErrorCode::Unavailable,"Cannot pin GetBuffer trace lifetimes"};
+        return Error{ErrorCode::Unavailable,"Cannot pin nested swap trace lifetimes"};
     auto* published=pending.release();
     bufferTrace.store(published,std::memory_order_release);
-    const auto applied=published->patch.apply(table+site.slot,
+    const auto applied=published->getBufferPatch.apply(table+site.slot,
         reinterpret_cast<void*>(published->next),reinterpret_cast<void*>(&swapGetBufferTrace));
     if(const auto error=std::get_if<Error>(&applied))return *error;
-    spdlog::info("Installed {}: tableRVA=0x{:x}; slot={}; pass-through caller/texture trace",
-        site.id,site.tableRva,site.slot);
+    const auto present=published->presentPatch.apply(table+swapProfile.methods[1].slot,
+        reinterpret_cast<void*>(published->nextPresent),reinterpret_cast<void*>(&swapPresentTrace));
+    if(const auto error=std::get_if<Error>(&present)) {
+        const auto restored=published->getBufferPatch.restore();
+        if(const auto rollback=std::get_if<Error>(&restored);
+           rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
+        return *error;
+    }
+    spdlog::info("Installed {} plus verified nested Present stage trace: tableRVA=0x{:x}; slots={},{}; pass-through",
+        site.id,site.tableRva,site.slot,swapProfile.methods[1].slot);
     return true;
 }
 void factoryCreated(IDXGIFactory* factory,IUnknown* device,

@@ -28,4 +28,9 @@ Result<bool> abandonWorldOwnedSrPlan(ID3D11DeviceContext* context);
 // One bounded, read-only D3D11 target identity snapshot on the next eligible
 // ENB Present after a world-like frame. Never dereferences renderer memory.
 void probePresentationTargets(IDXGISwapChain* swap) noexcept;
+// Called at the verified nested ReShade Present entry. In the installed
+// ENB -> ReShade chain this is after ENB has returned from its effect work
+// and before ReShade forwards/presents. The callback only records two
+// bounded pixel snapshots requested by the owned-scene controller.
+void probePostEnbPresentationTarget(IDXGISwapChain* swap) noexcept;
 }

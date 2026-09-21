@@ -56,6 +56,7 @@ struct WorldState {
     std::atomic<bool> initialTargetMapDone{false};
     std::atomic<bool> presentTargetProbeDue{false};
     std::atomic<unsigned> ownedPrePresentProbes{0};
+    std::atomic<unsigned> ownedPostEnbProbes{0};
     std::atomic<std::uintptr_t> worldColourIdentity{0};
     std::atomic<bool> drsSuppressed{false};
     std::mutex drsTupleMutex;
@@ -391,10 +392,11 @@ void probeOwnedPixels(const char* stage,ID3D11DeviceContext* context,
             bool known=false;for(unsigned j=0;j<distinct;++j)known|=colours[j]==colour;
             if(!known)colours[distinct++]=colour;
         }
-        spdlog::info("Owned {} {} pixels: extent={}x{} nonBlack={}/256 distinct={}/256",
+        spdlog::info("Owned {} {} pixels: extent={}x{} nonBlack={}/256 distinct={}/256 SHA256={}",
             stage,
             i==0?"reduced scene":"native buffer",
-            image.descriptor.Width,image.descriptor.Height,nonBlack,distinct);
+            image.descriptor.Width,image.descriptor.Height,nonBlack,distinct,
+            sha256(image.pixels));
     }
 }
 struct OwnedSceneSample {
@@ -517,6 +519,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 stats?std::optional<ColorSampleStats>{stats->color}:std::nullopt,
                 stats?std::optional<DepthSampleStats>{stats->depth}:std::nullopt);
             const bool ready=state->ownedSceneGate.ready();
+            if(ready&&!wasReady) {
+                state->ownedPrePresentProbes.store(2,std::memory_order_release);
+                state->ownedPostEnbProbes.store(2,std::memory_order_release);
+            }
             if(sequence==1||sequence%600==0||ready!=wasReady) {
                 if(stats)
                     spdlog::info("Owned scene admission frame {}: colorNonBlack={} colorDistinct={} sceneLike={} depthDistinct={} depthNonFar={} worldLike={} NGX-ready={}",
@@ -1404,5 +1410,36 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif
     return true;
+}
+void probePostEnbPresentationTarget(IDXGISwapChain* swap) noexcept {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!swap)return;
+    auto remaining=state->ownedPostEnbProbes.load(std::memory_order_acquire);
+    if(!remaining)return;
+    if(!state->ownedPostEnbProbes.compare_exchange_strong(
+        remaining,remaining-1,std::memory_order_acq_rel))return;
+    try {
+        const auto context=state->createdContext.load(std::memory_order_relaxed);
+        auto* scene=activeOwnedSceneTexture();
+        if(!context||!scene)return;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> display;
+        const auto got=swap->GetBuffer(0,IID_PPV_ARGS(&display));
+        if(FAILED(got)||!display) {
+            spdlog::warn("Owned post-ENB pixel probe unavailable: GetBuffer HRESULT=0x{:08x}",
+                static_cast<std::uint32_t>(got));
+            return;
+        }
+        probeOwnedPixels(remaining==2?"post-ENB frame 1":"post-ENB frame 2",
+            reinterpret_cast<ID3D11DeviceContext*>(context),scene,display.Get());
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Owned post-ENB pixel probe unavailable: {}",error.what());}
+        catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("Owned post-ENB pixel probe unavailable");}catch(...) {}
+    }
+#else
+    (void)swap;
+#endif
 }
 }
