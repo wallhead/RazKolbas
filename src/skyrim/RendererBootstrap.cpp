@@ -89,7 +89,7 @@ BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
     if(!logical||window!=state->gameWindow)return state->prior(window,rect);
     auto& domain=*state->domain;
     const auto phase=domain.phase();
-    if(phase==ScenePhase::Dormant) {
+    if(phase==ScenePhase::Dormant||phase==ScenePhase::NativeUi) {
         const auto frame=worldDrawForwardedCalls()+1;
         if(domain.begin(frame,domain.plan().generation,GetCurrentThreadId()))
             ownedFrameThread.store(GetCurrentThreadId(),std::memory_order_release);
@@ -98,15 +98,6 @@ BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
 }
 void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
-    static thread_local bool publishingBoundary=false;
-    auto* candidate=uiHook.load(std::memory_order_acquire);
-    if(candidate&&candidate->armed.load(std::memory_order_acquire)&&
-       !publishingBoundary&&
-       candidate->redirect.isSceneUiBoundary(context,count,views,depth)) {
-        publishingBoundary=true;
-        struct BoundaryScope { bool& active;~BoundaryScope(){active=false;} } scope{publishingBoundary};
-        publishOwnedSceneForNativeUi(context);
-    }
     std::scoped_lock lock(uiDispatchMutex);
     auto* state=uiHook.load(std::memory_order_acquire);
     if(!state)return;

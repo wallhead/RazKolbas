@@ -117,6 +117,24 @@ active. This is source/build evidence until an actual-game run confirms the
 candidate contains a complete UI-free scene and later UI appears at native
 resolution.
 
+### Runtime rejection of the colour-only candidate
+
+The user-started 0.1.53 run falsified that candidate. At world frame 4852,
+two populated colour/depth samples admitted the first post-world bind with one
+reduced colour RTV and no depth. RazKolbas published before that bind and
+entered `NativeUi`, but later in the same frame the same reduced scene was
+bound again with a 1707x960 depth target. The compatibility guard recorded
+`targetCount=1`, `sceneSlot=0`, `depth=true`, then suspended the route at
+Present. The user observed a black screen. Present calls continued succeeding
+and no new crash log appeared, so the black output came from publishing an
+incomplete scene and then suspending with that partial native image retained.
+
+Therefore a colour-only bind is not sufficient evidence of the final UI
+boundary in this ENB path. The 0.1.53 trigger was removed and the installed
+mod was restored to the stable 0.1.52 DLL. A replacement must prove that no
+later scene/depth work follows, or hook a semantically identified UI entry,
+before it can publish and redirect.
+
 The reference's private offsets are not a drop-in contract for RazKolbas.
 RazKolbas 0.1.24 has a D3D11 creation/swap observer and user-tested
 full-resolution SDR DLAA copyback before UI; it does not own a reduced

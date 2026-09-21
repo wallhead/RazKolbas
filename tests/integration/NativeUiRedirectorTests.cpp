@@ -45,20 +45,10 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     rk::OwnedSceneDomain route;
     REQUIRE(route.configure({render,display,1}));
     rk::NativeUiRedirector redirect(route);
-    auto* sceneView=scene.renderTarget();
-    auto* nativeRaw=nativeView.Get();
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
         {&forwardOm,&forwardVp},scene.texture(),nativeView.Get())));
-    REQUIRE_FALSE(redirect.isSceneUiBoundary(context.Get(),1,
-        &sceneView,nullptr));
     REQUIRE(route.begin(1,1));
-    REQUIRE(redirect.isSceneUiBoundary(context.Get(),1,&sceneView,nullptr));
-    REQUIRE_FALSE(redirect.isSceneUiBoundary(context.Get(),0,nullptr,nullptr));
-    REQUIRE_FALSE(redirect.isSceneUiBoundary(context.Get(),1,&nativeRaw,nullptr));
-    ID3D11RenderTargetView* multiple[]{sceneView,nativeRaw};
-    REQUIRE_FALSE(redirect.isSceneUiBoundary(context.Get(),2,multiple,nullptr));
-    REQUIRE_FALSE(redirect.isSceneUiBoundary(context.Get(),1,&sceneView,
-        reinterpret_cast<ID3D11DepthStencilView*>(1)));
+    auto* sceneView=scene.renderTarget();
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);

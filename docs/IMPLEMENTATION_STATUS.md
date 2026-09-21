@@ -1402,3 +1402,31 @@ the user INI and signed NVIDIA SR runtime remain unchanged. Manifest status is
 start Skyrim. The next required step is a user-started save-load run and
 inspection for the `Owned pre-UI boundary admitted` log before assessing UI
 sharpness, ENB/ReShade appearance and stability.
+
+## User-started 0.1.53 black-screen result and rollback
+
+The user started 0.1.53 and reported a black screen. The process remained
+responsive, Present/world counts continued matching beyond 70,000 calls with
+zero reported Present failures, and no new CrashLogger file appeared. At world
+frame 4852, the guarded pre-UI gate admitted the first populated single-colour,
+no-depth bind. Later in that same frame, the reduced scene was rebound with a
+1707x960 depth target. The UI compatibility guard recorded the mismatch and
+suspended the route at Present. This proves the admitted bind was an
+intermediate scene transition rather than the final UI boundary. The partial
+native publication followed by suspension explains the retained black image.
+
+After collecting the log, the assistant sent a normal window-close request;
+Skyrim exited cleanly. The complete pre-0.1.53 backup was verified, and the
+installed DLL and manifest were restored to stable 0.1.52. Restored DLL
+SHA-256 is
+`124570410a1c8b69d8b23f18754042f578d0f59e0beab756d001176f78b740a0`;
+all four installed payloads match the restored manifest. Source removes the
+falsified activation path. A future native-UI implementation must use a
+semantically identified later hook or prove that no scene/depth work follows
+before publishing.
+
+The source rollback was rebuilt with both `win-dev` and `win-release`; all 35
+CTest groups passed in each configuration. The release NVIDIA presentation
+harness completed 600 pooled DLSS frames with zero fallbacks and retained
+output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.

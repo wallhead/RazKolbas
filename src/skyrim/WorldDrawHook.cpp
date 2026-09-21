@@ -83,8 +83,6 @@ struct WorldState {
     bool srRequested{};
     bool srDisabled{};
     OwnedSceneAdmissionGate ownedSceneGate;
-    OwnedSceneAdmissionGate nativeUiBoundaryGate;
-    bool nativeUiBoundaryReady{};
     bool ownedInputCaptureOnly{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
@@ -461,7 +459,7 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
     }
 }
 bool processOwnedWorldFrame(WorldState* state,void* world,
-    std::uint64_t sequence,bool keepNativeUiOpen) noexcept {
+    std::uint64_t sequence) noexcept {
     auto* domain=activeOwnedSceneDomain();
     if(!domain)return ownedScenePreviouslyActive();
     if(domain->phase()==ScenePhase::Suspended)return true;
@@ -635,23 +633,18 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault()||
-           (!keepNativeUiOpen&&
-            !domain->closePublishedFrame(sequence,domain->plan().generation)))
+           !domain->closePublishedFrame(sequence,domain->plan().generation))
             throw std::runtime_error("Owned native publication or context compatibility failed");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
         state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
         state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
         if(sequence<=3||sequence%600==0)
-            spdlog::info("Owned {} frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; {}",
-                keepNativeUiOpen?"pre-UI":"pre-Present",
+            spdlog::info("Owned pre-Present frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; reduced full frame including game UI",
                 sequence,domain->plan().render.width,domain->plan().render.height,
                 domain->plan().display.width,domain->plan().display.height,
                 std::get<NativeFlipTarget>(native).index,
                 static_cast<unsigned>(state->displayedMode.load(std::memory_order_relaxed)),
-                state->srPresenter.submittedFrames(),state->ownedFallbacks.size(),
-                keepNativeUiOpen?"subsequent colour-only UI binds route to native output":
-                    "reduced full frame including game UI");
-        return true;
+                state->srPresenter.submittedFrames(),state->ownedFallbacks.size());
     } catch(const std::exception& error) {
         state->srDisabled=true;
         state->statusDlssDisabled.store(true,std::memory_order_release);
@@ -664,7 +657,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         domain->suspend();
         try {spdlog::warn("Owned world SR suspended after frame {}",sequence);}catch(...) {}
     }
-    return false;
+    return true;
 }
 #endif
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
@@ -1165,60 +1158,6 @@ std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
 }
-bool publishOwnedSceneForNativeUi(ID3D11DeviceContext* context) noexcept {
-#ifdef RK_WITH_NGX
-    try {
-    auto* state=active.load(std::memory_order_acquire);
-    auto* domain=activeOwnedSceneDomain();
-    auto* scene=activeOwnedSceneTexture();
-    if(!state||!domain||!scene||!context||domain->phase()!=ScenePhase::World||
-       reinterpret_cast<std::uintptr_t>(context)!=
-           state->createdContext.load(std::memory_order_acquire))return false;
-    const auto sequence=domain->frame();
-    if(state->forwarded.load(std::memory_order_acquire)!=sequence)return false;
-    const auto numbers=readWorldNumbers(reinterpret_cast<void*>(state->expectedRenderer),
-        state->expectedRenderer);
-    if(!numbers.valid||numbers.lockOwner!=GetCurrentThreadId()||
-       numbers.lockRecursion<=0||numbers.context!=reinterpret_cast<std::uintptr_t>(context)||
-       !numbers.depth)return false;
-    if(!state->nativeUiBoundaryReady) {
-        if(!state->nativeUiBoundaryGate.needsSample(sequence,domain->plan().generation))
-            return false;
-        const auto sample=probeOwnedScene(context,scene,
-            reinterpret_cast<ID3D11Texture2D*>(numbers.depth),domain->plan().render);
-        const auto* stats=std::get_if<OwnedSceneSample>(&sample);
-        state->nativeUiBoundaryGate.record(sequence,
-            stats?std::optional<ColorSampleStats>{stats->color}:std::nullopt,
-            stats?std::optional<DepthSampleStats>{stats->depth}:std::nullopt);
-        if(sequence<=3||state->nativeUiBoundaryGate.ready()) {
-            try {
-                if(stats)spdlog::info("Owned pre-UI boundary frame {}: colorNonBlack={} colorDistinct={} depthDistinct={} depthNonFar={} ready={}",
-                    sequence,stats->color.nonBlack,stats->color.distinct,
-                    stats->depth.distinct,stats->depth.nonFar,
-                    state->nativeUiBoundaryGate.ready());
-                else spdlog::warn("Owned pre-UI boundary frame {} probe unavailable: {}",
-                    sequence,std::get<Error>(sample).message);
-            } catch(...) {}
-        }
-        if(!state->nativeUiBoundaryGate.ready())return false;
-        state->nativeUiBoundaryReady=true;
-        try {spdlog::info("Owned pre-UI boundary admitted at frame {}; DLSS publication moves before native UI",
-            sequence);}catch(...) {}
-    }
-    return processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-        sequence,true);
-    } catch(const std::exception& error) {
-        try {spdlog::warn("Owned pre-UI boundary probe failed: {}",error.what());}catch(...) {}
-        return false;
-    } catch(...) {
-        try {spdlog::warn("Owned pre-UI boundary probe failed");}catch(...) {}
-        return false;
-    }
-#else
-    (void)context;
-    return false;
-#endif
-}
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
@@ -1265,22 +1204,9 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
        reinterpret_cast<std::uintptr_t>(swap))return;
 #ifdef RK_WITH_NGX
-    if(auto* domain=activeOwnedSceneDomain();domain) {
-        if(domain->phase()==ScenePhase::World)
-            processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-                state->forwarded.load(std::memory_order_relaxed),false);
-        else if(domain->phase()==ScenePhase::NativeUi) {
-            auto* ui=ownedUiRedirector();
-            if(!ui||ui->compatibilityFault()||
-               !domain->closePublishedFrame(domain->frame(),domain->plan().generation)) {
-                domain->suspend();
-                state->srDisabled=true;
-                state->statusDlssDisabled.store(true,std::memory_order_release);
-                try {spdlog::warn("Owned native UI frame could not close safely at Present; route suspended");}
-                catch(...) {}
-            }
-        }
-    }
+    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World)
+        processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
+            state->forwarded.load(std::memory_order_relaxed));
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);

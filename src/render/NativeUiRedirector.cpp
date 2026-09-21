@@ -104,15 +104,6 @@ bool NativeUiRedirector::nativeBound() const noexcept {
     auto value=resource(bound.Get());auto id=canonical(value.Get());
     return id&&id.Get()==nativeId_.Get();
 }
-bool NativeUiRedirector::isSceneUiBoundary(ID3D11DeviceContext* context,
-    UINT count,ID3D11RenderTargetView* const* views,
-    ID3D11DepthStencilView* depth) const noexcept {
-    if(!context_||context!=context_.Get()||GetCurrentThreadId()!=thread_||
-       generation_!=route_.plan().generation||route_.phase()!=ScenePhase::World||
-       count!=1||!views||!views[0]||depth)return false;
-    auto value=resource(views[0]);auto id=canonical(value.Get());
-    return id&&id.Get()==sceneId_.Get();
-}
 void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
     UINT count,ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
     if(eligible(context)&&views&&count) {
