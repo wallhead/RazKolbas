@@ -30,6 +30,52 @@ Extent extentOf(ID3D11Resource* value) noexcept {
     D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
     return {desc.Width,desc.Height};
 }
+HRESULT createNativeAuxiliary(ID3D11Device* device,ID3D11RenderTargetView* source,
+    Extent display,ComPtr<ID3D11RenderTargetView>& result) noexcept {
+    if(!device||!source||!display.valid())return E_INVALIDARG;
+    auto sourceResource=resource(source);
+    ComPtr<ID3D11Texture2D> sourceTexture;
+    if(!sourceResource||FAILED(sourceResource.As(&sourceTexture)))return E_INVALIDARG;
+    D3D11_TEXTURE2D_DESC textureDesc{};sourceTexture->GetDesc(&textureDesc);
+    D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};source->GetDesc(&viewDesc);
+    if(textureDesc.ArraySize!=1||textureDesc.MipLevels!=1||
+       textureDesc.SampleDesc.Count!=1||
+       viewDesc.ViewDimension!=D3D11_RTV_DIMENSION_TEXTURE2D||
+       viewDesc.Texture2D.MipSlice!=0)return E_NOTIMPL;
+    textureDesc.Width=display.width;textureDesc.Height=display.height;
+    textureDesc.Usage=D3D11_USAGE_DEFAULT;textureDesc.CPUAccessFlags=0;
+    textureDesc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    textureDesc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> texture;
+    auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
+    if(FAILED(hr))return hr;
+    return device->CreateRenderTargetView(texture.Get(),&viewDesc,&result);
+}
+HRESULT createNativeDepth(ID3D11Device* device,ID3D11DepthStencilView* source,
+    Extent display,ComPtr<ID3D11DepthStencilView>& result) noexcept {
+    if(!device||!source||!display.valid())return E_INVALIDARG;
+    auto sourceResource=resource(source);
+    ComPtr<ID3D11Texture2D> sourceTexture;
+    if(!sourceResource||FAILED(sourceResource.As(&sourceTexture)))return E_INVALIDARG;
+    D3D11_TEXTURE2D_DESC textureDesc{};sourceTexture->GetDesc(&textureDesc);
+    D3D11_DEPTH_STENCIL_VIEW_DESC viewDesc{};source->GetDesc(&viewDesc);
+    if(textureDesc.ArraySize!=1||textureDesc.MipLevels!=1||
+       textureDesc.SampleDesc.Count!=1||
+       viewDesc.ViewDimension!=D3D11_DSV_DIMENSION_TEXTURE2D||
+       viewDesc.Texture2D.MipSlice!=0)return E_NOTIMPL;
+    textureDesc.Width=display.width;textureDesc.Height=display.height;
+    textureDesc.Usage=D3D11_USAGE_DEFAULT;textureDesc.CPUAccessFlags=0;
+    textureDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+    textureDesc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> texture;
+    auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
+    if(FAILED(hr))return hr;
+    return device->CreateDepthStencilView(texture.Get(),&viewDesc,&result);
+}
+bool hasStencil(DXGI_FORMAT format) noexcept {
+    return format==DXGI_FORMAT_D24_UNORM_S8_UINT||
+        format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+}
 }
 HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderThread,
     UiContextNext next,ID3D11Texture2D* reducedScene,
@@ -96,6 +142,16 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        !route_.enterUi(frame,generation_,true))return E_UNEXPECTED;
+    if(companionsReady()) {
+        constexpr float clear[4]{};
+        for(const auto& auxiliary:auxiliaries_)
+            if(auxiliary.nativeView)
+                context_->ClearRenderTargetView(auxiliary.nativeView.Get(),clear);
+        D3D11_DEPTH_STENCIL_VIEW_DESC desc{};nativeDepthView_->GetDesc(&desc);
+        const auto flags=D3D11_CLEAR_DEPTH|
+            (hasStencil(desc.Format)?D3D11_CLEAR_STENCIL:0u);
+        context_->ClearDepthStencilView(nativeDepthView_.Get(),flags,1.0f,0);
+    }
     bindNativeTarget();
     return S_OK;
 }
@@ -113,13 +169,109 @@ std::optional<UiFrameObservation> NativeUiRedirector::finishObservation(
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!observing_||observation_.frame!=frame||GetCurrentThreadId()!=owner)
         return std::nullopt;
-    observing_=false;observeViewport_=false;
+    observing_=false;observeViewport_=false;++completedObservations_;
+    if(observationMatchesRoute())++validRouteObservations_;
+    else observationContractFault_=true;
     return observation_;
+}
+bool NativeUiRedirector::observationMatchesRoute() const noexcept {
+    if(observation_.dropped||observation_.count!=8)return false;
+    const auto render=route_.plan().render;
+    const auto isRender=[render](Extent value) {
+        return value.width==render.width&&value.height==render.height;
+    };
+    std::uintptr_t depth{};
+    for(std::uint32_t i=0;i<observation_.count;++i) {
+        const auto& event=observation_.events[i];
+        if(i%2) {
+            if(event.kind!=UiObservationKind::Viewport||
+               !isRender(event.viewport))return false;
+            continue;
+        }
+        if(event.kind!=UiObservationKind::RenderTargets||event.sceneSlot!=0||
+           !event.hasDepth||!isRender(event.depth)||!isRender(event.targets[0])||
+           event.targetIdentities[0]!=reinterpret_cast<std::uintptr_t>(sceneId_.Get()))
+            return false;
+        if(!depth)depth=event.depthIdentity;
+        if(!depth||event.depthIdentity!=depth)return false;
+        if(i==0) {
+            if(event.targetCount!=2||!isRender(event.targets[1])||
+               !event.targetIdentities[1]||
+               event.targetIdentities[1]==event.targetIdentities[0])return false;
+        } else if(event.targetCount!=1)return false;
+    }
+    return true;
+}
+void NativeUiRedirector::rememberObservedCompanions(UINT count,
+    ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth,
+    int sceneSlot) noexcept {
+    if(depth) {
+        auto value=resource(depth);auto id=canonical(value.Get());
+        if(id&&extentOf(value.Get()).width==route_.plan().render.width&&
+           extentOf(value.Get()).height==route_.plan().render.height) {
+            if(!depthSourceId_) {depthSourceId_=id;depthSourceView_=depth;}
+            if(depthSourceId_.Get()==id.Get()) {
+                if(count>1)observedMrtDepth_=true;
+                if(count==1)observedSingleDepth_=true;
+            }
+        }
+    }
+    for(UINT i=0;i<count&&i<D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;++i) {
+        if(static_cast<int>(i)==sceneSlot||!views[i])continue;
+        auto value=resource(views[i]);auto id=canonical(value.Get());
+        if(!id||extentOf(value.Get()).width!=route_.plan().render.width||
+           extentOf(value.Get()).height!=route_.plan().render.height)continue;
+        for(auto& auxiliary:auxiliaries_) {
+            if(auxiliary.sourceId&&auxiliary.sourceId.Get()!=id.Get())continue;
+            if(!auxiliary.sourceId) {
+                auxiliary.sourceId=id;auxiliary.sourceView=views[i];
+            }
+            break;
+        }
+    }
+}
+HRESULT NativeUiRedirector::prepareObservedCompanions() noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||GetCurrentThreadId()!=owner||
+       generation_!=route_.plan().generation)return E_UNEXPECTED;
+    ComPtr<ID3D11Device> device;context_->GetDevice(&device);
+    if(!device)return E_UNEXPECTED;
+    for(auto& auxiliary:auxiliaries_) {
+        if(!auxiliary.sourceView||auxiliary.nativeView)continue;
+        const auto hr=createNativeAuxiliary(device.Get(),auxiliary.sourceView.Get(),
+            route_.plan().display,auxiliary.nativeView);
+        if(FAILED(hr))return hr;
+    }
+    if(depthSourceView_&&!nativeDepthView_) {
+        const auto hr=createNativeDepth(device.Get(),depthSourceView_.Get(),
+            route_.plan().display,nativeDepthView_);
+        if(FAILED(hr))return hr;
+    }
+    return companionsReady()?S_OK:S_FALSE;
+}
+bool NativeUiRedirector::companionsReady() const noexcept {
+    if(observationContractFault_||validRouteObservations_<2||
+       !observedMrtDepth_||!observedSingleDepth_||
+       !depthSourceId_||!nativeDepthView_)return false;
+    unsigned auxiliaryCount{};
+    for(const auto& item:auxiliaries_) {
+        if(item.sourceId&&!item.nativeView)return false;
+        if(item.sourceId)++auxiliaryCount;
+    }
+    return auxiliaryCount==2;
+}
+ID3D11RenderTargetView* NativeUiRedirector::auxiliaryReplacement(
+    IUnknown* sourceId) const noexcept {
+    if(!sourceId)return nullptr;
+    for(const auto& auxiliary:auxiliaries_)
+        if(auxiliary.sourceId.Get()==sourceId)return auxiliary.nativeView.Get();
+    return nullptr;
 }
 bool NativeUiRedirector::eligible(ID3D11DeviceContext* context) const noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     return context==context_.Get()&&GetCurrentThreadId()==owner&&
-       route_.phase()==ScenePhase::NativeUi&&generation_==route_.plan().generation;
+       route_.phase()==ScenePhase::NativeUi&&generation_==route_.plan().generation&&
+       !latePassRoutingDisabled_;
 }
 bool NativeUiRedirector::nativeBound() const noexcept {
     ComPtr<ID3D11RenderTargetView> bound;
@@ -144,6 +296,7 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
             }
         }
         if(observedScene) {
+            rememberObservedCompanions(count,views,depth,observedSlot);
             if(observation_.count<observation_.events.size()) {
                 auto& event=observation_.events[observation_.count++];
                 event.kind=UiObservationKind::RenderTargets;
@@ -169,9 +322,30 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
             if(id&&id.Get()==sceneId_.Get()) {sceneIncoming=true;sceneSlot=i;}
         }
         if(sceneIncoming) {
-            if(count==1&&!depth) {
-                auto* replacement=nativeRtv_.Get();
-                next_.om(context,1,&replacement,nullptr);return;
+            std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
+                replacements{};
+            bool compatible=count<=replacements.size();
+            for(UINT i=0;compatible&&i<count;++i) {
+                auto value=resource(views[i]);auto id=canonical(value.Get());
+                if(id&&id.Get()==sceneId_.Get())replacements[i]=nativeRtv_.Get();
+                else if(auto* auxiliary=auxiliaryReplacement(id.Get()))
+                    replacements[i]=auxiliary;
+                else if(!views[i]||extentOf(value.Get()).width!=route_.plan().render.width||
+                        extentOf(value.Get()).height!=route_.plan().render.height)
+                    replacements[i]=views[i];
+                else compatible=false;
+            }
+            ID3D11DepthStencilView* replacementDepth=depth;
+            if(depth) {
+                auto value=resource(depth);auto id=canonical(value.Get());
+                if(id&&id.Get()==depthSourceId_.Get()&&nativeDepthView_)
+                    replacementDepth=nativeDepthView_.Get();
+                else if(extentOf(value.Get()).width==route_.plan().render.width&&
+                        extentOf(value.Get()).height==route_.plan().render.height)
+                    compatible=false;
+            }
+            if(compatible) {
+                next_.om(context,count,replacements.data(),replacementDepth);return;
             }
             if(!compatibilityFault_) {
                 faultInfo_={count,sceneSlot,depth!=nullptr,0,0};
@@ -217,6 +391,11 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
         next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
-    observation_={};observing_=observeViewport_=false;
+    latePassRoutingDisabled_=false;
+    observation_={};observing_=observeViewport_=false;completedObservations_=0;
+    validRouteObservations_=0;observationContractFault_=false;
+    observedMrtDepth_=observedSingleDepth_=false;
+    for(auto& auxiliary:auxiliaries_)auxiliary={};
+    depthSourceId_.Reset();depthSourceView_.Reset();nativeDepthView_.Reset();
 }
 }

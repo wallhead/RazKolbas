@@ -59,6 +59,20 @@ public:
     bool beginObservation(std::uint64_t frame) noexcept;
     std::optional<UiFrameObservation> finishObservation(
         std::uint64_t frame) noexcept;
+    // Allocate display-sized counterparts for the reduced auxiliary colour
+    // and depth resources learned by the read-only menu trace. Allocation is
+    // kept outside the context callbacks.
+    HRESULT prepareObservedCompanions() noexcept;
+    bool companionsReady() const noexcept;
+    bool latePassRoutingAvailable() const noexcept {
+        return !latePassRoutingDisabled_&&companionsReady();
+    }
+    // Preserve the owned reduced-scene route but permanently stop translating
+    // late passes after a runtime contract mismatch. The controller then
+    // returns to its proven pre-Present publication path.
+    void disableLatePassRouting() noexcept {
+        latePassRoutingDisabled_=true;compatibilityFault_=false;faultInfo_={};
+    }
     void onOMSetRenderTargets(ID3D11DeviceContext* context,UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
@@ -67,17 +81,35 @@ public:
     UiCompatibilityFault compatibilityFaultInfo() const noexcept { return faultInfo_; }
     void releaseAfterRetirement(bool unbindNative=false) noexcept;
 private:
+    struct AuxiliaryCompanion {
+        Microsoft::WRL::ComPtr<IUnknown> sourceId;
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sourceView;
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> nativeView;
+    };
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
     void bindNativeTarget() noexcept;
+    bool observationMatchesRoute() const noexcept;
+    void rememberObservedCompanions(UINT count,
+        ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth,
+        int sceneSlot) noexcept;
+    ID3D11RenderTargetView* auxiliaryReplacement(IUnknown* sourceId) const noexcept;
     OwnedSceneDomain& route_;
     UiContextNext next_{};
     DWORD thread_{};
     std::uint64_t generation_{};
     bool compatibilityFault_{};
+    bool latePassRoutingDisabled_{};
     UiCompatibilityFault faultInfo_{};
     UiFrameObservation observation_{};
     bool observing_{},observeViewport_{};
+    std::uint32_t completedObservations_{};
+    std::uint32_t validRouteObservations_{};
+    bool observationContractFault_{};
+    bool observedMrtDepth_{},observedSingleDepth_{};
+    std::array<AuxiliaryCompanion,4> auxiliaries_{};
+    Microsoft::WRL::ComPtr<IUnknown> depthSourceId_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthSourceView_,nativeDepthView_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
     Microsoft::WRL::ComPtr<IUnknown> sceneId_,nativeId_;

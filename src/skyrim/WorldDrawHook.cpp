@@ -90,6 +90,7 @@ struct WorldState {
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
+    bool nativeUiRouteActivated{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
     std::uint64_t srActiveGeneration{};
@@ -460,8 +461,9 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
         return Error{ErrorCode::Io,std::string("Cannot locate owned SR capture directory: ")+error.what()};
     }
 }
+enum class OwnedPublicationBoundary { PrePresent, MenuDisplay };
 bool processOwnedWorldFrame(WorldState* state,void* world,
-    std::uint64_t sequence) noexcept {
+    std::uint64_t sequence,OwnedPublicationBoundary boundary) noexcept {
     auto* domain=activeOwnedSceneDomain();
     if(!domain)return ownedScenePreviouslyActive();
     if(domain->phase()==ScenePhase::Suspended)return true;
@@ -634,14 +636,17 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
-        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault()||
-           !domain->closePublishedFrame(sequence,domain->plan().generation))
+        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native publication or context compatibility failed");
+        if(boundary==OwnedPublicationBoundary::PrePresent&&
+           !domain->closePublishedFrame(sequence,domain->plan().generation))
+            throw std::runtime_error("Owned pre-Present frame did not close");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
         state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
         state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
         if(sequence<=3||sequence%600==0)
-            spdlog::info("Owned pre-Present frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; menu marker is observation-only",
+            spdlog::info("Owned {} publication frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}",
+                boundary==OwnedPublicationBoundary::MenuDisplay?"menu-boundary":"pre-Present",
                 sequence,domain->plan().render.width,domain->plan().render.height,
                 domain->plan().display.width,domain->plan().display.height,
                 std::get<NativeFlipTarget>(native).index,
@@ -667,8 +672,24 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     auto* state=active.load(std::memory_order_acquire);
     auto* domain=activeOwnedSceneDomain();
     const auto frame=state?state->forwarded.load(std::memory_order_relaxed):0;
-    if(state&&domain&&frame<=12&&domain->phase()==ScenePhase::World)
-        if(auto* ui=ownedUiRedirector())ui->beginObservation(frame);
+    if(state&&domain&&domain->phase()==ScenePhase::World) {
+        if(auto* ui=ownedUiRedirector()) {
+            if(frame<=12)ui->beginObservation(frame);
+            if(frame>12&&state->ownedSceneGate.ready()&&
+               state->srPresenter.submittedFrames()>0&&
+               ui->latePassRoutingAvailable()) {
+                if(processOwnedWorldFrame(state,
+                    reinterpret_cast<void*>(state->expectedRenderer),frame,
+                    OwnedPublicationBoundary::MenuDisplay)&&
+                   domain->phase()==ScenePhase::NativeUi&&
+                   !state->nativeUiRouteActivated) {
+                    state->nativeUiRouteActivated=true;
+                    try {spdlog::info("Owned native UI resource route activated at frame {} after {} successful DLSS submissions",
+                        frame,state->srPresenter.submittedFrames());}catch(...) {}
+                }
+            }
+        }
+    }
 #endif
 }
 void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
@@ -1248,9 +1269,48 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                         }
                     }
                 } catch(...) {}
+                const auto prepared=ui->prepareObservedCompanions();
+                if(FAILED(prepared)) {
+                    try {spdlog::warn("Owned native UI companion preparation frame {} failed: HRESULT=0x{:08x}",
+                        frame,static_cast<std::uint32_t>(prepared));} catch(...) {}
+                } else if(ui->companionsReady()&&frame<=2) {
+                    try {spdlog::info("Owned native UI companions ready at frame {}: reduced MRT/depth roles learned and display-sized counterparts allocated",
+                        frame);}catch(...) {}
+                }
             }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-            frame);
+            frame,OwnedPublicationBoundary::PrePresent);
+    } else if(auto* closingDomain=activeOwnedSceneDomain();
+              closingDomain&&closingDomain->phase()==ScenePhase::NativeUi) {
+        const auto frame=state->forwarded.load(std::memory_order_relaxed);
+        auto* ui=ownedUiRedirector();
+        if(!ui) {
+            state->srDisabled=true;
+            state->statusDlssDisabled.store(true,std::memory_order_release);
+            closingDomain->suspend();
+            try {spdlog::warn("Owned menu-boundary UI route suspended without its context hook at pre-Present frame {}",
+                frame);}catch(...) {}
+        } else if(ui->compatibilityFault()) {
+            ui->disableLatePassRouting();
+            if(!closingDomain->closePublishedFrame(frame,
+                closingDomain->plan().generation)) {
+                state->srDisabled=true;
+                state->statusDlssDisabled.store(true,std::memory_order_release);
+                closingDomain->suspend();
+            }
+            try {spdlog::warn("Owned native UI contract changed at frame {}; continuing with stable pre-Present publication",
+                frame);}catch(...) {}
+        } else if(!closingDomain->closePublishedFrame(frame,
+                      closingDomain->plan().generation)) {
+            state->srDisabled=true;
+            state->statusDlssDisabled.store(true,std::memory_order_release);
+            closingDomain->suspend();
+            try {spdlog::warn("Owned menu-boundary UI frame {} could not close",
+                frame);}catch(...) {}
+        } else if(frame<=3||frame%600==0) {
+            try {spdlog::info("Owned menu-boundary UI route closed frame {} at pre-Present",
+                frame);}catch(...) {}
+        }
     }
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);

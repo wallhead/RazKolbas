@@ -21,6 +21,13 @@ ComPtr<ID3D11Resource> viewResource(ID3D11View* view) {
     if(view)view->GetResource(result.GetAddressOf());
     return result;
 }
+rk::Extent viewExtent(ID3D11View* view) {
+    ComPtr<ID3D11Texture2D> texture;
+    if(auto value=viewResource(view);value)value.As(&texture);
+    D3D11_TEXTURE2D_DESC desc{};
+    if(texture)texture->GetDesc(&desc);
+    return {desc.Width,desc.Height};
+}
 }
 
 TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publication", "[native_ui]") {
@@ -138,32 +145,55 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     depthViewDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
     ComPtr<ID3D11DepthStencilView> depthView;
     REQUIRE(SUCCEEDED(device->CreateDepthStencilView(depth.Get(),&depthViewDesc,&depthView)));
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> auxiliary;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&auxiliary)));
+    ComPtr<ID3D11RenderTargetView> auxiliaryView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(auxiliary.Get(),nullptr,
+        &auxiliaryView)));
+    ComPtr<ID3D11Texture2D> secondAuxiliary;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&secondAuxiliary)));
+    ComPtr<ID3D11RenderTargetView> secondAuxiliaryView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(secondAuxiliary.Get(),nullptr,
+        &secondAuxiliaryView)));
     rk::OwnedSceneDomain route;
     REQUIRE(route.configure({render,display,1}));
     REQUIRE(route.begin(7,1,GetCurrentThreadId()));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
         {&forwardOm,&forwardVp},scene.texture(),nativeView.Get())));
-    REQUIRE(redirect.beginObservation(7));
     auto* sceneView=scene.renderTarget();
-    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
+    std::array<ID3D11RenderTargetView*,2> reducedTargets{
+        sceneView,auxiliaryView.Get()};
+    REQUIRE(redirect.beginObservation(7));
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
-    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+    for(unsigned pass=0;pass<3;++pass) {
+        redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+        redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    }
     auto observed=redirect.finishObservation(7);
     REQUIRE(observed.has_value());
     REQUIRE(observed->frame==7);
-    REQUIRE(observed->count==3);
+    REQUIRE(observed->count==8);
     REQUIRE(observed->events[0].kind==rk::UiObservationKind::RenderTargets);
     REQUIRE(observed->events[0].sceneSlot==0);
-    REQUIRE_FALSE(observed->events[0].hasDepth);
+    REQUIRE(observed->events[0].hasDepth);
+    REQUIRE(observed->events[0].targetCount==2);
     REQUIRE(observed->events[1].kind==rk::UiObservationKind::Viewport);
     REQUIRE(observed->events[1].viewport.width==render.width);
     REQUIRE(observed->events[1].viewport.height==render.height);
     REQUIRE(observed->events[2].kind==rk::UiObservationKind::RenderTargets);
     REQUIRE(observed->events[2].hasDepth);
+    REQUIRE(observed->events[2].targetCount==1);
     REQUIRE(observed->events[2].depth.width==render.width);
     REQUIRE(observed->events[2].depth.height==render.height);
+    REQUIRE(observed->events[4].kind==rk::UiObservationKind::RenderTargets);
+    REQUIRE(observed->events[4].targetCount==1);
+    REQUIRE(observed->events[4].hasDepth);
+    REQUIRE(observed->events[6].targetCount==1);
     ComPtr<ID3D11RenderTargetView> bound;
     ComPtr<ID3D11DepthStencilView> boundDepth;
     context->OMGetRenderTargets(1,&bound,&boundDepth);
@@ -172,6 +202,74 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(identity(viewResource(boundDepth.Get()).Get()).Get()==
         identity(depth.Get()).Get());
     REQUIRE_FALSE(redirect.compatibilityFault());
+    REQUIRE(SUCCEEDED(redirect.prepareObservedCompanions()));
+    REQUIRE_FALSE(redirect.companionsReady());
+    reducedTargets[1]=secondAuxiliaryView.Get();
+    REQUIRE(redirect.beginObservation(7));
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    for(unsigned pass=0;pass<3;++pass) {
+        redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+        redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    }
+    observed=redirect.finishObservation(7);
+    REQUIRE(observed.has_value());
+    REQUIRE(observed->count==8);
+    REQUIRE(observed->events[0].targetIdentities[1]==
+        reinterpret_cast<std::uintptr_t>(identity(secondAuxiliary.Get()).Get()));
+    REQUIRE(SUCCEEDED(redirect.prepareObservedCompanions()));
+    REQUIRE(redirect.companionsReady());
+    REQUIRE(route.startProcessing(7,1));
+    REQUIRE(SUCCEEDED(redirect.commitPublishedUi(7)));
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    std::array<ComPtr<ID3D11RenderTargetView>,2> nativeTargets;
+    boundDepth.Reset();
+    std::array<ID3D11RenderTargetView*,2> rawTargets{};
+    context->OMGetRenderTargets(2,rawTargets.data(),boundDepth.GetAddressOf());
+    for(std::size_t i=0;i<nativeTargets.size();++i)nativeTargets[i].Attach(rawTargets[i]);
+    REQUIRE(identity(viewResource(nativeTargets[0].Get()).Get()).Get()==
+        identity(native.Get()).Get());
+    REQUIRE(identity(viewResource(nativeTargets[1].Get()).Get()).Get()!=
+        identity(secondAuxiliary.Get()).Get());
+    const auto auxiliaryExtent=viewExtent(nativeTargets[1].Get());
+    REQUIRE(auxiliaryExtent.width==display.width);
+    REQUIRE(auxiliaryExtent.height==display.height);
+    reducedTargets[1]=auxiliaryView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    for(auto& target:nativeTargets)target.Reset();
+    boundDepth.Reset();rawTargets={};
+    context->OMGetRenderTargets(2,rawTargets.data(),boundDepth.GetAddressOf());
+    for(std::size_t i=0;i<nativeTargets.size();++i)nativeTargets[i].Attach(rawTargets[i]);
+    REQUIRE(identity(viewResource(nativeTargets[1].Get()).Get()).Get()!=
+        identity(auxiliary.Get()).Get());
+    REQUIRE(viewExtent(nativeTargets[1].Get()).width==display.width);
+    ComPtr<ID3D11Texture2D> nativeDepth;
+    REQUIRE(SUCCEEDED(viewResource(boundDepth.Get()).As(&nativeDepth)));
+    D3D11_TEXTURE2D_DESC nativeDepthDesc{};nativeDepth->GetDesc(&nativeDepthDesc);
+    REQUIRE(nativeDepthDesc.Width==display.width);
+    REQUIRE(nativeDepthDesc.Height==display.height);
+    UINT viewportCount=1;D3D11_VIEWPORT nativeViewport{};
+    context->RSGetViewports(&viewportCount,&nativeViewport);
+    REQUIRE(nativeViewport.Width==display.width);
+    REQUIRE(nativeViewport.Height==display.height);
+    REQUIRE_FALSE(redirect.compatibilityFault());
+    desc.MipLevels=2;
+    ComPtr<ID3D11Texture2D> unknownReduced;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&unknownReduced)));
+    D3D11_RENDER_TARGET_VIEW_DESC unknownViewDesc{};
+    unknownViewDesc.Format=desc.Format;
+    unknownViewDesc.ViewDimension=D3D11_RTV_DIMENSION_TEXTURE2D;
+    ComPtr<ID3D11RenderTargetView> unknownReducedView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(unknownReduced.Get(),
+        &unknownViewDesc,&unknownReducedView)));
+    reducedTargets[1]=unknownReducedView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    REQUIRE(redirect.compatibilityFault());
+    redirect.disableLatePassRouting();
+    REQUIRE_FALSE(redirect.compatibilityFault());
+    REQUIRE_FALSE(redirect.latePassRoutingAvailable());
+    REQUIRE(route.closePublishedFrame(7,1));
     route.suspend();
     redirect.releaseAfterRetirement();
 }

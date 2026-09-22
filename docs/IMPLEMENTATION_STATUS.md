@@ -1557,3 +1557,38 @@ All installed payloads match the 0.1.55 manifest. The assistant did not start
 Skyrim. The next evidence is one user-started save-load run: the screen should
 remain visible through the pre-Present path while the first twelve frames
 record the resource sequence after the menu marker.
+
+## 0.1.55 resource trace result and guarded native UI route
+
+The user started 0.1.55, loaded a save and reported a visible image that did
+not look like Skyrim Upscaler AIO. The assistant closed the responsive game
+normally after collecting the trace; no new crash log was produced. Frames
+1-12 each recorded the same eight events after the menu marker: one reduced
+scene + alternating auxiliary MRT bind followed by three reduced scene-only
+binds, all with the same reduced depth and each followed by a reduced viewport.
+Exact identities and the comparison with AIO are recorded in
+`docs/re/NATIVE_UI_RESOURCE_ROUTE.md`.
+
+This run separately verified continuous real DLSS SR. The scene/depth gate
+became ready and created the NGX feature at frame 6301, the first pooled
+evaluation returned at frame 6421, and submissions reached 5,580 at frame
+12,000 with no logged Present failure. ENB also changed the native output hash
+at both sampled Present calls while leaving the reduced scene unchanged. The
+user's visual difference is therefore consistent with 0.1.55's late
+composition order rather than DLSS or ENB being inactive.
+
+Source now allocates display-sized counterparts for the two learned auxiliary
+RTVs and shared DSV outside the context callbacks. It preserves the visible
+pre-Present route until the input gate is ready, the companions are prepared,
+and at least one DLSS evaluation has succeeded. It then publishes at the menu
+boundary and maps the observed scene, auxiliary, depth and viewport roles to
+native size for the four late passes, closing the frame at pre-Present.
+Unknown reduced attachments cause a compatibility fault and permanently
+downgrade later frames to the stable pre-Present publication path; the cached
+reduced scene stays owned and continues receiving display-sized publication.
+The updated WARP regression covers two alternating auxiliary identities and
+the depth/viewport mapping. Debug and Release CTest each pass all 35 groups.
+The Release RTX 4080 SUPER harness completed 600 pooled
+1707x960-to-2560x1440 DLSS frames with zero fallbacks and output SHA-256
+`eff793f9f4695c298308e3e55310f5c6cf63f802761419c954adddebe698c255`.
+Packaging, installation and actual-game visual verification are pending.
