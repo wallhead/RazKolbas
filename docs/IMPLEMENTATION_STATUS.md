@@ -1537,3 +1537,23 @@ with zero fallbacks and output SHA-256
 `3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
 Actual-game visibility and the bounded bind sequence are **NOT RUN** for this
 correction.
+
+Source commit `8092889` is packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.55-visible-resource-trace-8092889.zip`
+with SHA-256
+`513b8f3ae55aa72fb992318d345ee60f2a06f8887f781f49990cee7b2dc49435`.
+The archive contains exactly the four manifest-listed payloads plus the
+manifest, all extracted hashes match, and its status is
+`DIAGNOSTIC_VISIBLE_PRE_PRESENT_DLSS_MENU_RESOURCE_TRACE_PENDING_GAME_TEST`.
+The complete stable 0.1.52 installation was verified against its manifest and
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.55-8092889`. Only the installed DLL
+and manifest were replaced. Installed DLL SHA-256 is
+`b86588a3baed350df4e7cfc24b608eb24f37a7bda09a76964b9d5c8182025cf9`;
+the user INI and signed NVIDIA runtime retain hashes
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the 0.1.55 manifest. The assistant did not start
+Skyrim. The next evidence is one user-started save-load run: the screen should
+remain visible through the pre-Present path while the first twelve frames
+record the resource sequence after the menu marker.
