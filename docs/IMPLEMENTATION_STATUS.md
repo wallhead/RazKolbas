@@ -1591,4 +1591,23 @@ the depth/viewport mapping. Debug and Release CTest each pass all 35 groups.
 The Release RTX 4080 SUPER harness completed 600 pooled
 1707x960-to-2560x1440 DLSS frames with zero fallbacks and output SHA-256
 `eff793f9f4695c298308e3e55310f5c6cf63f802761419c954adddebe698c255`.
-Packaging, installation and actual-game visual verification are pending.
+Actual-game visual verification is pending.
+
+Source commit `d64d0e8` was packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.56-native-ui-route-d64d0e8.zip`
+with SHA-256
+`6b3ca18b8763392d0ac551a8c837ca7c29085aebe4877d24dbc3bb5c57faa4b6`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest and verified every payload hash. The previous 0.1.55 mod folder
+was verified against its manifest and copied to ignored
+`artifacts/local/mo2-install-backup-0.1.56-d64d0e8`. Only the installed DLL
+and manifest were replaced. Installed DLL SHA-256 is
+`22f761cabb475169f372ac62c3d5abbb7b1626f00928aae85a667c88b9954f4a`;
+the user INI and signed NVIDIA runtime retain SHA-256
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the 0.1.56 manifest. Skyrim was not running and
+the assistant did not start it. Status is
+`EXPERIMENTAL_GUARDED_MENU_BOUNDARY_DLSS_NATIVE_UI_PENDING_GAME_TEST`.
+The next action is a user-started save-load test of visual parity, ENB/ReShade
+ordering and native-size UI after the log reports native UI route activation.
