@@ -24,6 +24,12 @@ bool extent(ID3D11Resource* value,Extent expected) noexcept {
     return desc.Width==expected.width&&desc.Height==expected.height&&
         desc.ArraySize==1&&desc.MipLevels==1&&desc.SampleDesc.Count==1;
 }
+Extent extentOf(ID3D11Resource* value) noexcept {
+    ComPtr<ID3D11Texture2D> texture;
+    if(!value||FAILED(value->QueryInterface(IID_PPV_ARGS(texture.GetAddressOf()))))return {};
+    D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+    return {desc.Width,desc.Height};
+}
 }
 HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderThread,
     UiContextNext next,ID3D11Texture2D* reducedScene,
@@ -93,6 +99,23 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     bindNativeTarget();
     return S_OK;
 }
+bool NativeUiRedirector::beginObservation(std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||!frame||GetCurrentThreadId()!=owner||
+       route_.phase()!=ScenePhase::World||route_.frame()!=frame)return false;
+    if(observing_)return observation_.frame==frame;
+    observation_={};observation_.frame=frame;
+    observing_=true;observeViewport_=false;
+    return true;
+}
+std::optional<UiFrameObservation> NativeUiRedirector::finishObservation(
+    std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!observing_||observation_.frame!=frame||GetCurrentThreadId()!=owner)
+        return std::nullopt;
+    observing_=false;observeViewport_=false;
+    return observation_;
+}
 bool NativeUiRedirector::eligible(ID3D11DeviceContext* context) const noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     return context==context_.Get()&&GetCurrentThreadId()==owner&&
@@ -106,6 +129,38 @@ bool NativeUiRedirector::nativeBound() const noexcept {
 }
 void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
     UINT count,ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
+    bool observedScene=false;
+    int observedSlot=-1;
+    std::array<ComPtr<IUnknown>,4> observedIds;
+    std::array<Extent,4> observedExtents{};
+    if(observing_&&context==context_.Get()&&views&&count&&
+       GetCurrentThreadId()==(route_.renderThread()?route_.renderThread():thread_)) {
+        for(UINT i=0;i<count&&i<observedIds.size();++i) {
+            auto value=resource(views[i]);
+            observedIds[i]=canonical(value.Get());
+            observedExtents[i]=extentOf(value.Get());
+            if(observedIds[i]&&observedIds[i].Get()==sceneId_.Get()) {
+                observedScene=true;observedSlot=static_cast<int>(i);
+            }
+        }
+        if(observedScene) {
+            if(observation_.count<observation_.events.size()) {
+                auto& event=observation_.events[observation_.count++];
+                event.kind=UiObservationKind::RenderTargets;
+                event.targetCount=count;event.sceneSlot=observedSlot;
+                event.hasDepth=depth!=nullptr;event.targets=observedExtents;
+                for(std::size_t i=0;i<observedIds.size();++i)
+                    event.targetIdentities[i]=reinterpret_cast<std::uintptr_t>(
+                        observedIds[i].Get());
+                if(depth) {
+                    auto value=resource(depth);auto id=canonical(value.Get());
+                    event.depth=extentOf(value.Get());
+                    event.depthIdentity=reinterpret_cast<std::uintptr_t>(id.Get());
+                }
+            } else ++observation_.dropped;
+            observeViewport_=true;
+        } else observeViewport_=false;
+    }
     if(eligible(context)&&views&&count) {
         bool sceneIncoming=false;
         UINT sceneSlot=0;
@@ -137,6 +192,16 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
 }
 void NativeUiRedirector::onRSSetViewports(ID3D11DeviceContext* context,
     UINT count,const D3D11_VIEWPORT* views) noexcept {
+    if(observing_&&observeViewport_&&context==context_.Get()&&count==1&&views&&
+       GetCurrentThreadId()==(route_.renderThread()?route_.renderThread():thread_)) {
+        if(observation_.count<observation_.events.size()) {
+            auto& event=observation_.events[observation_.count++];
+            event.kind=UiObservationKind::Viewport;
+            event.viewport={static_cast<std::uint32_t>(views[0].Width),
+                static_cast<std::uint32_t>(views[0].Height)};
+        } else ++observation_.dropped;
+        observeViewport_=false;
+    }
     if(eligible(context)&&count==1&&views&&nativeBound()) {
         auto width=views[0].Width,height=views[0].Height;
         if(route_.remapFullUiViewport(width,height,views[0].TopLeftX,
@@ -152,5 +217,6 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
         next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
+    observation_={};observing_=observeViewport_=false;
 }
 }

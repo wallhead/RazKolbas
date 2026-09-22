@@ -101,7 +101,6 @@ struct WorldState {
 std::atomic<WorldState*> active{nullptr};
 bool read(std::uintptr_t address,void* destination,std::size_t size);
 #ifdef RK_WITH_NGX
-enum class OwnedPublicationBoundary { MenuDisplay, PrePresentFallback };
 Result<NgxJitter> readNgxJitter(std::uintptr_t camera,
     std::uint32_t targetWidth,std::uint32_t targetHeight) {
     if(!camera)return Error{ErrorCode::Unavailable,"Verified game camera is unavailable"};
@@ -462,7 +461,7 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
     }
 }
 bool processOwnedWorldFrame(WorldState* state,void* world,
-    std::uint64_t sequence,OwnedPublicationBoundary boundary) noexcept {
+    std::uint64_t sequence) noexcept {
     auto* domain=activeOwnedSceneDomain();
     if(!domain)return ownedScenePreviouslyActive();
     if(domain->phase()==ScenePhase::Suspended)return true;
@@ -635,18 +634,14 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
-        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
-            throw std::runtime_error("Owned native publication or context compatibility failed");
-        if(boundary==OwnedPublicationBoundary::PrePresentFallback&&
+        if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault()||
            !domain->closePublishedFrame(sequence,domain->plan().generation))
-            throw std::runtime_error("Owned pre-Present fallback did not close its frame");
+            throw std::runtime_error("Owned native publication or context compatibility failed");
         state->statusWidth.store(domain->plan().render.width,std::memory_order_relaxed);
         state->statusHeight.store(domain->plan().render.height,std::memory_order_relaxed);
         state->statusSkippedFrames.store(state->srSkipped,std::memory_order_relaxed);
         if(sequence<=3||sequence%600==0)
-            spdlog::info("Owned {} frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}",
-                boundary==OwnedPublicationBoundary::MenuDisplay?
-                    "pre-menu-display":"pre-Present fallback",
+            spdlog::info("Owned pre-Present frame {}: source={}x{} native={}x{} flipIndex={} mode={} providerSubmissions={} fallbacksInFlight={}; menu marker is observation-only",
                 sequence,domain->plan().render.width,domain->plan().render.height,
                 domain->plan().display.width,domain->plan().display.height,
                 std::get<NativeFlipTarget>(native).index,
@@ -671,10 +666,9 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
 #ifdef RK_WITH_NGX
     auto* state=active.load(std::memory_order_acquire);
     auto* domain=activeOwnedSceneDomain();
-    if(state&&domain&&domain->phase()==ScenePhase::World)
-        processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-            state->forwarded.load(std::memory_order_relaxed),
-            OwnedPublicationBoundary::MenuDisplay);
+    const auto frame=state?state->forwarded.load(std::memory_order_relaxed):0;
+    if(state&&domain&&frame<=12&&domain->phase()==ScenePhase::World)
+        if(auto* ui=ownedUiRedirector())ui->beginObservation(frame);
 #endif
 }
 void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
@@ -1227,23 +1221,36 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
        reinterpret_cast<std::uintptr_t>(swap))return;
 #ifdef RK_WITH_NGX
-    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World)
+    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World) {
+        const auto frame=state->forwarded.load(std::memory_order_relaxed);
+        if(auto* ui=ownedUiRedirector())
+            if(auto observation=ui->finishObservation(frame)) {
+                try {
+                    spdlog::info("Owned menu-to-Present bind trace frame {}: events={} dropped={}",
+                        frame,observation->count,observation->dropped);
+                    for(std::uint32_t i=0;i<observation->count;++i) {
+                        const auto& event=observation->events[i];
+                        if(event.kind==UiObservationKind::Viewport) {
+                            spdlog::info("Owned bind trace frame {} event {}: viewport={}x{}",
+                                frame,i,event.viewport.width,event.viewport.height);
+                        } else {
+                            spdlog::info("Owned bind trace frame {} event {}: targets={} sceneSlot={} depth={} depthExtent={}x{} depthId=0x{:x}; target0={}x{} id=0x{:x}; target1={}x{} id=0x{:x}; target2={}x{} id=0x{:x}; target3={}x{} id=0x{:x}",
+                                frame,i,event.targetCount,event.sceneSlot,event.hasDepth,
+                                event.depth.width,event.depth.height,event.depthIdentity,
+                                event.targets[0].width,event.targets[0].height,
+                                event.targetIdentities[0],
+                                event.targets[1].width,event.targets[1].height,
+                                event.targetIdentities[1],
+                                event.targets[2].width,event.targets[2].height,
+                                event.targetIdentities[2],
+                                event.targets[3].width,event.targets[3].height,
+                                event.targetIdentities[3]);
+                        }
+                    }
+                } catch(...) {}
+            }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
-            state->forwarded.load(std::memory_order_relaxed),
-            OwnedPublicationBoundary::PrePresentFallback);
-    if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::NativeUi) {
-        auto* ui=ownedUiRedirector();
-        if(!ui||ui->compatibilityFault()||
-           !domain->closePublishedFrame(domain->frame(),domain->plan().generation)) {
-            state->srDisabled=true;
-            state->statusDlssDisabled.store(true,std::memory_order_release);
-            domain->suspend();
-            try {spdlog::warn("Owned native UI phase failed before Present; SR suspended");}
-            catch(...) {}
-        } else if(domain->frame()<=3||domain->frame()%600==0) {
-            try {spdlog::info("Owned native UI frame {} closed at pre-Present",
-                domain->frame());} catch(...) {}
-        }
+            frame);
     }
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
@@ -1478,7 +1485,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
     menuRelay.release();
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; owned SR publishes once before menu PostDisplay and closes at Present; requested={}; configuredQuality={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
+    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; menu marker is read-only for bounded resource tracing; owned SR publishes at pre-Present; requested={}; configuredQuality={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

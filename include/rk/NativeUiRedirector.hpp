@@ -1,7 +1,9 @@
 #pragma once
 #include "rk/OwnedSceneDomain.hpp"
 #include <Windows.h>
+#include <array>
 #include <d3d11.h>
+#include <optional>
 #include <wrl/client.h>
 
 namespace rk {
@@ -17,6 +19,22 @@ struct UiCompatibilityFault {
     UINT sceneSlot{};
     bool hasDepth{};
     UINT depthWidth{},depthHeight{};
+};
+enum class UiObservationKind { RenderTargets, Viewport };
+struct UiObservationEvent {
+    UiObservationKind kind{UiObservationKind::RenderTargets};
+    UINT targetCount{};
+    int sceneSlot{-1};
+    bool hasDepth{};
+    Extent depth{},viewport{};
+    std::array<Extent,4> targets{};
+    std::array<std::uintptr_t,4> targetIdentities{};
+    std::uintptr_t depthIdentity{};
+};
+struct UiFrameObservation {
+    std::uint64_t frame{};
+    std::uint32_t count{},dropped{};
+    std::array<UiObservationEvent,64> events{};
 };
 // Scoped translations for a single verified immediate-context chain. The
 // installer must save the current downstream methods; this class never jumps
@@ -35,6 +53,12 @@ public:
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
+    // Read-only bounded trace between the semantic menu marker and Present.
+    // It records only binds that contain the owned reduced scene and their
+    // immediately following viewport; forwarding is unchanged.
+    bool beginObservation(std::uint64_t frame) noexcept;
+    std::optional<UiFrameObservation> finishObservation(
+        std::uint64_t frame) noexcept;
     void onOMSetRenderTargets(ID3D11DeviceContext* context,UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
@@ -52,6 +76,8 @@ private:
     std::uint64_t generation_{};
     bool compatibilityFault_{};
     UiCompatibilityFault faultInfo_{};
+    UiFrameObservation observation_{};
+    bool observing_{},observeViewport_{};
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
     Microsoft::WRL::ComPtr<IUnknown> sceneId_,nativeId_;

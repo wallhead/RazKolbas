@@ -16,7 +16,7 @@ ComPtr<IUnknown> identity(IUnknown* object) {
     if(object)object->QueryInterface(IID_PPV_ARGS(result.GetAddressOf()));
     return result;
 }
-ComPtr<ID3D11Resource> viewResource(ID3D11RenderTargetView* view) {
+ComPtr<ID3D11Resource> viewResource(ID3D11View* view) {
     ComPtr<ID3D11Resource> result;
     if(view)view->GetResource(result.GetAddressOf());
     return result;
@@ -107,4 +107,71 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     route.suspend();redirect.releaseAfterRetirement(true);
     context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
     REQUIRE(bound==nullptr);
+}
+
+TEST_CASE("WARP menu marker observes reduced scene binds without changing them", "[native_ui]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    D3D_FEATURE_LEVEL level{};
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
+    constexpr rk::Extent render{32,16},display{64,32};
+    auto sceneResult=rk::createReducedSdrSurface(device.Get(),display,render);
+    REQUIRE(std::holds_alternative<rk::ReducedSdrSurface>(sceneResult));
+    auto& scene=std::get<rk::ReducedSdrSurface>(sceneResult);
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=display.width;desc.Height=display.height;desc.MipLevels=1;
+    desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;
+    desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> native;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&native)));
+    ComPtr<ID3D11RenderTargetView> nativeView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(native.Get(),nullptr,&nativeView)));
+    desc.Width=render.width;desc.Height=render.height;
+    desc.Format=DXGI_FORMAT_R24G8_TYPELESS;
+    desc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+    ComPtr<ID3D11Texture2D> depth;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&depth)));
+    D3D11_DEPTH_STENCIL_VIEW_DESC depthViewDesc{};
+    depthViewDesc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthViewDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+    ComPtr<ID3D11DepthStencilView> depthView;
+    REQUIRE(SUCCEEDED(device->CreateDepthStencilView(depth.Get(),&depthViewDesc,&depthView)));
+    rk::OwnedSceneDomain route;
+    REQUIRE(route.configure({render,display,1}));
+    REQUIRE(route.begin(7,1,GetCurrentThreadId()));
+    rk::NativeUiRedirector redirect(route);
+    REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
+        {&forwardOm,&forwardVp},scene.texture(),nativeView.Get())));
+    REQUIRE(redirect.beginObservation(7));
+    auto* sceneView=scene.renderTarget();
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
+    const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
+    redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+    auto observed=redirect.finishObservation(7);
+    REQUIRE(observed.has_value());
+    REQUIRE(observed->frame==7);
+    REQUIRE(observed->count==3);
+    REQUIRE(observed->events[0].kind==rk::UiObservationKind::RenderTargets);
+    REQUIRE(observed->events[0].sceneSlot==0);
+    REQUIRE_FALSE(observed->events[0].hasDepth);
+    REQUIRE(observed->events[1].kind==rk::UiObservationKind::Viewport);
+    REQUIRE(observed->events[1].viewport.width==render.width);
+    REQUIRE(observed->events[1].viewport.height==render.height);
+    REQUIRE(observed->events[2].kind==rk::UiObservationKind::RenderTargets);
+    REQUIRE(observed->events[2].hasDepth);
+    REQUIRE(observed->events[2].depth.width==render.width);
+    REQUIRE(observed->events[2].depth.height==render.height);
+    ComPtr<ID3D11RenderTargetView> bound;
+    ComPtr<ID3D11DepthStencilView> boundDepth;
+    context->OMGetRenderTargets(1,&bound,&boundDepth);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(scene.texture()).Get());
+    REQUIRE(identity(viewResource(boundDepth.Get()).Get()).Get()==
+        identity(depth.Get()).Get());
+    REQUIRE_FALSE(redirect.compatibilityFault());
+    route.suspend();
+    redirect.releaseAfterRetirement();
 }

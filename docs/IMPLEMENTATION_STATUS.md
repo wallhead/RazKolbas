@@ -1500,3 +1500,40 @@ reference, re-enable RazKolbas in MO2, start Skyrim, load a save and observe
 0.1.54. If that semantic boundary fails, the next source change will replace
 bind-shape inference with explicit resource-role routing derived from this
 live evidence.
+
+## 0.1.54 black-screen result and observation-only correction
+
+The user enabled RazKolbas, started Skyrim and reported a black screen with
+the installed 0.1.54 menu-display candidate. The process remained responsive,
+Present calls continued returning success, and no new crash log appeared.
+Frame-one evidence is decisive: at the menu callback the 1707x960 owned scene
+and 2560x1440 native buffer were both entirely black. After publication, a
+same-frame bind used two color targets with the owned scene in slot zero and a
+1707x960 depth target, triggering the compatibility guard. At pre-Present the
+owned scene had become populated while the native buffer remained black; the
+next frame's reduced scene was fully populated. The menu call therefore occurs
+before complete scene/depth work and cannot be used as a publication boundary.
+Skyrim was closed normally.
+
+The installed DLL and manifest were restored from the verified pre-0.1.54
+backup. Restored DLL SHA-256 is
+`124570410a1c8b69d8b23f18754042f578d0f59e0beab756d001176f78b740a0`;
+the user INI and signed NVIDIA runtime remain unchanged.
+
+Source now keeps the exact menu CALL only as a bounded read-only marker for
+the first twelve owned frames. It records only OM binds containing the owned
+reduced scene and their immediately following viewport, with target/depth
+extents and canonical identities. It never changes a target or viewport in
+this observation phase. Actual SR publication has returned to the proven
+pre-Present path and closes the frame immediately, matching the stable 0.1.52
+behavior while collecting the resource sequence required for a resource-role
+native UI route.
+
+The new WARP regression verifies that observation records color-only,
+viewport and color-plus-depth events without changing the bound scene or
+depth. Debug and Release builds each pass all 35 CTest groups. The Release
+RTX 4080 SUPER harness completed 600 pooled 1707x960-to-2560x1440 DLSS frames
+with zero fallbacks and output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
+Actual-game visibility and the bounded bind sequence are **NOT RUN** for this
+correction.
