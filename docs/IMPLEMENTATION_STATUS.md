@@ -26,6 +26,28 @@ game launch because they alter feature creation and owned render dimensions.
 The selected non-Auto model preset is written to the quality-specific NVIDIA
 hint before feature creation.
 
+Source commit `5f26e11` is pushed to `codex/razkolbas-bootstrap`. Debug and
+Release each pass all 38 CTest groups after the embedded version was advanced
+to 0.1.65. Release DLL SHA-256 is
+`67d4456423440a297e9f740c85d63a2ca30b6a333fd9e3c2834aa581e56f7db0`.
+The independently extracted MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.65-menu-controls-5f26e11.zip`
+has SHA-256
+`13309e7f670de5b75a1c8a81736effa2a3517a3760bb8f393b31fd320a3b3fc4`.
+It contains exactly the four manifest payloads plus the manifest; every hash
+and the NVIDIA runtime signature passed verification.
+
+Skyrim was absent during installation. All 0.1.64 payloads first matched the
+old manifest and the complete mod was copied to ignored backup
+`artifacts/local/mo2-install-backup-0.1.65-5f26e11`. Only the DLL and manifest
+were replaced in `D:/TESV_EX/MO2/mods/RazKolbas`. The user INI remains
+byte-identical at SHA-256
+`2b3afaa42d207c07eb28d5de0f8fc53e5a7fdeb4179022d0b8134ec9f0d19d6c`;
+the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed manifest payloads match. Runtime interaction with the new menu
+widgets is pending a user-started loaded-save test.
+
 The supplied `PureDark_Sharpening_12.zip` passed its 155-payload manifest
 check. Its ordinary sharpening reconstruction confirms the current stage
 placement, five-tap RGB formula, gain mapping and direct code-value filtering.
