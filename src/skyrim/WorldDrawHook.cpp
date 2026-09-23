@@ -611,7 +611,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         sequence);
                 if(firstAttempt) {
                     const auto jitter=std::get<NgxJitter>(renderJitter);
-                    spdlog::info("Owned NGX evaluation parameters: jitter=({},{}); MVScale={}x{}; sharpness={}; autoExposure=true; reset=true",
+                    spdlog::info("Owned NGX evaluation parameters: jitter=({},{}); MVScale={}x{}; ngxSharpness=0; postSharpness={}; autoExposure=true; reset=true",
                         jitter.x,jitter.y,domain->plan().render.width,
                         domain->plan().render.height,state->srSharpness);
                 }

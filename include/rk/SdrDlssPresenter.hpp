@@ -3,6 +3,7 @@
 #include "rk/SrInput.hpp"
 #include "rk/JitterContract.hpp"
 #include "rk/RenderSizePolicy.hpp"
+#include "rk/SdrPostSharpen.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <Windows.h>
@@ -130,6 +131,7 @@ private:
     bool resetPending_{};
     UpscaleQuality quality_{UpscaleQuality::Quality};
     float sharpness_{};
+    SdrPostSharpenPass postSharpen_;
     std::optional<RenderSizePlan> preparedPlan_;
 };
 }

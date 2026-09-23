@@ -58,12 +58,12 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     unsigned evaluations{};
     rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext* context,
         const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata& metadata,
-        rk::NgxJitter,float sharpness,bool reset)->rk::Result<bool> {
+        rk::NgxJitter,float ngxSharpness,bool reset)->rk::Result<bool> {
         ++evaluations;
         REQUIRE(metadata.frameId==10);
         REQUIRE(metadata.generation==3);
         REQUIRE(reset);
-        REQUIRE(sharpness==0.6f);
+        REQUIRE(ngxSharpness==0.0f);
         REQUIRE((frame.sourceRegion()==rk::SrSourceRegion{2,1,4,3}));
         D3D11_TEXTURE2D_DESC depth{};frame.depth()->GetDesc(&depth);
         REQUIRE(depth.Format==DXGI_FORMAT_R32_FLOAT);
@@ -114,6 +114,59 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     FAIL("Prepared frame did not retire");
+}
+
+TEST_CASE("Prepared publication applies configured post-DLSS sharpening",
+    "[sdr_prepared_presenter]") {
+    const auto publish=[&](bool sharpen)->std::uint8_t {
+        Scene scene;
+        rk::SdrDlssPresenter presenter{[](ID3D11DeviceContext* context,
+            const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata&,
+            rk::NgxJitter,float ngxSharpness,bool)->rk::Result<bool> {
+            REQUIRE(ngxSharpness==0.0f);
+            constexpr UINT width=8,height=6;
+            std::array<std::uint32_t,width*height> pixels{};
+            pixels.fill(0xff666666u);
+            pixels[3*width+4]=0xff808080u;
+            pixels[3*width+3]=0xffb3b3b3u;
+            pixels[3*width+5]=0xff1a1a1au;
+            context->UpdateSubresource(frame.output(),0,nullptr,pixels.data(),
+                width*4,0);
+            return true;
+        }};
+        REQUIRE(std::get<bool>(presenter.configureSharpness(sharpen,0.5f)));
+        auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+            scene.cropped(),{12,4,true},{0,0});
+        REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
+        const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
+        REQUIRE(token.has_value());
+        scene.context->OMSetRenderTargets(1,scene.displayView.GetAddressOf(),nullptr);
+        const auto published=presenter.publishEvaluated(scene.context.Get(),*token,
+            scene.display.Get());
+        REQUIRE(std::holds_alternative<bool>(published));
+        REQUIRE(std::get<bool>(published));
+        ComPtr<ID3D11RenderTargetView> restored;
+        scene.context->OMGetRenderTargets(1,restored.GetAddressOf(),nullptr);
+        REQUIRE(restored.Get()==scene.displayView.Get());
+        const std::array<ID3D11Texture2D*,1> target{scene.display.Get()};
+        const auto captured=rk::readbackCandidates(scene.context.Get(),target);
+        REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(captured));
+        const auto value=std::get<std::vector<rk::ProbeImage>>(captured)[0]
+            .pixels[(3*8+4)*4];
+        scene.context->Flush();
+        for(unsigned i=0;i<500;++i) {
+            const auto stopped=presenter.stop(scene.context.Get());
+            REQUIRE_FALSE(std::holds_alternative<rk::Error>(stopped));
+            if(std::get<bool>(stopped))return value;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        FAIL("Post-sharpen publication resources did not retire");
+        return value;
+    };
+    REQUIRE(publish(false)==128);
+    const auto sharpened=publish(true);
+    REQUIRE(sharpened>=129);
+    REQUIRE(sharpened<=131);
 }
 
 TEST_CASE("Partial prepared evaluation failure retains work and uses current scene fallback",

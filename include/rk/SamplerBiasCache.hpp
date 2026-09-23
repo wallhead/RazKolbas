@@ -25,6 +25,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<IUnknown> deviceIdentity_;
     std::vector<Entry> entries_;
+    std::vector<Microsoft::WRL::ComPtr<IUnknown>> rejected_;
     float bias_{};
 };
 }

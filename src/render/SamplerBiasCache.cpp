@@ -39,14 +39,20 @@ bool SamplerBiasCache::remap(ID3D11DeviceContext* context,
         for(std::size_t i=0;i<input.size();++i) {
             auto* source=input[i];
             if(!source)continue;
-            D3D11_SAMPLER_DESC desc{};source->GetDesc(&desc);
-            if(desc.MipLODBias!=0.0f||desc.MaxAnisotropy<=1)continue;
             auto sourceId=identity(source);
             if(!sourceId)continue;
             const auto found=std::find_if(entries_.begin(),entries_.end(),
                 [&](const Entry& entry){return entry.source.Get()==sourceId.Get();});
             if(found!=entries_.end()) {
                 output[i]=found->replacement.Get();changed=true;continue;
+            }
+            if(std::ranges::any_of(rejected_,[&](const auto& rejected) {
+                return rejected.Get()==sourceId.Get();
+            }))continue;
+            D3D11_SAMPLER_DESC desc{};source->GetDesc(&desc);
+            if(desc.MipLODBias!=0.0f||desc.MaxAnisotropy<=1) {
+                if(rejected_.size()<256)rejected_.push_back(std::move(sourceId));
+                continue;
             }
             if(entries_.size()>=256)continue;
             desc.MipLODBias=bias_;

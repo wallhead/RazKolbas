@@ -344,7 +344,9 @@ Result<bool> SdrDlssPresenter::submitPreparedNgx(ID3D11DeviceContext* context,
     NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
     eval.Feature.pInColor=prepared.color();
     eval.Feature.pInOutput=prepared.output();
-    eval.Feature.InSharpness=sharpness_;
+    // The pinned DLSS runtime reports integrated sharpening as unsupported.
+    // Keep NGX neutral and apply the configured correction to its output.
+    eval.Feature.InSharpness=0.0f;
     eval.pInDepth=prepared.depth();
     eval.pInMotionVectors=prepared.motion();
     eval.InRenderSubrectDimensions={prepared.width(),prepared.height()};
@@ -452,8 +454,10 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
                     displayWidth_=slot.frame->outputWidth();
                     displayHeight_=slot.frame->outputHeight();reduced_=true;
                 }
+                // The injected evaluator models the NGX call contract. The
+                // configured value belongs to the independent publication pass.
                 evaluated=preparedEvaluator_(context,*slot.frame,metadata,jitter,
-                    sharpness_,reset);
+                    0.0f,reset);
             } else {
                 if(!initialized_)evaluated=initialize(device,context,
                     slot.frame->width(),slot.frame->height(),
@@ -524,7 +528,9 @@ Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     if(activeView)activeView->GetResource(&activeTarget);
     if(!activeTarget||identity(activeTarget.Get()).Get()!=identity(destination).Get())
         return Error{ErrorCode::Conflict,"Prepared SR publication target is not active RTV0"};
-    const auto copied=copySdrDisplayFrame(context,destination,slot.frame->output());
+    const auto copied=sharpness_>0.0f?
+        postSharpen_.apply(context,destination,slot.frame->output(),sharpness_):
+        copySdrDisplayFrame(context,destination,slot.frame->output());
     context->End(slot.completion.Get());
     slot.inFlight=true;
     if(const auto error=std::get_if<Error>(&copied))return *error;
@@ -606,7 +612,7 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
     eval.Feature.pInColor=slot.frame->color();
     eval.Feature.pInOutput=slot.frame->output();
-    eval.Feature.InSharpness=sharpness_;
+    eval.Feature.InSharpness=0.0f;
     eval.pInDepth=slot.frame->depth();
     eval.pInMotionVectors=slot.frame->motion();
     eval.InRenderSubrectDimensions={width_,height_};
@@ -619,7 +625,9 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     if(!success(NGX_D3D11_EVALUATE_DLSS_EXT(context,feature_,parameters_,&eval)))
         return Error{ErrorCode::Unavailable,"NVIDIA SDR DLSS evaluation failed"};
     scope.reset();
-    const auto copied=copySdrDisplayFrame(context,backbuffer,slot.frame->output());
+    const auto copied=sharpness_>0.0f?
+        postSharpen_.apply(context,backbuffer,slot.frame->output(),sharpness_):
+        copySdrDisplayFrame(context,backbuffer,slot.frame->output());
     if(const auto error=std::get_if<Error>(&copied))return *error;
     context->End(slot.completion.Get());
     slot.inFlight=true;
@@ -674,6 +682,7 @@ Result<bool> SdrDlssPresenter::stop(ID3D11DeviceContext* context) {
     }
     retiredPrepared_.clear();
     unfencedPrepared_.clear();
+    postSharpen_.reset();
     device_.Reset();
     if(runtimeFile_!=INVALID_HANDLE_VALUE)CloseHandle(runtimeFile_);
     runtimeFile_=INVALID_HANDLE_VALUE;
