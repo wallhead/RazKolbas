@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## Native DLAA visual baseline confirmed (2026-09-23, 11:39 launch)
+
+The user started Skyrim with the NativeAA configuration and reported the image
+looks good. Process 22156 remained responsive. The current-session log confirms
+native 2560x1440 buffers and camera extent, `ownedRouteArmed=false`, zero owned
+route activations, and 6,000 continuous DLAA submissions by world frame 17,421
+with `skipped=0`. Sampled Presents report zero failures. No warning/error entry
+appears in the 283-line session snapshot. This validates the current binary's
+native DLAA appearance by user observation, not just a historical build.
+
+The filtered log is retained under ignored
+`artifacts/local/runtime-0.1.58-native-dlaa-2026-09-23-1139/current-session.log`,
+SHA-256 `2a02987ef5fb3de01a8021b3d3fc2e63ac527b60a62dbd42d22307618ac7496c`.
+The existing stage-pair capture mechanism saved frames 11,421 and 11,422 under
+the SKSE `RazKolbasCaptures` directory (`stage-pair-22156-11421-46129609` and
+`stage-pair-22156-11422-46130437`). They provide native-path comparison material;
+their contents have not yet been independently analyzed in this checkpoint.
+The installed manifest's four payload hashes were reverified. No configuration
+or binary changes were made during this run; the game was left running.
+
+Together with the spatial-only reduced-route failure, this narrows the visual
+defect to differences introduced by reduced rendering and its integration
+with the effects/presentation path. It does not identify the precise ENB
+resource or missing setup step. Native DLAA is the working baseline; reduced
+SR visual correctness remains unresolved. No repeated baseline run is needed.
+
 ### Latest steering: reuse the known-good DLAA baseline
 
 The user clarified that the earlier native-resolution DLAA image looked
