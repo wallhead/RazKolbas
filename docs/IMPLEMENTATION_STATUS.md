@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-## 0.1.60 early ENB contract installed; game test pending (2026-09-23)
+## 0.1.60 early ENB contract passes runtime and visual test (2026-09-23, 13:08 launch)
 
 Commit `e186b1c` implements creation-time reduced scene publication for the
 exact installed ENB/ReShade chain and was pushed to
@@ -24,10 +24,29 @@ MO2 package
 `D:/TESV_EX/MO2/downloads/RazKolbas-0.1.60-early-enb-contract-e186b1c.zip`
 has SHA-256
 `9f12b07ecab71166473c092cf62c2f06f07a52db482f4360e404bf22d47ab109`.
-The configuration remains `Quality=Quality`,
-`ManualRenderScale=0.666667`, `SpatialBaselineOnly=true`. This first run tests
-the ENB dimension/resource contract and visual integration without NGX frame
-evaluation. Game runtime verification is NOT RUN.
+The configuration remained `Quality=Quality`,
+`ManualRenderScale=0.666667`, `SpatialBaselineOnly=true`. The user started
+Skyrim at 13:08:09 and loaded the game with ENB and ReShade active. The
+session produced 50 bounded ENB probes through world-forwarded frame 29,400;
+every probe reported actual, metadata and ENB reference dimensions of
+`1707x960`, `dimensionMatch=true`, bound mask `0x67`, and slots 5/6 present.
+This is the exact runtime reversal of the 0.1.59 late-alias failure. Native
+publication remained `2560x1440`, reduced and native samples were non-black
+and diverse, the native UI route activated, and Present reported zero failed
+or occluded calls through at least world-forwarded frame 31,200. There were
+zero error records. The four warnings were the expected one-time emergency
+startup publication and three pre-admission provider attempts.
+
+The user reported that the image and ENB appearance looked good. This closes
+the spatial ENB/resource-contract validation. The installed payload was
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.60-early-enb-contract-e186b1c-visual-good/`.
+A filtered runtime snapshot is retained under ignored
+`artifacts/local/runtime-0.1.60-early-enb-contract-2026-09-23-1308/` with
+SHA-256
+`35de79d84c34b8a7a2b58a70bcb35da343bcc764122f4b587328ec019bb8dc53`.
+The next controlled run removes only the `SpatialBaselineOnly` diagnostic
+gate so the same early resource contract reaches live NGX evaluation.
 
 ## 0.1.59 proves the reduced-scene ENB dimension failure (2026-09-23, 12:09 launch)
 

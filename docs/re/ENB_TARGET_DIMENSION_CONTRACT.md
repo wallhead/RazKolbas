@@ -146,3 +146,20 @@ marshaled through the render-thread Present boundary. If outer device, UI,
 rectangle or native-target setup fails after early publication, the verified
 nested Present boundary performs display-sized spatial publication from the
 same scene instead of reverting ENB to another cached resource identity.
+
+## Runtime result: early contract restores the ENB path
+
+The user-started 0.1.60 spatial session on 2026-09-23 produced 50 bounded
+samples through world-forwarded frame 29,400. Every sample reported actual,
+private-metadata and ENB reference dimensions `1707x960`,
+`dimensionMatch=true`, bound mask `0x67`, and slots 5/6 present. Native
+publication remained `2560x1440`; sampled reduced and native images were
+non-black and diverse. Present reported no failed or occluded calls through
+at least frame 31,200, and the log contained no errors. The user reported
+that the image and ENB appearance looked good.
+
+This validates the early scene identity plus caller-specific GetDesc and
+GetBuffer contract for the installed ENB/ReShade chain. It does not yet
+validate live NGX evaluation: this run intentionally used
+`SpatialBaselineOnly=true`. The next run keeps this exact resource route and
+changes only that diagnostic setting to false.
