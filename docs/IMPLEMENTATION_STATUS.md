@@ -78,6 +78,22 @@ zero-bias, anisotropy and eligible counts plus the first descriptor values.
 Debug and Release each pass all 37 CTest groups. The next diagnostic package
 must be installed and run before changing the sampler predicate or hook layer.
 
+Source commit `ecd3274` is pushed and packaged as
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.63-sampler-trace-ecd3274.zip`,
+SHA-256
+`5180b5843db40039670ab00b3be0bb2d841893a27e5240a0eb33da4454e95852`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest, verified all hashes, and verified the NVIDIA runtime signature.
+With Skyrim stopped, all installed 0.1.62 payloads matched their manifest and
+the complete mod was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.63-ecd3274`. Only the DLL and manifest
+were replaced. Installed DLL SHA-256 is
+`e9026aa0827cfe3dd3305c7b51393586c17238ecefe52164a5adc73516357bd5`;
+the user INI and signed NVIDIA runtime remain unchanged. All installed payloads
+match the 0.1.63 manifest, whose status is
+`DIAGNOSTIC_DLSS_SAMPLER_OWNERSHIP_TRACE_PENDING_GAME_TEST`. The assistant did
+not start Skyrim.
+
 ## 0.1.61 live DLSS runs continuously; quality correction required (2026-09-23, 16:54 launch)
 
 After the 0.1.60 spatial route passed both runtime checks and the user's
