@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/RenderSizePolicy.hpp"
+#include <cmath>
 
 TEST_CASE("Configured SR quality has a complete exact mapping", "[render_size_policy]") {
     using rk::UpscaleQuality;
@@ -35,6 +36,19 @@ TEST_CASE("Reduced world sizing requires both owned paths", "[render_size_policy
     REQUIRE_FALSE(rk::chooseRenderSize(display,display,true,true).reduced);
     REQUIRE_FALSE(rk::chooseRenderSize(display,{3000,720},true,true).reduced);
     REQUIRE_FALSE(rk::chooseRenderSize(display,{0,720},true,true).reduced);
+}
+
+TEST_CASE("Automatic mip bias follows the smaller reduced-render axis",
+    "[render_size_policy]") {
+    const auto automatic=rk::resolveMipLodBias({1707,960},{2560,1440},true,0.0);
+    REQUIRE(std::holds_alternative<float>(automatic));
+    REQUIRE(std::abs(std::get<float>(automatic)+0.5849625f)<0.00001f);
+    const auto manual=rk::resolveMipLodBias({1707,960},{2560,1440},false,-0.25);
+    REQUIRE(std::get<float>(manual)==-0.25f);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::resolveMipLodBias({1707,960},{2560,1440},false,-4.0)));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::resolveMipLodBias({3000,960},{2560,1440},true,0.0)));
 }
 
 TEST_CASE("Only world scissors scale and fractional edges retain coverage", "[render_size_policy]") {

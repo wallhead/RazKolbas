@@ -32,6 +32,21 @@ Extent planEarlyOwnedScene(Extent display,UpscaleQuality quality,
     if(!width||!height||width>=display.width&&height>=display.height)return {};
     return {width,height};
 }
+Result<float> resolveMipLodBias(Extent render,Extent display,
+    bool automatic,double manualBias) noexcept {
+    if(!render.valid()||!display.valid()||render.width>display.width||
+       render.height>display.height||!std::isfinite(manualBias))
+        return Error{ErrorCode::InvalidInput,"Mip-bias extents or value are invalid"};
+    double bias=manualBias;
+    if(automatic) {
+        const auto x=static_cast<double>(render.width)/display.width;
+        const auto y=static_cast<double>(render.height)/display.height;
+        bias=std::log2(std::min(x,y));
+    }
+    if(!std::isfinite(bias)||bias<-3.0||bias>3.0)
+        return Error{ErrorCode::Unsupported,"Mip bias is outside the supported range"};
+    return static_cast<float>(bias);
+}
 RenderSizePlan chooseRenderSize(Extent display,Extent requested,
     bool worldTargetReady,bool displayPathReady) noexcept {
     if(!display.valid()) return {};

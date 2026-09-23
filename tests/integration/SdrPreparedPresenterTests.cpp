@@ -58,11 +58,12 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     unsigned evaluations{};
     rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext* context,
         const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata& metadata,
-        rk::NgxJitter,bool reset)->rk::Result<bool> {
+        rk::NgxJitter,float sharpness,bool reset)->rk::Result<bool> {
         ++evaluations;
         REQUIRE(metadata.frameId==10);
         REQUIRE(metadata.generation==3);
         REQUIRE(reset);
+        REQUIRE(sharpness==0.6f);
         REQUIRE((frame.sourceRegion()==rk::SrSourceRegion{2,1,4,3}));
         D3D11_TEXTURE2D_DESC depth{};frame.depth()->GetDesc(&depth);
         REQUIRE(depth.Format==DXGI_FORMAT_R32_FLOAT);
@@ -75,11 +76,14 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     }};
     REQUIRE(std::holds_alternative<rk::Error>(presenter.configureQuality(
         static_cast<rk::UpscaleQuality>(99))));
+    REQUIRE(std::holds_alternative<rk::Error>(presenter.configureSharpness(true,1.1f)));
     REQUIRE(std::get<bool>(presenter.configureQuality(rk::UpscaleQuality::Balanced)));
+    REQUIRE(std::get<bool>(presenter.configureSharpness(true,0.6f)));
     auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
         scene.cropped(),{10,3,true},{0.125f,-0.25f});
     REQUIRE(std::holds_alternative<rk::Error>(
         presenter.configureQuality(rk::UpscaleQuality::Performance)));
+    REQUIRE(std::holds_alternative<rk::Error>(presenter.configureSharpness(false,0.0f)));
     REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
     const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
     REQUIRE(token.has_value());
@@ -117,7 +121,7 @@ TEST_CASE("Partial prepared evaluation failure retains work and uses current sce
     Scene scene;
     rk::SdrDlssPresenter presenter{[](ID3D11DeviceContext* context,
         const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata&,
-        rk::NgxJitter,bool)->rk::Result<bool> {
+        rk::NgxJitter,float,bool)->rk::Result<bool> {
         ComPtr<ID3D11Device> device;context->GetDevice(&device);
         ComPtr<ID3D11UnorderedAccessView> view;
         if(FAILED(device->CreateUnorderedAccessView(frame.output(),nullptr,&view)))
@@ -166,7 +170,7 @@ TEST_CASE("A newer prepared frame invalidates the previous publication token",
     Scene scene;
     rk::SdrDlssPresenter presenter{[](ID3D11DeviceContext*,
         const rk::PreparedSrInputs&,const rk::SrFrameMetadata&,
-        rk::NgxJitter,bool)->rk::Result<bool> { return true; }};
+        rk::NgxJitter,float,bool)->rk::Result<bool> { return true; }};
     const auto first=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
         scene.cropped(),{30,8,true},{0,0});
     REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(first));
@@ -205,7 +209,7 @@ TEST_CASE("Owned scene evaluation reuses three prepared resource slots",
     std::set<std::array<std::uintptr_t,4>> resourceSets;
     rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext*,
         const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata&,
-        rk::NgxJitter,bool)->rk::Result<bool> {
+        rk::NgxJitter,float,bool)->rk::Result<bool> {
         resourceSets.insert({reinterpret_cast<std::uintptr_t>(frame.color()),
             reinterpret_cast<std::uintptr_t>(frame.motion()),
             reinterpret_cast<std::uintptr_t>(frame.depth()),
@@ -239,7 +243,7 @@ TEST_CASE("Prepared history resets after failure gap and source phase change",
     unsigned calls{};
     rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext*,
         const rk::PreparedSrInputs&,const rk::SrFrameMetadata&,
-        rk::NgxJitter,bool reset)->rk::Result<bool> {
+        rk::NgxJitter,float,bool reset)->rk::Result<bool> {
         resets.push_back(reset);
         if(++calls==1)
             return rk::Error{rk::ErrorCode::Unavailable,"injected first failure"};

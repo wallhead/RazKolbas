@@ -17,7 +17,7 @@ const std::vector<Field>& settingsSchema() {
         {"Upscaling.Sharpening", true, 0, 2, {}},
         {"Upscaling.Sharpness", double{0.30}, 0, 1, {}},
         {"Upscaling.MipBiasMode", Choice{"Auto"}, 0, 2, {"Auto","Manual"}},
-        {"Upscaling.ManualMipBias", double{0.0}, -8, 8, {}},
+        {"Upscaling.ManualMipBias", double{0.0}, -3, 3, {}},
         {"Upscaling.ManualRenderScale", double{0.0}, 0, 1, {}},
         {"FrameGeneration.Enabled", false, 0, 2, {}},
         {"FrameGeneration.Provider", Choice{"Auto"}, 0, 2, {"Auto","DLSS","FSR","XeSS"}},

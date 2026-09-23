@@ -1,5 +1,6 @@
 #pragma once
 #include "rk/FrameContracts.hpp"
+#include "rk/Result.hpp"
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -11,6 +12,8 @@ std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexce
 // provider query must be checked against this extent before evaluation.
 Extent planEarlyOwnedScene(Extent display,UpscaleQuality quality,
     double manualScale) noexcept;
+Result<float> resolveMipLodBias(Extent render,Extent display,
+    bool automatic,double manualBias) noexcept;
 enum class RenderDomain { World, Ui };
 struct ScissorExtent {
     std::uint32_t x{},y{},width{},height{};

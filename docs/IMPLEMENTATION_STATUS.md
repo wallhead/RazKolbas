@@ -1,6 +1,31 @@
 # Implementation checkpoint
 
-## 0.1.61 live DLSS test installed; game test pending (2026-09-23)
+## 0.1.62 mip-detail correction in implementation (2026-09-23)
+
+The 0.1.61 run proved continuous owned DLSS evaluation and correct ENB/UI
+routing, but the user reported that the otherwise correct image still looked
+like a lower-resolution image. Source inspection found that the declared
+automatic mip-bias policy had no sampler implementation. The supplied PureDark
+RE independently identifies six shader-stage sampler wrappers and a restrictive
+replacement rule: change only samplers with zero existing `MipLODBias` and
+`MaxAnisotropy > 1`. The reference configuration uses `-0.584962`, equal to
+`log2(2/3)` for Quality mode.
+
+The in-progress correction computes automatic bias from the smaller
+render/display axis, validates the
+exact installed ENB PS/VS/GS/HS/DS/CS sampler slots before patching any of
+them, and caches cloned sampler states without modifying originals. Debug
+and Release pass all 37 CTest groups, including new WARP replacement/cache,
+profile-admission, mip-policy and parameter-delivery tests. Independent review
+confirmed the exact installed ENB sites and identified the NGX SDK's explicit
+statement that integrated DLSS sharpening is unsupported. The configured
+value is now propagated truthfully for API completeness, but it is not claimed
+as an effective correction; the supplied reference uses a separate post-upscale
+filter. The safe manual-bias range is consistently `[-3,3]`. A partial
+nine-slot hook-install conflict leaves a conservative unarmed lease and permits
+no retry until the next launch. Packaging and game testing remain pending.
+
+## 0.1.61 live DLSS runs continuously; quality correction required (2026-09-23, 16:54 launch)
 
 After the 0.1.60 spatial route passed both runtime checks and the user's
 visual ENB check, Skyrim was closed and that exact install was backed up under
@@ -23,7 +48,21 @@ MO2 package
 `D:/TESV_EX/MO2/downloads/RazKolbas-0.1.61-live-dlss-e186b1c.zip` has
 SHA-256
 `81501d0adee368e0a3e08305a969704ae5ca4bc8a0827d34d310388aeaa72833`.
-Game runtime verification is NOT RUN.
+The user started Skyrim at 16:54:05 and loaded the game. The early ENB
+contract remained valid in all 35 bounded probes through world-forwarded frame
+20,400: actual, metadata and ENB reference dimensions were `1707x960`,
+`dimensionMatch=true`, bound mask was `0x67`, and slots 5/6 were present. The
+owned scene reached its colour/depth admission gate at frame 12,601. NGX
+feature creation succeeded, the first evaluation returned, and continuous
+mode-2 publication reached 7,680 provider submissions with zero fallbacks in
+flight. Present reported zero failures; the log contained zero errors and only
+the four expected startup warnings.
+
+The user reported that the image and ENB appearance were good, but that it
+visually looked like a lower resolution. This is a route/stability pass and an
+image-quality failure. The final filtered session snapshot is retained under
+ignored `artifacts/local/runtime-0.1.61-live-dlss-2026-09-23-1654/`, SHA-256
+`4e70d5b9fbd62f2c08122ee72fea0eccec830c0563e5da6261fee33fa814b6b2`.
 
 ## 0.1.60 early ENB contract passes runtime and visual test (2026-09-23, 13:08 launch)
 

@@ -155,6 +155,15 @@ Result<bool> SdrDlssPresenter::configureQuality(UpscaleQuality quality) noexcept
     return true;
 }
 
+Result<bool> SdrDlssPresenter::configureSharpness(bool enabled,float sharpness) noexcept {
+    if(ngxStartAttempted_||initialized_||preparedGeneration_)
+        return Error{ErrorCode::Conflict,"Cannot change NVIDIA sharpness during an active feature"};
+    if(!std::isfinite(sharpness)||sharpness<0.0f||sharpness>1.0f)
+        return Error{ErrorCode::InvalidInput,"NVIDIA sharpness is outside 0..1"};
+    sharpness_=enabled?sharpness:0.0f;
+    return true;
+}
+
 Result<bool> SdrDlssPresenter::beginSession(ID3D11Device* device,
     ID3D11DeviceContext* context,bool reduced) {
     if(!device||!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
@@ -335,6 +344,7 @@ Result<bool> SdrDlssPresenter::submitPreparedNgx(ID3D11DeviceContext* context,
     NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
     eval.Feature.pInColor=prepared.color();
     eval.Feature.pInOutput=prepared.output();
+    eval.Feature.InSharpness=sharpness_;
     eval.pInDepth=prepared.depth();
     eval.pInMotionVectors=prepared.motion();
     eval.InRenderSubrectDimensions={prepared.width(),prepared.height()};
@@ -442,7 +452,8 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
                     displayWidth_=slot.frame->outputWidth();
                     displayHeight_=slot.frame->outputHeight();reduced_=true;
                 }
-                evaluated=preparedEvaluator_(context,*slot.frame,metadata,jitter,reset);
+                evaluated=preparedEvaluator_(context,*slot.frame,metadata,jitter,
+                    sharpness_,reset);
             } else {
                 if(!initialized_)evaluated=initialize(device,context,
                     slot.frame->width(),slot.frame->height(),
@@ -595,6 +606,7 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
     eval.Feature.pInColor=slot.frame->color();
     eval.Feature.pInOutput=slot.frame->output();
+    eval.Feature.InSharpness=sharpness_;
     eval.pInDepth=slot.frame->depth();
     eval.pInMotionVectors=slot.frame->motion();
     eval.InRenderSubrectDimensions={width_,height_};

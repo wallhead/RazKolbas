@@ -90,6 +90,9 @@ struct WorldState {
     bool ownedSpatialBaseline{};
     UpscaleQuality earlyQuality{UpscaleQuality::Quality};
     double manualRenderScale{};
+    bool automaticMipBias{true};
+    double manualMipBias{};
+    float srSharpness{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
@@ -606,6 +609,12 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 if(firstAttempt)
                     spdlog::info("Owned NGX stage frame {}: before pooled evaluation",
                         sequence);
+                if(firstAttempt) {
+                    const auto jitter=std::get<NgxJitter>(renderJitter);
+                    spdlog::info("Owned NGX evaluation parameters: jitter=({},{}); MVScale={}x{}; sharpness={}; autoExposure=true; reset=true",
+                        jitter.x,jitter.y,domain->plan().render.width,
+                        domain->plan().render.height,state->srSharpness);
+                }
                 auto evaluated=state->srPresenter.evaluateOwnedScene(device,context,sources,
                     domain->plan().display.width,domain->plan().display.height,
                     SrFrameMetadata{sequence,domain->plan().generation,false,
@@ -1489,6 +1498,18 @@ Result<Extent> prepareWorldOwnedSrPlan(ID3D11Device* device,
     return Error{ErrorCode::Unsupported,"NVIDIA SDR SR runtime is not built"};
 #endif
 }
+Result<float> worldOwnedMipBias(Extent render,Extent display) noexcept {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!state->srRequested)
+        return Error{ErrorCode::Unsupported,"Owned world SR mip policy is unavailable"};
+    return resolveMipLodBias(render,display,state->automaticMipBias,
+        state->manualMipBias);
+#else
+    (void)render;(void)display;
+    return Error{ErrorCode::Unsupported,"NVIDIA SDR SR runtime is not built"};
+#endif
+}
 void useWorldOwnedSpatialFallback() noexcept {
 #ifdef RK_WITH_NGX
     if(auto* state=active.load(std::memory_order_acquire)) {
@@ -1561,10 +1582,18 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(!quality)return Error{ErrorCode::InvalidInput,"Unrecognized SR quality setting"};
     if(const auto configured=pending->srPresenter.configureQuality(*quality);
        const auto error=std::get_if<Error>(&configured))return *error;
+    pending->srSharpness=settings.get<bool>("Upscaling.Sharpening")?
+        static_cast<float>(settings.get<double>("Upscaling.Sharpness")):0.0f;
+    if(const auto configured=pending->srPresenter.configureSharpness(
+        settings.get<bool>("Upscaling.Sharpening"),pending->srSharpness);
+       const auto error=std::get_if<Error>(&configured))return *error;
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;
     pending->earlyQuality=*quality;
     pending->manualRenderScale=settings.get<double>("Upscaling.ManualRenderScale");
+    pending->automaticMipBias=
+        settings.get<Choice>("Upscaling.MipBiasMode").value=="Auto";
+    pending->manualMipBias=settings.get<double>("Upscaling.ManualMipBias");
     pending->ownedSpatialBaseline=
         settings.get<bool>("Diagnostics.SpatialBaselineOnly");
     if(pending->ownedSpatialBaseline)
@@ -1585,7 +1614,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
        liveCameraLoad==cameraLoad&&liveJitterCall==jitterCall&&
        liveJitterEntry==jitterEntry) {
         pending->jitterCamera=base+0x328cc20;
-        spdlog::info("Skyrim camera jitter source armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; same-frame DLAA jitter enabled");
+        spdlog::info("Skyrim camera jitter source armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; same-frame SR/DLAA jitter enabled");
     } else spdlog::warn("Skyrim camera jitter source unavailable: caller/CALL/target bytes differ; DLAA will retain native frames");
     const auto configured=pending->forwarder.configure(
         reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);

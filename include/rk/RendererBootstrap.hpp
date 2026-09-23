@@ -8,10 +8,12 @@ using RendererObserved = void(*)(const RendererSnapshot&);
 Result<bool> installRendererObserver(const Settings& settings, RendererObserved notification);
 bool rendererObserverArmed() noexcept;
 // Requires a process-lifetime domain and the exact verified ENB immediate
-// context. Both downstream slots are validated before either is replaced.
+// context. Every downstream slot is validated before any sampler replacement
+// can become active.
 Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
     OwnedSceneDomain& domain,ID3D11Texture2D* reducedScene,
-    ID3D11RenderTargetView* nativeTarget,std::string_view disabledPatchIds);
+    ID3D11RenderTargetView* nativeTarget,float mipBias,
+    std::string_view disabledPatchIds);
 NativeUiRedirector* ownedUiRedirector() noexcept;
 OwnedSceneDomain* activeOwnedSceneDomain() noexcept;
 ID3D11Texture2D* activeOwnedSceneTexture() noexcept;

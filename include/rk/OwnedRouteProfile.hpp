@@ -21,6 +21,7 @@ const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
 const OwnedRouteSite& enbContextOmSite() noexcept;
 const OwnedRouteSite& enbContextViewportSite() noexcept;
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept;
+std::span<const OwnedRouteSite> enbContextSamplerSites() noexcept;
 // Mapped image bytes, not disk file layout. The caller separately verifies the
 // loaded file's hash and the actual COM object's table address before patching.
 Result<bool> validateOwnedRouteSite(std::span<const std::uint8_t> image,

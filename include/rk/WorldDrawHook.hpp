@@ -28,6 +28,7 @@ Result<Extent> planWorldOwnedScene(Extent display) noexcept;
 // game's view-cache GetBuffer consumer resumes.
 Result<Extent> prepareWorldOwnedSrPlan(ID3D11Device* device,
     ID3D11DeviceContext* context,Extent display);
+Result<float> worldOwnedMipBias(Extent render,Extent display) noexcept;
 // Keep the owned reduced route active while permanently selecting its
 // display-sized spatial publication path for this process.
 void useWorldOwnedSpatialFallback() noexcept;

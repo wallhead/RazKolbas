@@ -71,6 +71,30 @@ TEST_CASE("ENB context methods retain their current downstream ownership", "[own
         base,sites[1]->moduleSha256,sites[1]->fileSize,sites[1]->tableRva,*sites[1])));
 }
 
+TEST_CASE("All six exact ENB sampler stages share the mip-bias contract",
+    "[owned_route_profile]") {
+    const auto sites=rk::enbContextSamplerSites();
+    REQUIRE(sites.size()==6);
+    constexpr std::array expectedSlots{10u,26u,32u,61u,65u,70u};
+    constexpr std::array expectedRvas{0x5c800u,0x5cd30u,0x5cf20u,
+        0x5d3a0u,0x5d690u,0x5d9b0u};
+    std::vector<std::uint8_t> image(sites.front().imageSize);
+    constexpr std::uintptr_t base=0x180000000;
+    for(std::size_t i=0;i<sites.size();++i) {
+        REQUIRE(sites[i].slot==expectedSlots[i]);
+        REQUIRE(sites[i].methodRva==expectedRvas[i]);
+        const auto address=base+sites[i].methodRva;
+        std::memcpy(image.data()+sites[i].tableRva+sites[i].slot*8,&address,8);
+        std::memcpy(image.data()+sites[i].methodRva,sites[i].prologue.data(),16);
+    }
+    for(const auto& site:sites)REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(image,
+        base,site.moduleSha256,site.fileSize,site.tableRva,site)));
+    image[sites.back().methodRva]^=1;
+    REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(image,
+        base,sites.back().moduleSha256,sites.back().fileSize,
+        sites.back().tableRva,sites.back())));
+}
+
 TEST_CASE("Only the observed Skyrim view-cache call owns the reduced buffer", "[owned_route_profile]") {
     constexpr std::uintptr_t base=0x7ff6f59a0000;
     constexpr auto hash="c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9";
