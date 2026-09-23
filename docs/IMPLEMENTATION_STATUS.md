@@ -20,6 +20,18 @@ tokens. Tooltips explain resolution and preset behavior. Detailed admission,
 fallback and frame counters remain on the Diagnostics tab. Runtime visual and
 mouse-interaction verification is pending.
 
+Source commit `35b5b2e` is pushed. Debug and Release each pass all 38 CTest
+groups. The verified MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.66-menu-layout-35b5b2e.zip`
+has SHA-256
+`949cfbf28a5560cb06ba2417904e321c0d7d4aae5d1827e50f2b04568f30465f`;
+its Release DLL is
+`a96c2482eadab13d508435a404e6a5c6dc9f81f1934e3d99ed9eb91eddab2351`.
+Independent extraction found exactly four manifest payloads plus the manifest,
+all payload hashes passed, and the NVIDIA runtime signature is valid. Skyrim
+was running when installation was attempted, so no installed file was touched
+and 0.1.65 remains active. Installing 0.1.66 is pending a normal game exit.
+
 ## 0.1.64 game result and 0.1.65 in-game DLSS controls (2026-09-23)
 
 The user-started 0.1.64 loaded-save run passed. The user reported that the
