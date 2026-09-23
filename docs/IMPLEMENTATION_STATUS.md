@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## PureDark Consolidated Verified 10 follow-up (2026-09-23)
+
+The user-supplied pass-10 RE bundle was independently hash-checked: all 2,034
+manifest payloads are present and match, with no unlisted files. Its bundled
+checker has a Windows path-separator comparison bug; this does not indicate
+payload corruption. The evidence was reviewed without copying or staging DLLs,
+archives, compiled probes, captures or analysis databases. Full provenance,
+confirmed findings and limits are recorded in
+`re/PUREDARK_CONSOLIDATED_10.md`.
+
+Source now separates attempted, successfully evaluated and successfully
+published SR frames. Evaluation failure, skipped fallback, forward frame gap and
+pre-Present/menu source-phase change force temporal reset. The native-UI route
+requires its own two-sample menu-boundary colour/depth admission and no longer
+requires an earlier DLSS submission. The exact verified ENB
+PSSetShaderResources slot is installed as a pass-through observer; it reports
+singleton reads whose underlying resource is the observed original depth while
+leaving bindings unchanged. A separate sampled late-depth replacement is not
+enabled until that consumer is seen live. Debug and Release builds pass all 35
+CTest groups. The Release RTX 4080 SUPER harness completed 600 pooled
+1707x960-to-2560x1440 DLSS frames with zero fallbacks and output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
+Independent review found one exception-containment issue in the menu probe;
+the callback and generic forwarder now both preserve original menu forwarding,
+with an injected-throw regression. Packaging and the game trace remain pending
+in this checkpoint.
+
 ## Scope
 
 The complete T01–T24 plan in `../RazKolbas_Codex_Handoff/docs/plans/2026-09-19-razkolbas-implementation.md` remains the target. This checkpoint is not a product completion claim.

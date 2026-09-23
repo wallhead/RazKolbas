@@ -20,6 +20,10 @@ void STDMETHODCALLTYPE nextOm(ID3D11DeviceContext* context,UINT count,
 }
 void STDMETHODCALLTYPE nextVp(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) {context->RSSetViewports(count,views);}
+void STDMETHODCALLTYPE nextPs(ID3D11DeviceContext* context,UINT start,UINT count,
+    ID3D11ShaderResourceView* const* views) {
+    context->PSSetShaderResources(start,count,views);
+}
 }
 
 TEST_CASE("Owned reduced SDR scene publishes spatial fallback before native UI",
@@ -48,7 +52,7 @@ TEST_CASE("Owned reduced SDR scene publishes spatial fallback before native UI",
     REQUIRE(domain.configure({render,display,1}));
     rk::NativeUiRedirector ui(domain);
     REQUIRE(SUCCEEDED(ui.configure(context.Get(),GetCurrentThreadId(),
-        {&nextOm,&nextVp},scene.texture(),native.view.Get())));
+        {&nextOm,&nextVp,&nextPs},scene.texture(),native.view.Get())));
     const std::array formats{DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R24G8_TYPELESS};
     std::array<ComPtr<ID3D11Texture2D>,2> guides;
     for(std::size_t i=0;i<guides.size();++i) {

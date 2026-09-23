@@ -11,8 +11,11 @@ struct UiContextNext {
     using OM=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,
         ID3D11RenderTargetView* const*,ID3D11DepthStencilView*);
     using VP=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,const D3D11_VIEWPORT*);
+    using PS=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,
+        ID3D11ShaderResourceView* const*);
     OM om{};
     VP viewport{};
+    PS ps{};
 };
 struct UiCompatibilityFault {
     UINT targetCount{};
@@ -34,6 +37,8 @@ struct UiObservationEvent {
 struct UiFrameObservation {
     std::uint64_t frame{};
     std::uint32_t count{},dropped{};
+    std::uint32_t sampledDepthReads{},otherSingletonReads{};
+    UINT firstSampledDepthSlot{~0u};
     std::array<UiObservationEvent,64> events{};
 };
 // Scoped translations for a single verified immediate-context chain. The
@@ -77,6 +82,10 @@ public:
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
         const D3D11_VIEWPORT* views) noexcept;
+    // Read-only trace for the exact singleton original-depth read used by the
+    // verified ENB context. This build forwards the binding unchanged.
+    void onPSSetShaderResources(ID3D11DeviceContext* context,UINT start,UINT count,
+        ID3D11ShaderResourceView* const* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
     UiCompatibilityFault compatibilityFaultInfo() const noexcept { return faultInfo_; }
     void releaseAfterRetirement(bool unbindNative=false) noexcept;

@@ -19,8 +19,10 @@ void MenuDisplayForwarder::dispatch(void* first,std::uint32_t second,
     std::uint32_t third,std::uint32_t fourth) noexcept {
     const auto original=original_.load(std::memory_order_acquire);
     if(!original)std::terminate();
-    if(const auto before=beforeOriginal_.load(std::memory_order_acquire))
-        before(first,second,third,fourth);
+    if(const auto before=beforeOriginal_.load(std::memory_order_acquire)) {
+        try {before(first,second,third,fourth);}
+        catch(...) {} // Instrumentation must never prevent original forwarding.
+    }
     original(first,second,third,fourth);
 }
 }

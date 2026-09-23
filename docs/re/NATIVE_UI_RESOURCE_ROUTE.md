@@ -63,3 +63,32 @@ Debug and Release CTest each pass all 35 groups. The Release RTX 4080 SUPER
 harness also completed 600 pooled 1707x960-to-2560x1440 DLSS frames with zero
 fallbacks; output SHA-256 was
 `eff793f9f4695c298308e3e55310f5c6cf63f802761419c954adddebe698c255`.
+
+## Pass-10 history and read-side follow-up
+
+The supplied PureDark Consolidated Verified 10 evidence identified two concrete
+candidate defects. Temporal state advanced after an attempted evaluation even
+when that evaluation failed, and menu publication reused a readiness gate from
+the later pre-Present source phase. The presenter now tracks attempted,
+successfully evaluated and successfully published frames separately. A failed
+evaluation, fallback, frame gap or source-phase change forces history reset.
+
+Menu routing now requires two independent colour/depth samples at the menu
+boundary and does not require an earlier DLSS submission. This holds the
+publication boundary constant when the path changes from spatial fallback to
+DLSS. Probe failures are contained inside the `noexcept` callback, and the
+generic menu forwarder independently guarantees original-call forwarding after
+an instrumentation exception.
+
+The verified ENB `PSSetShaderResources` slot is installed as a pass-through
+observer for the first bounded menu-to-Present traces. It reports singleton SRV
+reads whose underlying resource exactly matches the observed original depth and
+preserves the caller's slot, count and view. It does not yet substitute a
+display-sized sampled-depth SRV. The reference uses separate writable and
+sampled late-depth resources, so a live matching call is required before that
+resource and replacement are enabled.
+
+Debug and Release builds pass all 35 CTest groups. The Release RTX 4080 SUPER
+harness completed 600 pooled 1707x960-to-2560x1440 DLSS frames with zero
+fallbacks and output SHA-256
+`3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.

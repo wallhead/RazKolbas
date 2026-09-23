@@ -19,6 +19,10 @@ void original(void* first,std::uint32_t second,std::uint32_t third,
     seenFirst=first;seenSecond=second;seenThird=third;seenFourth=fourth;
 }
 void other(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept {}
+void throwingBefore(void*,std::uint32_t,std::uint32_t,std::uint32_t) {
+    ++beforeCalls;
+    throw 7;
+}
 }
 
 TEST_CASE("Menu-display forwarding preserves four arguments and runs the boundary first",
@@ -44,4 +48,14 @@ TEST_CASE("Menu-display forwarding owner is immutable after activation",
     REQUIRE(std::get<bool>(forwarder.configure(&original,&before)));
     REQUIRE(std::get<bool>(forwarder.configure(&original,&before)));
     REQUIRE(std::holds_alternative<rk::Error>(forwarder.configure(&other,&before)));
+}
+
+TEST_CASE("Menu-display forwarding survives an instrumentation exception",
+    "[patch][menu_display]") {
+    rk::MenuDisplayForwarder forwarder;
+    beforeCalls=originalCalls=0;
+    REQUIRE(std::get<bool>(forwarder.configure(&original,&throwingBefore)));
+    forwarder.dispatch(nullptr,1,2,3);
+    REQUIRE(beforeCalls==1);
+    REQUIRE(originalCalls==1);
 }

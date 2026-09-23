@@ -17,9 +17,15 @@ struct NVSDK_NGX_Handle;
 struct NVSDK_NGX_Parameter;
 
 namespace rk {
+enum class SrSourcePhase : std::uint8_t {
+    Unknown,
+    PrePresent,
+    MenuDisplay
+};
 struct SrFrameMetadata {
     std::uint64_t frameId{},generation{};
     bool resetHistory{};
+    SrSourcePhase sourcePhase{SrSourcePhase::Unknown};
 };
 struct SrEvaluationToken {
     std::uint64_t frameId{},generation{};
@@ -105,7 +111,10 @@ private:
     std::vector<RetiredPrepared> retiredPrepared_;
     std::vector<PreparedSrInputs> unfencedPrepared_;
     PreparedEvaluator preparedEvaluator_;
-    std::uint64_t preparedGeneration_{},lastPreparedFrameId_{};
+    std::uint64_t preparedGeneration_{},lastPreparedAttemptFrameId_{};
+    std::uint64_t lastSuccessfulEvaluationFrameId_{};
+    std::uint64_t lastSuccessfulPublicationFrameId_{};
+    SrSourcePhase lastSuccessfulSourcePhase_{SrSourcePhase::Unknown};
     unsigned nextPreparedSlot_{};
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     HANDLE runtimeFile_{INVALID_HANDLE_VALUE};

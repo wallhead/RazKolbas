@@ -66,7 +66,7 @@ std::atomic<bool> ownedEverActive{false};
 std::atomic<DWORD> ownedFrameThread{0};
 struct UiHookLease {
     explicit UiHookLease(OwnedSceneDomain& domain) noexcept:redirect(domain) {}
-    PointerPatch omPatch,viewportPatch;
+    PointerPatch omPatch,viewportPatch,psPatch;
     UiContextNext next{};
     NativeUiRedirector redirect;
     std::atomic<bool> armed{false};
@@ -123,6 +123,15 @@ void STDMETHODCALLTYPE uiViewportProxy(ID3D11DeviceContext* context,UINT count,
     if(state->armed.load(std::memory_order_acquire))
         state->redirect.onRSSetViewports(context,count,views);
     else state->next.viewport(context,count,views);
+}
+void STDMETHODCALLTYPE uiPsProxy(ID3D11DeviceContext* context,UINT start,UINT count,
+    ID3D11ShaderResourceView* const* views) noexcept {
+    std::scoped_lock lock(uiDispatchMutex);
+    auto* state=uiHook.load(std::memory_order_acquire);
+    if(!state)return;
+    if(state->armed.load(std::memory_order_acquire))
+        state->redirect.onPSSetShaderResources(context,start,count,views);
+    else state->next.ps(context,start,count,views);
 }
 void releasePreparedUiHook(bool unbindNative=false) noexcept {
     std::scoped_lock lock(uiDispatchMutex);
@@ -667,8 +676,10 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         return Error{ErrorCode::InvalidInput,"Owned UI context is not prepared"};
     const auto& omSite=enbContextOmSite();
     const auto& viewportSite=enbContextViewportSite();
+    const auto& psSite=enbContextPsResourcesSite();
     if(patchDisabled(disabledPatchIds,omSite.id)||
-       patchDisabled(disabledPatchIds,viewportSite.id))return false;
+       patchDisabled(disabledPatchIds,viewportSite.id)||
+       patchDisabled(disabledPatchIds,psSite.id))return false;
     try {
         auto** table=*reinterpret_cast<void***>(context);
         HMODULE owner=nullptr;
@@ -680,17 +691,19 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         const auto base=reinterpret_cast<std::uintptr_t>(owner);
         const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
         if(tableAddress<base||tableAddress-base!=omSite.tableRva||
-           omSite.tableRva!=viewportSite.tableRva)
+           omSite.tableRva!=viewportSite.tableRva||
+           omSite.tableRva!=psSite.tableRva)
             return Error{ErrorCode::Unsupported,"UI context is not the verified ENB table"};
         const auto mapped=snapshotModule(owner,omSite.imageSize);
-        for(const auto* site:{&omSite,&viewportSite}) {
+        for(const auto* site:{&omSite,&viewportSite,&psSite}) {
             const auto checked=validateOwnedRouteSite(mapped,base,id.hash,id.size,
                 static_cast<std::uint32_t>(tableAddress-base),*site);
             if(const auto error=std::get_if<Error>(&checked))return *error;
         }
         auto pending=std::make_unique<UiHookLease>(domain);
         pending->next={reinterpret_cast<UiContextNext::OM>(base+omSite.methodRva),
-            reinterpret_cast<UiContextNext::VP>(base+viewportSite.methodRva)};
+            reinterpret_cast<UiContextNext::VP>(base+viewportSite.methodRva),
+            reinterpret_cast<UiContextNext::PS>(base+psSite.methodRva)};
         const auto configured=pending->redirect.configure(context,GetCurrentThreadId(),
             pending->next,reducedScene,nativeTarget);
         if(FAILED(configured))
@@ -714,9 +727,21 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
                rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
             return *error;
         }
+        const auto ps=published->psPatch.apply(table+psSite.slot,
+            reinterpret_cast<void*>(published->next.ps),
+            reinterpret_cast<void*>(&uiPsProxy));
+        if(const auto error=std::get_if<Error>(&ps)) {
+            const auto restoredViewport=published->viewportPatch.restore();
+            const auto restoredOm=published->omPatch.restore();
+            const auto* viewportError=std::get_if<Error>(&restoredViewport);
+            const auto* omError=std::get_if<Error>(&restoredOm);
+            if((viewportError&&viewportError->code!=ErrorCode::Conflict)||
+               (omError&&omError->code!=ErrorCode::Conflict))std::terminate();
+            return *error;
+        }
         published->armed.store(true,std::memory_order_release);
-        try {spdlog::info("Installed verified ENB UI context slots {} and {}; dormant until owned NativeUi phase",
-            omSite.id,viewportSite.id);}catch(...) {}
+        try {spdlog::info("Installed verified ENB UI context slots {}, {} and {}; PS resource route is observation-only",
+            omSite.id,viewportSite.id,psSite.id);}catch(...) {}
         return true;
     } catch(const std::exception& error) {
         return Error{ErrorCode::Unavailable,

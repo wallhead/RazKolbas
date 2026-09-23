@@ -7,6 +7,7 @@
 #include <cstring>
 #include <set>
 #include <thread>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -229,4 +230,43 @@ TEST_CASE("Owned scene evaluation reuses three prepared resource slots",
     REQUIRE(presenter.submittedFrames()==360);
     REQUIRE(resourceSets.size()==3);
     REQUIRE(presenter.retainedPreparedFrames()==3);
+}
+
+TEST_CASE("Prepared history resets after failure gap and source phase change",
+    "[sdr_prepared_presenter]") {
+    Scene scene;
+    std::vector<bool> resets;
+    unsigned calls{};
+    rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext*,
+        const rk::PreparedSrInputs&,const rk::SrFrameMetadata&,
+        rk::NgxJitter,bool reset)->rk::Result<bool> {
+        resets.push_back(reset);
+        if(++calls==1)
+            return rk::Error{rk::ErrorCode::Unavailable,"injected first failure"};
+        return true;
+    }};
+    const auto failed=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+        scene.cropped(),{100,11,false,rk::SrSourcePhase::PrePresent},{0,0});
+    REQUIRE(std::holds_alternative<rk::Error>(failed));
+    const auto recovered=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+        scene.cropped(),{101,11,false,rk::SrSourcePhase::PrePresent},{0,0});
+    REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(recovered));
+    REQUIRE(std::get<std::optional<rk::SrEvaluationToken>>(recovered).has_value());
+    const auto gap=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+        scene.cropped(),{103,11,false,rk::SrSourcePhase::PrePresent},{0,0});
+    REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(gap));
+    REQUIRE(std::get<std::optional<rk::SrEvaluationToken>>(gap).has_value());
+    const auto phase=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+        scene.cropped(),{104,11,false,rk::SrSourcePhase::MenuDisplay},{0,0});
+    REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(phase));
+    REQUIRE(std::get<std::optional<rk::SrEvaluationToken>>(phase).has_value());
+    REQUIRE(resets==std::vector<bool>{true,true,true,true});
+    scene.context->Flush();
+    for(unsigned i=0;i<500;++i) {
+        const auto stopped=presenter.stop(scene.context.Get());
+        REQUIRE_FALSE(std::holds_alternative<rk::Error>(stopped));
+        if(std::get<bool>(stopped))return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    FAIL("History-reset fixture did not retire");
 }

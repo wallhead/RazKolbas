@@ -85,6 +85,7 @@ struct WorldState {
     bool srRequested{};
     bool srDisabled{};
     OwnedSceneAdmissionGate ownedSceneGate;
+    OwnedSceneAdmissionGate menuSceneGate;
     bool ownedInputCaptureOnly{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
@@ -513,7 +514,8 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     domain->plan().display.width,domain->plan().display.height);
             }
         }
-        if(state->ownedSceneGate.needsSample(sequence,domain->plan().generation)) {
+        if(boundary==OwnedPublicationBoundary::PrePresent&&
+           state->ownedSceneGate.needsSample(sequence,domain->plan().generation)) {
             const bool wasReady=state->ownedSceneGate.ready();
             const auto sample=probeOwnedScene(context,scene,
                 reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
@@ -540,7 +542,9 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         }
         const auto presented=presentSdrSrFrame(context,scene,display,
             [&]()->Result<bool> {
-                if(!state->ownedSceneGate.ready())
+                const auto sourceReady=boundary==OwnedPublicationBoundary::MenuDisplay?
+                    state->menuSceneGate.ready():state->ownedSceneGate.ready();
+                if(!sourceReady)
                     return Error{ErrorCode::Unavailable,"World colour and depth have not passed the owned NGX admission gate"};
                 if(state->ownedInputCaptureOnly) {
                     if(!state->ownedInputCaptureAttempted) {
@@ -599,7 +603,9 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         sequence);
                 auto evaluated=state->srPresenter.evaluateOwnedScene(device,context,sources,
                     domain->plan().display.width,domain->plan().display.height,
-                    SrFrameMetadata{sequence,domain->plan().generation,false},
+                    SrFrameMetadata{sequence,domain->plan().generation,false,
+                        boundary==OwnedPublicationBoundary::MenuDisplay?
+                            SrSourcePhase::MenuDisplay:SrSourcePhase::PrePresent},
                     std::get<NgxJitter>(renderJitter));
                 if(firstAttempt)
                     spdlog::info("Owned NGX stage frame {}: first evaluation returned",sequence);
@@ -629,6 +635,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 std::memory_order_relaxed);
         } else {
             state->displayedMode.store(DisplayMode::SpatialFallback,std::memory_order_release);
+            state->srPresenter.requestReset();
             state->ownedFallbacks.emplace_back(std::move(outcome));
             ++state->srSkipped;
         }
@@ -674,9 +681,41 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     const auto frame=state?state->forwarded.load(std::memory_order_relaxed):0;
     if(state&&domain&&domain->phase()==ScenePhase::World) {
         if(auto* ui=ownedUiRedirector()) {
+          try {
             if(frame<=12)ui->beginObservation(frame);
             if(frame>12&&state->ownedSceneGate.ready()&&
-               state->srPresenter.submittedFrames()>0&&
+               ui->latePassRoutingAvailable()&&
+               state->menuSceneGate.needsSample(frame,domain->plan().generation)) {
+                const auto numbers=readWorldNumbers(
+                    reinterpret_cast<void*>(state->expectedRenderer),
+                    state->expectedRenderer);
+                const auto sample=numbers.valid&&
+                    numbers.lockOwner==GetCurrentThreadId()&&numbers.lockRecursion>0&&
+                    numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+                    numbers.context==state->createdContext.load(std::memory_order_acquire)&&
+                    numbers.swap==state->createdSwap.load(std::memory_order_acquire)&&
+                    numbers.depth&&activeOwnedSceneTexture()?
+                    probeOwnedScene(reinterpret_cast<ID3D11DeviceContext*>(numbers.context),
+                        activeOwnedSceneTexture(),
+                        reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
+                        domain->plan().render):
+                    Result<OwnedSceneSample>{Error{ErrorCode::Unavailable,
+                        "Menu-boundary renderer ownership or guide chain differs"}};
+                const auto* stats=std::get_if<OwnedSceneSample>(&sample);
+                state->menuSceneGate.record(frame,
+                    stats?std::optional<ColorSampleStats>{stats->color}:std::nullopt,
+                    stats?std::optional<DepthSampleStats>{stats->depth}:std::nullopt);
+                try {
+                    if(stats)
+                        spdlog::info("Owned menu-boundary admission frame {}: sceneLike={} worldLike={} ready={}",
+                            frame,stats->color.sceneLike(),stats->depth.worldLike(),
+                            state->menuSceneGate.ready());
+                    else
+                        spdlog::warn("Owned menu-boundary admission frame {} unavailable: {}",
+                            frame,std::get<Error>(sample).message);
+                } catch(...) {}
+            }
+            if(frame>12&&state->menuSceneGate.ready()&&
                ui->latePassRoutingAvailable()) {
                 if(processOwnedWorldFrame(state,
                     reinterpret_cast<void*>(state->expectedRenderer),frame,
@@ -684,10 +723,21 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                    domain->phase()==ScenePhase::NativeUi&&
                    !state->nativeUiRouteActivated) {
                     state->nativeUiRouteActivated=true;
-                    try {spdlog::info("Owned native UI resource route activated at frame {} after {} successful DLSS submissions",
+                    try {spdlog::info("Owned native UI resource route activated at frame {} after same-boundary colour/depth admission; DLSS submissions={}",
                         frame,state->srPresenter.submittedFrames());}catch(...) {}
                 }
             }
+          } catch(const std::exception& error) {
+            state->menuSceneGate.record(frame,std::nullopt,std::nullopt);
+            state->srPresenter.requestReset();
+            try {spdlog::warn("Owned menu-boundary admission frame {} failed safely: {}",
+                frame,error.what());}catch(...) {}
+          } catch(...) {
+            state->menuSceneGate.record(frame,std::nullopt,std::nullopt);
+            state->srPresenter.requestReset();
+            try {spdlog::warn("Owned menu-boundary admission frame {} failed safely",
+                frame);}catch(...) {}
+          }
         }
     }
 #endif
@@ -1003,7 +1053,8 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
                             backbuffer.Get(),[&]()->Result<bool> {
                                 const auto evaluated=state->srPresenter.evaluatePrepared(device,
                                     immediate,std::move(frame),
-                                    SrFrameMetadata{sequence,state->srGeneration,false},
+                                    SrFrameMetadata{sequence,state->srGeneration,false,
+                                        SrSourcePhase::PrePresent},
                                     renderJitter);
                                 if(const auto error=std::get_if<Error>(&evaluated))return *error;
                                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
@@ -1247,8 +1298,12 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
         if(auto* ui=ownedUiRedirector())
             if(auto observation=ui->finishObservation(frame)) {
                 try {
-                    spdlog::info("Owned menu-to-Present bind trace frame {}: events={} dropped={}",
-                        frame,observation->count,observation->dropped);
+                    spdlog::info("Owned menu-to-Present bind trace frame {}: events={} dropped={} sampledDepthReads={} firstSampledDepthSlot={} otherSingletonReads={}",
+                        frame,observation->count,observation->dropped,
+                        observation->sampledDepthReads,
+                        observation->firstSampledDepthSlot==~0u?-1:
+                            static_cast<int>(observation->firstSampledDepthSlot),
+                        observation->otherSingletonReads);
                     for(std::uint32_t i=0;i<observation->count;++i) {
                         const auto& event=observation->events[i];
                         if(event.kind==UiObservationKind::Viewport) {

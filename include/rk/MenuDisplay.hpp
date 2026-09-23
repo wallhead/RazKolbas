@@ -5,7 +5,7 @@
 #include <mutex>
 
 namespace rk {
-using MenuDisplayFn=void(*)(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept;
+using MenuDisplayFn=void(*)(void*,std::uint32_t,std::uint32_t,std::uint32_t);
 
 class MenuDisplayForwarder {
 public:

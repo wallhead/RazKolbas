@@ -11,6 +11,10 @@ void STDMETHODCALLTYPE forwardOm(ID3D11DeviceContext* context,UINT count,
 }
 void STDMETHODCALLTYPE forwardVp(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) { context->RSSetViewports(count,views); }
+void STDMETHODCALLTYPE forwardPs(ID3D11DeviceContext* context,UINT start,UINT count,
+    ID3D11ShaderResourceView* const* views) {
+    context->PSSetShaderResources(start,count,views);
+}
 ComPtr<IUnknown> identity(IUnknown* object) {
     ComPtr<IUnknown> result;
     if(object)object->QueryInterface(IID_PPV_ARGS(result.GetAddressOf()));
@@ -53,7 +57,7 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(route.configure({render,display,1}));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
-        {&forwardOm,&forwardVp},scene.texture(),nativeView.Get())));
+        {&forwardOm,&forwardVp,&forwardPs},scene.texture(),nativeView.Get())));
     REQUIRE(route.begin(1,1));
     auto* sceneView=scene.renderTarget();
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
@@ -137,7 +141,7 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(SUCCEEDED(device->CreateRenderTargetView(native.Get(),nullptr,&nativeView)));
     desc.Width=render.width;desc.Height=render.height;
     desc.Format=DXGI_FORMAT_R24G8_TYPELESS;
-    desc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+    desc.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
     ComPtr<ID3D11Texture2D> depth;
     REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&depth)));
     D3D11_DEPTH_STENCIL_VIEW_DESC depthViewDesc{};
@@ -145,6 +149,12 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     depthViewDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
     ComPtr<ID3D11DepthStencilView> depthView;
     REQUIRE(SUCCEEDED(device->CreateDepthStencilView(depth.Get(),&depthViewDesc,&depthView)));
+    D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc{};
+    depthSrvDesc.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    depthSrvDesc.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D;
+    depthSrvDesc.Texture2D.MipLevels=1;
+    ComPtr<ID3D11ShaderResourceView> depthSrv;
+    REQUIRE(SUCCEEDED(device->CreateShaderResourceView(depth.Get(),&depthSrvDesc,&depthSrv)));
     desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.BindFlags=D3D11_BIND_RENDER_TARGET;
     ComPtr<ID3D11Texture2D> auxiliary;
@@ -162,7 +172,7 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(route.begin(7,1,GetCurrentThreadId()));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
-        {&forwardOm,&forwardVp},scene.texture(),nativeView.Get())));
+        {&forwardOm,&forwardVp,&forwardPs},scene.texture(),nativeView.Get())));
     auto* sceneView=scene.renderTarget();
     const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
     std::array<ID3D11RenderTargetView*,2> reducedTargets{
@@ -170,6 +180,13 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(redirect.beginObservation(7));
     redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    forwardOm(context.Get(),0,nullptr,nullptr);
+    auto* sampledDepth=depthSrv.Get();
+    redirect.onPSSetShaderResources(context.Get(),3,1,&sampledDepth);
+    ComPtr<ID3D11ShaderResourceView> boundDepthSrv;
+    context->PSGetShaderResources(3,1,&boundDepthSrv);
+    REQUIRE(identity(viewResource(boundDepthSrv.Get()).Get()).Get()==
+        identity(depth.Get()).Get());
     for(unsigned pass=0;pass<3;++pass) {
         redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
         redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
@@ -178,6 +195,8 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(observed.has_value());
     REQUIRE(observed->frame==7);
     REQUIRE(observed->count==8);
+    REQUIRE(observed->sampledDepthReads==1);
+    REQUIRE(observed->firstSampledDepthSlot==3);
     REQUIRE(observed->events[0].kind==rk::UiObservationKind::RenderTargets);
     REQUIRE(observed->events[0].sceneSlot==0);
     REQUIRE(observed->events[0].hasDepth);

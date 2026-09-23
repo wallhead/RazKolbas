@@ -407,7 +407,7 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
        const auto error=std::get_if<Error>(&checked))return *error;
     if(preparedGeneration_&&
        (metadata.generation!=preparedGeneration_||
-        metadata.frameId<=lastPreparedFrameId_||
+        metadata.frameId<=lastPreparedAttemptFrameId_||
         slot.frame->width()!=width_||slot.frame->height()!=height_||
         slot.frame->outputWidth()!=displayWidth_||
         slot.frame->outputHeight()!=displayHeight_))
@@ -421,7 +421,13 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
     }
     slot.metadata=metadata;
     slot.evaluated=slot.published=false;
-    const bool reset=metadata.resetHistory||resetPending_||!lastPreparedFrameId_;
+    const bool sourceChanged=
+        lastSuccessfulSourcePhase_!=SrSourcePhase::Unknown&&
+        metadata.sourcePhase!=lastSuccessfulSourcePhase_;
+    const bool frameGap=lastSuccessfulEvaluationFrameId_&&
+        metadata.frameId!=lastSuccessfulEvaluationFrameId_+1;
+    const bool reset=metadata.resetHistory||resetPending_||
+        !lastSuccessfulEvaluationFrameId_||frameGap||sourceChanged;
     Result<bool> evaluated=Error{ErrorCode::Unavailable,"Prepared SR state isolation unavailable"};
     Result<bool> completed=Error{ErrorCode::Unavailable,"Prepared SR GPU completion unavailable"};
     bool completionIssued=false;
@@ -456,11 +462,22 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
     }
     slot.inFlight=true;
     preparedGeneration_=metadata.generation;
-    lastPreparedFrameId_=metadata.frameId;
-    if(const auto error=std::get_if<Error>(&completed))return *error;
-    if(const auto error=std::get_if<Error>(&evaluated))return *error;
-    if(!std::get<bool>(evaluated))return std::optional<SrEvaluationToken>{};
+    lastPreparedAttemptFrameId_=metadata.frameId;
+    if(const auto error=std::get_if<Error>(&completed)) {
+        resetPending_=true;
+        return *error;
+    }
+    if(const auto error=std::get_if<Error>(&evaluated)) {
+        resetPending_=true;
+        return *error;
+    }
+    if(!std::get<bool>(evaluated)) {
+        resetPending_=true;
+        return std::optional<SrEvaluationToken>{};
+    }
     slot.evaluated=true;
+    lastSuccessfulEvaluationFrameId_=metadata.frameId;
+    lastSuccessfulSourcePhase_=metadata.sourcePhase;
     resetPending_=false;
     ++submittedFrames_;
     return std::optional<SrEvaluationToken>{SrEvaluationToken{
@@ -476,7 +493,7 @@ Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     if(!slot.frame||!slot.evaluated||slot.published||
        slot.metadata.frameId!=token.frameId||
        slot.metadata.generation!=token.generation||
-       token.frameId!=lastPreparedFrameId_||
+       token.frameId!=lastPreparedAttemptFrameId_||
        token.generation!=preparedGeneration_)
         return Error{ErrorCode::Conflict,"Prepared SR publication token is stale"};
     D3D11_TEXTURE2D_DESC dest{};destination->GetDesc(&dest);
@@ -501,6 +518,7 @@ Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     slot.inFlight=true;
     if(const auto error=std::get_if<Error>(&copied))return *error;
     slot.published=true;
+    lastSuccessfulPublicationFrameId_=token.frameId;
     return true;
 }
 Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
@@ -648,7 +666,9 @@ Result<bool> SdrDlssPresenter::stop(ID3D11DeviceContext* context) {
     if(runtimeFile_!=INVALID_HANDLE_VALUE)CloseHandle(runtimeFile_);
     runtimeFile_=INVALID_HANDLE_VALUE;
     width_=height_=displayWidth_=displayHeight_=0;
-    preparedGeneration_=lastPreparedFrameId_=0;
+    preparedGeneration_=lastPreparedAttemptFrameId_=0;
+    lastSuccessfulEvaluationFrameId_=lastSuccessfulPublicationFrameId_=0;
+    lastSuccessfulSourcePhase_=SrSourcePhase::Unknown;
     reduced_=false;initialized_=false;ngxStartAttempted_=false;
     preparedPlan_.reset();
     return true;

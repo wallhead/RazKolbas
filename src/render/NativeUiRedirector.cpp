@@ -80,7 +80,7 @@ bool hasStencil(DXGI_FORMAT format) noexcept {
 HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderThread,
     UiContextNext next,ID3D11Texture2D* reducedScene,
     ID3D11RenderTargetView* nativeRtv) noexcept {
-    if(context_||!context||!renderThread||!next.om||!next.viewport||
+    if(context_||!context||!renderThread||!next.om||!next.viewport||!next.ps||
        !reducedScene||!nativeRtv||!route_.plan().valid()||
        context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)return E_INVALIDARG;
     auto nativeColor=resource(nativeRtv);
@@ -385,6 +385,20 @@ void NativeUiRedirector::onRSSetViewports(ID3D11DeviceContext* context,
         }
     }
     next_.viewport(context,count,views);
+}
+void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
+    UINT start,UINT count,ID3D11ShaderResourceView* const* views) noexcept {
+    if(observing_&&context==context_.Get()&&count==1&&views&&views[0]&&
+       GetCurrentThreadId()==(route_.renderThread()?route_.renderThread():thread_)) {
+        auto value=resource(views[0]);
+        auto id=canonical(value.Get());
+        if(id&&depthSourceId_&&id.Get()==depthSourceId_.Get()) {
+            ++observation_.sampledDepthReads;
+            if(observation_.firstSampledDepthSlot==~0u)
+                observation_.firstSampledDepthSlot=start;
+        } else ++observation_.otherSingletonReads;
+    }
+    next_.ps(context,start,count,views);
 }
 void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     if(unbindNative&&context_&&nativeRtv_&&next_.om&&nativeBound())
