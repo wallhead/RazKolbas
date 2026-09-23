@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-## 0.1.62 mip-detail correction in implementation (2026-09-23)
+## 0.1.62 mip-detail correction installed; game test pending (2026-09-23)
 
 The 0.1.61 run proved continuous owned DLSS evaluation and correct ENB/UI
 routing, but the user reported that the otherwise correct image still looked
@@ -23,7 +23,31 @@ value is now propagated truthfully for API completeness, but it is not claimed
 as an effective correction; the supplied reference uses a separate post-upscale
 filter. The safe manual-bias range is consistently `[-3,3]`. A partial
 nine-slot hook-install conflict leaves a conservative unarmed lease and permits
-no retry until the next launch. Packaging and game testing remain pending.
+no retry until the next launch.
+
+Source commit `df60c0a` was pushed to `codex/razkolbas-bootstrap`. Debug and
+Release each pass all 37 CTest groups after the review correction. Release DLL
+SHA-256 is
+`4ea6bb3114d0a95dfa456dfb5cf060bed8e3bad15de7e992431ce61429782203`.
+The MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.62-mip-bias-df60c0a.zip` has SHA-256
+`1671bfd52dd9a0d2276264f2c13c330759ae640fbdaa2fe8e9356c9c180c91e9`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest, verified every payload hash, and verified the NVIDIA runtime's
+Authenticode signature.
+
+Skyrim was absent during installation. Every 0.1.61 payload first matched its
+manifest, and the complete prior mod was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.62-df60c0a`. Only the plugin DLL and
+manifest were replaced; the user INI and signed NVIDIA runtime retain SHA-256
+`2b3afaa42d207c07eb28d5de0f8fc53e5a7fdeb4179022d0b8134ec9f0d19d6c`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the 0.1.62 manifest, whose status is
+`EXPERIMENTAL_DLSS_MIP_BIAS_PENDING_GAME_TEST`. The assistant did not start
+Skyrim. The next user-started loaded-save run must verify six sampler hooks,
+automatic bias near `-0.5849625`, at least one cached replacement, continuous
+DLSS evaluation, ENB/ReShade appearance, stability and perceived texture
+detail.
 
 ## 0.1.61 live DLSS runs continuously; quality correction required (2026-09-23, 16:54 launch)
 
