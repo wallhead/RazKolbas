@@ -1,5 +1,34 @@
 # Implementation checkpoint
 
+## 0.1.60 early ENB contract installed; game test pending (2026-09-23)
+
+Commit `e186b1c` implements creation-time reduced scene publication for the
+exact installed ENB/ReShade chain and was pushed to
+`codex/razkolbas-bootstrap`. Final Debug and Release builds each passed all
+36 CTest groups; the focused route/fallback/resize selection passed 352
+assertions in 23 cases. Final independent re-review found no blocker.
+
+Skyrim was closed and the exact 0.1.59 installed payload matched its manifest.
+It was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.59-enb-target-probe-922c6d9-before-e186b1c/`.
+The 0.1.60 payload was then installed at `D:/TESV_EX/MO2/mods/RazKolbas`.
+Installed DLL SHA-256:
+`8b256903a729a5447bf393172fc68d2f87968fe0740b93a40b1581f52fd5efd7`;
+INI SHA-256:
+`d84768616750ca01c66ad68a9984b8070887867c20c8a4056b88f318d9f858e5`;
+manifest SHA-256:
+`a5318524bb6ff3c125074a2cb4b80f67448c243229650b4ddb3314455a80a730`.
+All four manifest payload hashes were verified after installation.
+
+MO2 package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.60-early-enb-contract-e186b1c.zip`
+has SHA-256
+`9f12b07ecab71166473c092cf62c2f06f07a52db482f4360e404bf22d47ab109`.
+The configuration remains `Quality=Quality`,
+`ManualRenderScale=0.666667`, `SpatialBaselineOnly=true`. This first run tests
+the ENB dimension/resource contract and visual integration without NGX frame
+evaluation. Game runtime verification is NOT RUN.
+
 ## 0.1.59 proves the reduced-scene ENB dimension failure (2026-09-23, 12:09 launch)
 
 The user started Skyrim and loaded a save with ReShade unchanged. PID 4040
