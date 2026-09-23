@@ -28,6 +28,26 @@ fallbacks and output SHA-256
 Actual-game visual parity for this candidate is **NOT RUN** until the user
 starts Skyrim.
 
+Source commit `be22ce8` was packaged and installed as 0.1.58. The verified
+MO2 archive is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.58-spatial-baseline-be22ce8.zip`,
+SHA-256
+`dbc14c24fbeae50ebe6a51b0a5721d6e76e6f892276ceb0ce91eb68926c95f3d`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest and verified every payload hash. The complete prior mod was
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.58-be22ce8` after its 0.1.57 payloads
+matched the old manifest. SkyrimSE.exe was absent throughout installation.
+The installed DLL SHA-256 is
+`cb757f67a7da6adf790f54d8ed05c4c86cf101544dd037295fc0a57fe72f4fef`.
+The installed INI intentionally enables `SpatialBaselineOnly=true` and has
+SHA-256
+`d84768616750ca01c66ad68a9984b8070887867c20c8a4056b88f318d9f858e5`.
+The signed NVIDIA SR runtime remains byte-identical at SHA-256
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The next user-started run must compare this stable spatial image with the
+ordinary ENB/ReShade appearance; this package intentionally submits no NGX.
+
 ## PureDark Consolidated Verified 10 follow-up (2026-09-23)
 
 The user-supplied pass-10 RE bundle was independently hash-checked: all 2,034

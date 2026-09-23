@@ -42,6 +42,10 @@ image comparison before DLSS is re-enabled. Debug and Release each pass all
 1707x960-to-2560x1440 evaluations with zero fallbacks; output SHA-256 was
 `9e24bc310a96dbeb827811488e7712457da160d242bd12370dbbdd05cdb65d37`.
 
+This source is commit `be22ce8`. It is installed as the controlled 0.1.58
+spatial-baseline package; its deployment receipt and hashes are recorded in
+`../IMPLEMENTATION_STATUS.md`. Actual-game visual parity remains **NOT RUN**.
+
 ## 0.1.55 user-run evidence (2026-09-22)
 
 The user started the installed 0.1.55 diagnostic, loaded a save and reported a
