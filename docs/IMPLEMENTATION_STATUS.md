@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-## ENB target-dimension diagnostic implemented (2026-09-23)
+## 0.1.59 ENB target-dimension diagnostic installed (2026-09-23)
 
 Read-only RE of the exact installed ENB found that its HDR MRT attachment
 path compares RTV private-data dimensions against globals populated from
@@ -30,9 +30,29 @@ unbounded non-HDR inspection path; it was corrected and re-reviewed.
 The new probe's Skyrim runtime test is NOT RUN. ReShade remains a possible
 contributor to reduced-path ordering or resource issues; no ReShade-off
 comparison has been performed. The established native DLAA visual result
-remains the baseline. Next: install a spatial reduced-scene diagnostic build
-with ReShade unchanged, then obtain the probe records from a user-started
-save load. No game was launched by the assistant.
+remains the baseline. Source commit `922c6d9` was packaged and installed into
+`D:/TESV_EX/MO2/mods/RazKolbas` while Skyrim was closed. The full known-good
+DLAA mod, including its INI and manifest, was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.59-native-dlaa-922c6d9/` first.
+
+The next-run INI uses `Quality=Quality`, `ManualRenderScale=0.666667` and
+`SpatialBaselineOnly=true`, so the probe exercises the failed reduced route
+without NGX evaluation. ENB and ReShade settings were not changed. All four
+installed payload hashes match the new manifest. DLL SHA-256:
+`45c0cf2b08857653f8e1038b3698025209cbc0d44e8a97f330baea5769dea695`.
+INI SHA-256:
+`d84768616750ca01c66ad68a9984b8070887867c20c8a4056b88f318d9f858e5`.
+MO2 package `D:/TESV_EX/MO2/downloads/RazKolbas-0.1.59-enb-target-probe-922c6d9.zip`,
+SHA-256 `457aee3ddde1e28b4e1b49454d8310eab4592ce3cd9e8dc5b7a3db58b5da4f90`.
+This is a diagnostic package, not a visual fix or a DLSS SR completion claim.
+
+Next: the user starts Skyrim, loads a save and leaves the scene running for
+roughly 30 seconds; collect current-session `ENB target probe` records and
+correlate reference/metadata dimensions with slots 5/6. No game was launched
+by the assistant. If metadata is valid and the dimensions differ, implement
+consistent early ENB description/buffer publication with matching allocation
+and a safe failure path. If they match, continue tracing the producer and
+late effects order, including ReShade, instead of applying a sizing patch.
 
 ## Native DLAA visual baseline confirmed (2026-09-23, 11:39 launch)
 
