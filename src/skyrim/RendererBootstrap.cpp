@@ -13,6 +13,7 @@
 #include "rk/OwnedSwapBufferRoute.hpp"
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/NativeFlipTarget.hpp"
+#include "rk/SpatialFallback.hpp"
 #include "rk/RendererLogicalSize.hpp"
 #include "rk/RipCall6.hpp"
 #include <spdlog/spdlog.h>
@@ -35,6 +36,7 @@ struct ObserverLease {
     std::atomic<unsigned> observations{0};
     std::atomic<bool> armed{false};
     std::string disabledPatchIds;
+    HMODULE exactEnbOwner{}; // pinned with the verified creation export owner
 };
 // Process-lifetime lease: both callback DLL and prior owner's DLL are pinned.
 // SKSE can FreeLibrary during shutdown; reachable callback code must remain valid.
@@ -44,21 +46,29 @@ struct FactoryTraceLease {
     PointerPatch patch;
     FactoryCreateFn next{};
     IDXGIFactory* target{}; // identity only; do not retain the factory object
+    HMODULE exactEnbOwner{};
     std::atomic<unsigned> calls{0};
 };
 std::atomic<FactoryTraceLease*> factoryTrace{nullptr};
 std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
 struct BufferTraceLease {
-    PointerPatch getBufferPatch,presentPatch;
+    PointerPatch getBufferPatch,getDescPatch,presentPatch;
     SwapGetBufferFn next{};
+    SwapGetDescFn nextDesc{};
     PresentFn nextPresent{};
     IDXGISwapChain* selectedSwap{}; // retained by the route before activation
     IDXGISwapChain* outerSwap{}; // identity only; renderer owns the swap
     std::unique_ptr<OwnedSwapBufferRoute> route;
+    Microsoft::WRL::ComPtr<ID3D11Device> earlyDevice;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> earlyContext;
     std::uintptr_t gameBase{};
     std::string gameHash;
+    std::atomic<std::uintptr_t> enbBase{0};
     std::atomic<bool> ownedArmed{false};
+    std::atomic<bool> integrationReady{false};
+    std::atomic<bool> cleanupPending{false};
     std::atomic<unsigned> calls{0};
+    std::atomic<unsigned> emergencyFrames{0},emergencyFailures{0};
 };
 std::atomic<BufferTraceLease*> bufferTrace{nullptr};
 std::atomic_flag bufferTraceAttempted=ATOMIC_FLAG_INIT;
@@ -235,14 +245,35 @@ std::vector<std::uint8_t> snapshotModule(HMODULE module,std::size_t size) {
     }
     return result;
 }
+std::uintptr_t resolveVerifiedEnbBase(BufferTraceLease& state,
+    std::uintptr_t caller) noexcept {
+    if(const auto cached=state.enbBase.load(std::memory_order_acquire))return cached;
+    try {
+        HMODULE owner=nullptr;
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(caller),&owner)||!owner)return 0;
+        struct Reference {HMODULE value;~Reference(){if(value)FreeLibrary(value);}} reference{owner};
+        const auto identity=identify(owner);
+        if(identity.hash!="47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58"||
+           identity.size!=4664320)return 0;
+        const auto base=reinterpret_cast<std::uintptr_t>(owner);
+        std::uintptr_t expected{};
+        state.enbBase.compare_exchange_strong(expected,base,
+            std::memory_order_acq_rel,std::memory_order_acquire);
+        return state.enbBase.load(std::memory_order_acquire);
+    } catch(...) { return 0; }
+}
 HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
     REFIID iid,void** output) noexcept {
     auto* state=bufferTrace.load(std::memory_order_acquire);
     if(!state||!state->next)return E_UNEXPECTED;
     const auto caller=_ReturnAddress();
     const auto owned=state->ownedArmed.load(std::memory_order_acquire);
-    const auto result=owned?state->route->getBufferForCaller(
+    const auto enbBase=owned?resolveVerifiedEnbBase(*state,
+        reinterpret_cast<std::uintptr_t>(caller)):0;
+    const auto result=owned?state->route->getBufferForConsumers(
         reinterpret_cast<std::uintptr_t>(caller),state->gameBase,state->gameHash,
+        enbBase,"47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
         swap,index,iid,output):state->next(swap,index,iid,output);
     const auto sequence=state->calls.fetch_add(1,std::memory_order_relaxed)+1;
     if(sequence<=64) {
@@ -270,10 +301,56 @@ HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
     }
     return result;
 }
+HRESULT WINAPI swapGetDescTrace(IDXGISwapChain* swap,
+    DXGI_SWAP_CHAIN_DESC* output) noexcept {
+    auto* state=bufferTrace.load(std::memory_order_acquire);
+    if(!state||!state->nextDesc)return E_UNEXPECTED;
+    const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if(!state->ownedArmed.load(std::memory_order_acquire)||!state->route)
+        return state->nextDesc(swap,output);
+    const auto enbBase=resolveVerifiedEnbBase(*state,caller);
+    return state->route->getDescForCaller(caller,enbBase,
+        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
+        swap,output);
+}
+void publishEarlySpatialFallback(BufferTraceLease& state,
+    IDXGISwapChain* swap) noexcept {
+    if(!state.ownedArmed.load(std::memory_order_acquire)||
+       state.integrationReady.load(std::memory_order_acquire)||
+       !state.route||swap!=state.selectedSwap||!state.earlyDevice||!state.earlyContext)
+        return;
+    try {
+        auto native=acquireNativeFlipTarget(swap,state.earlyDevice.Get(),
+            state.route->displayExtent());
+        if(const auto error=std::get_if<Error>(&native))
+            throw std::runtime_error(error->message);
+        auto frame=publishSdrSpatialFallbackToDisplay(state.earlyContext.Get(),
+            state.route->sceneTexture(),std::get<NativeFlipTarget>(native).texture.Get());
+        if(const auto error=std::get_if<Error>(&frame))
+            throw std::runtime_error(error->message);
+        const auto count=state.emergencyFrames.fetch_add(1,std::memory_order_relaxed)+1;
+        if(count<=3||count%600==0)
+            spdlog::warn("Early route emergency spatial publication #{} completed before nested Present; late native-UI integration is not ready",
+                count);
+    } catch(const std::exception& error) {
+        const auto count=state.emergencyFailures.fetch_add(1,std::memory_order_relaxed)+1;
+        if(count<=3||count%600==0)
+            try {spdlog::error("Early route emergency spatial publication #{} failed: {}",
+                count,error.what());}catch(...) {}
+    } catch(...) {
+        const auto count=state.emergencyFailures.fetch_add(1,std::memory_order_relaxed)+1;
+        if(count<=3||count%600==0)
+            try {spdlog::error("Early route emergency spatial publication #{} failed",
+                count);}catch(...) {}
+    }
+}
 HRESULT WINAPI swapPresentTrace(IDXGISwapChain* swap,UINT interval,UINT flags) noexcept {
     auto* state=bufferTrace.load(std::memory_order_acquire);
     if(!state||!state->nextPresent)return E_UNEXPECTED;
-    if(!(flags&DXGI_PRESENT_TEST))probePostEnbPresentationTarget(swap);
+    if(!(flags&DXGI_PRESENT_TEST)) {
+        probePostEnbPresentationTarget(swap);
+        publishEarlySpatialFallback(*state,swap);
+    }
     return state->nextPresent(swap,interval,flags);
 }
 Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
@@ -285,6 +362,7 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
         return Error{ErrorCode::Unsupported,"Returned swap table has no loaded-module owner"};
     struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
     const auto& site=reshade673SwapGetBufferSite();
+    const auto& descSite=reshade673SwapGetDescSite();
     const auto id=identify(owner);
     const auto base=reinterpret_cast<std::uintptr_t>(owner);
     const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
@@ -298,9 +376,13 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(tableAddress-base),site);
     if(const auto error=std::get_if<Error>(&validated))return *error;
+    const auto descValidated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+        static_cast<std::uint32_t>(tableAddress-base),descSite);
+    if(const auto error=std::get_if<Error>(&descValidated))return *error;
     if(bufferTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     auto pending=std::make_unique<BufferTraceLease>();
     pending->next=reinterpret_cast<SwapGetBufferFn>(base+site.methodRva);
+    pending->nextDesc=reinterpret_cast<SwapGetDescFn>(base+descSite.methodRva);
     pending->nextPresent=reinterpret_cast<PresentFn>(base+swapProfile.methods[1].rva);
     pending->selectedSwap=swap;
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
@@ -313,17 +395,95 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     const auto applied=published->getBufferPatch.apply(table+site.slot,
         reinterpret_cast<void*>(published->next),reinterpret_cast<void*>(&swapGetBufferTrace));
     if(const auto error=std::get_if<Error>(&applied))return *error;
-    const auto present=published->presentPatch.apply(table+swapProfile.methods[1].slot,
-        reinterpret_cast<void*>(published->nextPresent),reinterpret_cast<void*>(&swapPresentTrace));
-    if(const auto error=std::get_if<Error>(&present)) {
+    const auto described=published->getDescPatch.apply(table+descSite.slot,
+        reinterpret_cast<void*>(published->nextDesc),reinterpret_cast<void*>(&swapGetDescTrace));
+    if(const auto error=std::get_if<Error>(&described)) {
         const auto restored=published->getBufferPatch.restore();
         if(const auto rollback=std::get_if<Error>(&restored);
            rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
         return *error;
     }
-    spdlog::info("Installed {} plus verified nested Present stage trace: tableRVA=0x{:x}; slots={},{}; pass-through",
-        site.id,site.tableRva,site.slot,swapProfile.methods[1].slot);
+    const auto present=published->presentPatch.apply(table+swapProfile.methods[1].slot,
+        reinterpret_cast<void*>(published->nextPresent),reinterpret_cast<void*>(&swapPresentTrace));
+    if(const auto error=std::get_if<Error>(&present)) {
+        const auto descRestored=published->getDescPatch.restore();
+        const auto restored=published->getBufferPatch.restore();
+        if(const auto rollback=std::get_if<Error>(&descRestored);
+           rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
+        if(const auto rollback=std::get_if<Error>(&restored);
+           rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
+        return *error;
+    }
+    spdlog::info("Installed {} plus {} and verified nested Present stage trace: tableRVA=0x{:x}; slots={},{},{}; pass-through until early scene publication",
+        site.id,descSite.id,site.tableRva,site.slot,descSite.slot,
+        swapProfile.methods[1].slot);
     return true;
+}
+Result<bool> validateEarlyEnbUiContract(HMODULE module) {
+    if(!module)return Error{ErrorCode::Unsupported,
+        "Exact ENB creation owner is unavailable"};
+    const auto identity=identify(module);
+    const auto& om=enbContextOmSite();
+    if(identity.hash!=om.moduleSha256||identity.size!=om.fileSize)
+        return Error{ErrorCode::Unsupported,"ENB creation owner identity differs"};
+    const auto base=reinterpret_cast<std::uintptr_t>(module);
+    const auto image=snapshotModule(module,om.imageSize);
+    for(const auto* site:{&om,&enbContextViewportSite(),&enbContextPsResourcesSite()}) {
+        const auto checked=validateOwnedRouteSite(image,base,identity.hash,
+            identity.size,site->tableRva,*site);
+        if(const auto error=std::get_if<Error>(&checked))return *error;
+    }
+    return true;
+}
+void prepareEarlyOwnedScene(IUnknown* creationDevice,
+    const DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain* swap) noexcept {
+#ifdef RK_WITH_NGX
+    auto* trace=bufferTrace.load(std::memory_order_acquire);
+    if(!trace||trace->selectedSwap!=swap||!trace->next||!trace->nextDesc||
+       trace->ownedArmed.load(std::memory_order_acquire)||
+       !rectHook.load(std::memory_order_acquire)||!creationDevice||!requested)return;
+    try {
+        DXGI_SWAP_CHAIN_DESC desc{};
+        const auto described=trace->nextDesc(swap,&desc);
+        if(FAILED(described))throw std::runtime_error("Native nested description unavailable");
+        const Extent display{desc.BufferDesc.Width,desc.BufferDesc.Height};
+        if(requested->BufferDesc.Width&&requested->BufferDesc.Height&&
+           (requested->BufferDesc.Width!=display.width||
+            requested->BufferDesc.Height!=display.height))
+            throw std::runtime_error("Requested and returned nested dimensions differ");
+        auto planned=planWorldOwnedScene(display);
+        if(const auto error=std::get_if<Error>(&planned))
+            throw std::runtime_error(error->message);
+        Microsoft::WRL::ComPtr<ID3D11Device> device;
+        if(FAILED(creationDevice->QueryInterface(IID_PPV_ARGS(&device)))||!device)
+            throw std::runtime_error("Nested creation device is not D3D11");
+        auto surface=createReducedSdrSurface(device.Get(),display,std::get<Extent>(planned));
+        if(const auto error=std::get_if<Error>(&surface))
+            throw std::runtime_error(error->message);
+        auto route=std::make_unique<OwnedSwapBufferRoute>();
+        if(FAILED(route->configure(swap,trace->next,trace->nextDesc,
+            std::move(std::get<ReducedSdrSurface>(surface)),1)))
+            throw std::runtime_error("Verified nested swap rejected early scene");
+        const auto render=route->renderExtent();
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate;
+        device->GetImmediateContext(immediate.GetAddressOf());
+        if(!immediate)throw std::runtime_error("Nested immediate context is unavailable");
+        trace->gameBase=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        trace->gameHash=std::string(skyrim1170CreationProfile().gameSha256);
+        trace->earlyDevice=device;
+        trace->earlyContext=std::move(immediate);
+        trace->route=std::move(route);
+        trace->ownedArmed.store(true,std::memory_order_release);
+        try {spdlog::info("Early owned scene published before ENB GetDesc/GetBuffer: render={}x{} display={}x{}; exact ENB and Skyrim consumers selected",
+            render.width,render.height,display.width,display.height);}catch(...) {}
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Early owned scene unavailable; nested buffer and description remain native: {}",error.what());}catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("Early owned scene unavailable; nested buffer and description remain native");}catch(...) {}
+    }
+#else
+    (void)creationDevice;(void)requested;(void)swap;
+#endif
 }
 void factoryCreated(IDXGIFactory* factory,IUnknown* device,
     const DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain* swap,HRESULT result,
@@ -340,6 +500,16 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
             static_cast<std::uint32_t>(result),reinterpret_cast<std::uintptr_t>(swap),
             GetCurrentThreadId());
         if(FAILED(result)||!swap)return;
+        if(!isOwnedSceneFactoryCandidate(factory,state->target,requested)) {
+            spdlog::info("Nested swap #{} ignored: factory or native SDR creation contract differs",
+                sequence);
+            return;
+        }
+        if(const auto enb=validateEarlyEnbUiContract(state->exactEnbOwner);
+           const auto error=std::get_if<Error>(&enb)) {
+            spdlog::warn("Nested swap #{} remains native: {}",sequence,error->message);
+            return;
+        }
         auto** table=*reinterpret_cast<void***>(swap);
         const auto method=std::atomic_ref<void*>(table[9]).load(std::memory_order_acquire);
         HMODULE owner=nullptr,methodOwner=nullptr;
@@ -361,6 +531,7 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
         const auto traced=installSwapGetBufferTrace(swap);
         if(const auto error=std::get_if<Error>(&traced))
             spdlog::warn("Nested GetBuffer trace not installed: {}",error->message);
+        else if(std::get<bool>(traced))prepareEarlyOwnedScene(device,requested,swap);
     } catch(const std::exception& error) {
         try {spdlog::warn("Nested factory trace unavailable: {}",error.what());} catch(...) {}
     } catch(...) {
@@ -375,6 +546,12 @@ HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
         &factoryCreated,state);
 }
 Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
+    auto* observer=lease.load(std::memory_order_acquire);
+    if(!observer||!observer->exactEnbOwner||
+       patchDisabled(observer->disabledPatchIds,enbContextOmSite().id)||
+       patchDisabled(observer->disabledPatchIds,enbContextViewportSite().id)||
+       patchDisabled(observer->disabledPatchIds,enbContextPsResourcesSite().id))
+        return false;
     if(factoryTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     if(!adapter)return Error{ErrorCode::Unavailable,"No adapter for early factory trace"};
     Microsoft::WRL::ComPtr<IDXGIFactory> factory;
@@ -399,6 +576,7 @@ Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
     auto pending=std::make_unique<FactoryTraceLease>();
     pending->next=reinterpret_cast<FactoryCreateFn>(base+site.methodRva);
     pending->target=factory.Get();
+    pending->exactEnbOwner=observer->exactEnbOwner;
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&factoryCreateProxy),&pinnedSelf)||
@@ -423,18 +601,30 @@ std::atomic<SwapLease*> swapLease{nullptr};
 std::mutex swapInstallMutex;
 void retireOwnedSceneForResize(std::uintptr_t swap) noexcept {
     auto* trace=bufferTrace.load(std::memory_order_acquire);
-    if(!trace||!trace->ownedArmed.load(std::memory_order_acquire)||
-       reinterpret_cast<std::uintptr_t>(trace->outerSwap)!=swap)return;
+    if(!trace||reinterpret_cast<std::uintptr_t>(trace->outerSwap)!=swap||
+       !trace->ownedArmed.exchange(false,std::memory_order_acq_rel))return;
+    trace->integrationReady.store(false,std::memory_order_release);
     const auto owner=ownedFrameThread.load(std::memory_order_acquire);
-    if(owner&&owner!=GetCurrentThreadId()) {
-        try {spdlog::warn("Owned scene resize cannot retire on another render thread; native RTV retained");}
+    if(resizeNeedsOwnerThread(owner,GetCurrentThreadId())) {
+        trace->cleanupPending.store(true,std::memory_order_release);
+        try {spdlog::warn("Owned scene routing stopped for cross-thread ResizeBuffers; resize rejected until UI cleanup runs on the render thread");}
         catch(...) {}
         return;
     }
-    trace->ownedArmed.store(false,std::memory_order_release);
     ownedDomain.suspend();
     releasePreparedUiHook(true);
-    try {spdlog::warn("Owned scene retired before ResizeBuffers; native forwarding until next game launch");}
+    try {spdlog::warn("Owned scene routing stopped before ResizeBuffers; old scene retained for outstanding references and native queries restored until next launch");}
+    catch(...) {}
+}
+void drainOwnedResizeCleanup() noexcept {
+    auto* trace=bufferTrace.load(std::memory_order_acquire);
+    if(!trace||!trace->cleanupPending.load(std::memory_order_acquire))return;
+    const auto owner=ownedFrameThread.load(std::memory_order_acquire);
+    if(owner&&owner!=GetCurrentThreadId())return;
+    ownedDomain.suspend();
+    releasePreparedUiHook(true);
+    trace->cleanupPending.store(false,std::memory_order_release);
+    try {spdlog::info("Deferred owned resize cleanup completed on render thread");}
     catch(...) {}
 }
 void swapObserved(const SwapEvent& event) {
@@ -458,6 +648,7 @@ void swapObserved(const SwapEvent& event) {
         return;
     }
     if(event.before) {
+        drainOwnedResizeCleanup();
         if(!(event.flags&DXGI_PRESENT_TEST)&&frameProbeBoundary(state->profileId,event.call)) {
             probePresentationTargets(reinterpret_cast<IDXGISwapChain*>(event.object));
             try { probePresentCandidates(reinterpret_cast<IDXGISwapChain*>(event.object)); }
@@ -486,8 +677,31 @@ HRESULT WINAPI swapPresent(IDXGISwapChain* s,UINT interval,UINT flags) noexcept 
     const auto* state=swapLease.load(std::memory_order_acquire);
     return observePresent(reinterpret_cast<PresentFn>(state->originals[1]),s,interval,flags,&swapObserved);
 }
+bool prepareOwnedResize(std::uintptr_t swap) noexcept {
+    auto* trace=bufferTrace.load(std::memory_order_acquire);
+    if(!trace||reinterpret_cast<std::uintptr_t>(trace->outerSwap)!=swap)return false;
+    const auto owner=ownedFrameThread.load(std::memory_order_acquire);
+    const auto foreign=resizeNeedsOwnerThread(owner,GetCurrentThreadId());
+    if(trace->cleanupPending.load(std::memory_order_acquire)) {
+        if(foreign)return true;
+        drainOwnedResizeCleanup();
+    }
+    return trace->ownedArmed.load(std::memory_order_acquire)&&foreign;
+}
+HRESULT rejectOwnedResize(SwapCall call,std::uintptr_t object,UINT count,
+    UINT width,UINT height,DXGI_FORMAT format,UINT flags) noexcept {
+    SwapEvent event{call,true,object,DXGI_ERROR_INVALID_CALL,0,0,flags,
+        count,width,height,format};
+    swapObserved(event);
+    event.before=false;
+    swapObserved(event);
+    return DXGI_ERROR_INVALID_CALL;
+}
 HRESULT WINAPI swapResize(IDXGISwapChain* s,UINT count,UINT width,UINT height,DXGI_FORMAT format,UINT flags) noexcept {
     const auto* state=swapLease.load(std::memory_order_acquire);
+    if(prepareOwnedResize(reinterpret_cast<std::uintptr_t>(s)))
+        return rejectOwnedResize(SwapCall::Resize,reinterpret_cast<std::uintptr_t>(s),
+            count,width,height,format,flags);
     return observeResize(reinterpret_cast<ResizeFn>(state->originals[2]),s,count,width,height,format,flags,&swapObserved);
 }
 HRESULT WINAPI swapPresent1(IDXGISwapChain1* s,UINT interval,UINT flags,const DXGI_PRESENT_PARAMETERS* params) noexcept {
@@ -496,6 +710,9 @@ HRESULT WINAPI swapPresent1(IDXGISwapChain1* s,UINT interval,UINT flags,const DX
 }
 HRESULT WINAPI swapResize1(IDXGISwapChain3* s,UINT count,UINT width,UINT height,DXGI_FORMAT format,UINT flags,const UINT* nodes,IUnknown* const* queues) noexcept {
     const auto* state=swapLease.load(std::memory_order_acquire);
+    if(prepareOwnedResize(reinterpret_cast<std::uintptr_t>(s)))
+        return rejectOwnedResize(SwapCall::Resize1,reinterpret_cast<std::uintptr_t>(s),
+            count,width,height,format,flags);
     return observeResize1(reinterpret_cast<Resize1Fn>(state->originals[4]),s,count,width,height,format,flags,nodes,queues,&swapObserved);
 }
 void logSwapTableOwners(void** table,HMODULE tableOwner,const FileIdentity& tableIdentity) {
@@ -564,7 +781,9 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
     const RendererSnapshot& snapshot,std::string_view disabledPatchIds) noexcept {
 #ifdef RK_WITH_NGX
     auto* trace=bufferTrace.load(std::memory_order_acquire);
-    if(!trace||!trace->selectedSwap||trace->ownedArmed.load(std::memory_order_acquire)||
+    if(!trace||!trace->selectedSwap||!trace->route||
+       !trace->ownedArmed.load(std::memory_order_acquire)||
+       trace->integrationReady.load(std::memory_order_acquire)||
        !rectHook.load(std::memory_order_acquire)||
        !args.device||!*args.device||!args.context||!*args.context||
        !args.swapChain||!*args.swapChain)return;
@@ -572,9 +791,18 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
     auto* device=*args.device;
     auto* context=*args.context;
     auto* swap=*args.swapChain;
+    trace->outerSwap=swap;
     bool sessionAttempted=false;
     bool committed=false;
     try {
+        Microsoft::WRL::ComPtr<ID3D11Device> contextDevice,swapDevice;
+        context->GetDevice(contextDevice.GetAddressOf());
+        if(FAILED(swap->GetDevice(IID_PPV_ARGS(swapDevice.GetAddressOf())))||
+           !contextDevice||!swapDevice||
+           !trace->route->belongsToDevice(device)||
+           !trace->route->belongsToDevice(contextDevice.Get())||
+           !trace->route->belongsToDevice(swapDevice.Get()))
+            throw std::runtime_error("Early scene, outer swap and immediate context use different D3D11 devices");
         auto native=acquireNativeFlipTarget(swap,device,display);
         if(const auto error=std::get_if<Error>(&native)) {
             spdlog::warn("Owned scene preparation deferred: {}",error->message);return;
@@ -582,22 +810,32 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
         sessionAttempted=true;
         auto plan=prepareWorldOwnedSrPlan(device,context,display);
         if(const auto error=std::get_if<Error>(&plan)) {
-            spdlog::info("Owned scene plan unavailable: {}",error->message);
-            abandonWorldOwnedSrPlan(context);
-            return;
+            spdlog::warn("Owned DLSS plan unavailable; early scene will use display-sized spatial fallback: {}",
+                error->message);
+            useWorldOwnedSpatialFallback();
+            const auto stopped=abandonWorldOwnedSrPlan(context);
+            if(const auto problem=std::get_if<Error>(&stopped))
+                spdlog::warn("Owned DLSS preflight teardown unavailable: {}",problem->message);
+            sessionAttempted=false;
         }
-        const auto render=std::get<Extent>(plan);
-        auto surface=createReducedSdrSurface(device,display,render);
-        if(const auto error=std::get_if<Error>(&surface))
-            throw std::runtime_error(error->message);
-        auto route=std::make_unique<OwnedSwapBufferRoute>();
-        if(FAILED(route->configure(trace->selectedSwap,trace->next,
-            std::move(std::get<ReducedSdrSurface>(surface)),1)))
-            throw std::runtime_error("Verified ReShade swap rejected reduced alias");
+        const auto render=trace->route->renderExtent();
+        if(const auto provider=std::get_if<Extent>(&plan);
+           provider&&(provider->width!=render.width||provider->height!=render.height)) {
+            spdlog::warn("Owned DLSS plan {}x{} differs from early scene {}x{}; display-sized spatial fallback selected",
+                provider->width,provider->height,render.width,render.height);
+            useWorldOwnedSpatialFallback();
+            const auto stopped=abandonWorldOwnedSrPlan(context);
+            if(const auto problem=std::get_if<Error>(&stopped))
+                spdlog::warn("Owned DLSS mismatch teardown unavailable: {}",problem->message);
+            sessionAttempted=false;
+        }
+        if(display.width!=trace->route->displayExtent().width||
+           display.height!=trace->route->displayExtent().height)
+            throw std::runtime_error("Outer display differs from early owned scene extent");
         if(!ownedDomain.configure({render,display,1}))
             throw std::runtime_error("Owned world phase plan rejected");
         const auto ui=installOwnedUiContextHooks(context,ownedDomain,
-            route->sceneTexture(),std::get<NativeFlipTarget>(native).view.Get(),
+            trace->route->sceneTexture(),std::get<NativeFlipTarget>(native).view.Get(),
             disabledPatchIds);
         if(const auto error=std::get_if<Error>(&ui))
             throw std::runtime_error(error->message);
@@ -606,8 +844,6 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
         DXGI_SWAP_CHAIN_DESC chain{};
         if(FAILED(swap->GetDesc(&chain))||!chain.OutputWindow)
             throw std::runtime_error("Owned game window unavailable");
-        trace->route=std::move(route);
-        trace->outerSwap=swap;
         trace->gameBase=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
         trace->gameHash=std::string(skyrim1170CreationProfile().gameSha256);
         const auto rect=activateOwnedRendererRect(ownedDomain,chain.OutputWindow);
@@ -615,14 +851,14 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
             throw std::runtime_error(error->message);
         if(!std::get<bool>(rect))
             throw std::runtime_error("Owned renderer rectangle was already activated");
-        trace->ownedArmed.store(true,std::memory_order_release);
+        trace->integrationReady.store(true,std::memory_order_release);
         ownedEverActive.store(true,std::memory_order_release);
         committed=true;
-        try {spdlog::info("Owned scene route armed before Skyrim view-cache GetBuffer: render={}x{} display={}x{}; native flip index={}; UI/rect hooks prepared",
+        try {spdlog::info("Early owned scene integration completed before Skyrim view-cache GetBuffer: render={}x{} display={}x{}; native flip index={}; provider/UI/rect hooks prepared",
             render.width,render.height,display.width,display.height,
             std::get<NativeFlipTarget>(native).index);}catch(...) {}
     } catch(const std::exception& error) {
-        try {spdlog::warn("Owned scene preparation failed; alias remains native: {}",error.what());}
+        try {spdlog::warn("Late owned scene integration failed after early publication; stable early resource remains selected until restart: {}",error.what());}
         catch(...) {}
         if(!committed)releasePreparedUiHook();
         if(sessionAttempted&&!committed) {
@@ -631,7 +867,7 @@ void prepareOwnedSceneAtCreation(const DeviceCreationArgs& args,
                 try {spdlog::warn("Owned scene NGX teardown failed: {}",problem->message);}catch(...) {}
         }
     } catch(...) {
-        try {spdlog::warn("Owned scene preparation failed; alias remains native");}catch(...) {}
+        try {spdlog::warn("Late owned scene integration failed after early publication; stable early resource remains selected until restart");}catch(...) {}
         if(!committed)releasePreparedUiHook();
         if(sessionAttempted&&!committed)abandonWorldOwnedSrPlan(context);
     }
@@ -902,6 +1138,10 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         auto pending=std::make_unique<ObserverLease>();
         pending->original=reinterpret_cast<CreateD3D11>(original); pending->notification=notification;
         pending->disabledPatchIds=settings.get<Text>("Patching.DisabledPatchIds").value;
+        constexpr std::string_view exactEnbHash=
+            "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58";
+        if(ownerIdentity.hash==exactEnbHash&&ownerIdentity.size==4664320)
+            pending->exactEnbOwner=owner;
         HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
         constexpr DWORD pinFlags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
         if (!GetModuleHandleExW(pinFlags,reinterpret_cast<LPCWSTR>(&createProxy),&pinnedSelf) ||

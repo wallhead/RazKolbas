@@ -8,6 +8,7 @@
 TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[owned_route_profile]") {
     const auto& factory=rk::reshade673FactoryCreateSite();
     const auto& buffer=rk::reshade673SwapGetBufferSite();
+    const auto& description=rk::reshade673SwapGetDescSite();
     REQUIRE(factory.moduleSha256==buffer.moduleSha256);
     REQUIRE(factory.tableRva==0x3d79d0);
     REQUIRE(factory.slot==10);
@@ -15,9 +16,12 @@ TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[
     REQUIRE(buffer.tableRva==0x3d7f90);
     REQUIRE(buffer.slot==9);
     REQUIRE(buffer.methodRva==0x13b460);
+    REQUIRE(description.tableRva==0x3d7f90);
+    REQUIRE(description.slot==12);
+    REQUIRE(description.methodRva==0x13b690);
     constexpr std::uintptr_t base=0x7ffc6b260000;
     std::vector<std::uint8_t> image(factory.imageSize);
-    for(const auto* site:{&factory,&buffer}) {
+    for(const auto* site:{&factory,&buffer,&description}) {
         const auto address=base+site->methodRva;
         std::memcpy(image.data()+site->tableRva+site->slot*8,&address,8);
         std::memcpy(image.data()+site->methodRva,site->prologue.data(),16);
@@ -32,6 +36,18 @@ TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[
         std::string(64,'0'),factory.fileSize,factory.tableRva,factory)));
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(image,base,
         factory.moduleSha256,factory.fileSize,factory.tableRva+8,factory)));
+}
+
+TEST_CASE("Only exact ENB creation consumers use the early scene contract", "[owned_route_profile]") {
+    constexpr std::uintptr_t base=0x180000000;
+    constexpr auto hash="47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58";
+    REQUIRE(rk::isEnb20260508OwnedSceneBufferCall(base+0x5e580,base,hash));
+    REQUIRE(rk::isEnb20260508OwnedSceneBufferCall(base+0x5e795,base,hash));
+    REQUIRE_FALSE(rk::isEnb20260508OwnedSceneBufferCall(base+0x5e581,base,hash));
+    REQUIRE_FALSE(rk::isEnb20260508OwnedSceneBufferCall(base+0x5e580,base,"other"));
+    REQUIRE(rk::isEnb20260508ReducedDescriptionCall(base+0x5e53e,base,hash));
+    REQUIRE(rk::isEnb20260508ReducedDescriptionCall(base+0x4872d,base,hash));
+    REQUIRE_FALSE(rk::isEnb20260508ReducedDescriptionCall(base+0x4872e,base,hash));
 }
 
 TEST_CASE("ENB context methods retain their current downstream ownership", "[owned_route_profile]") {

@@ -7,6 +7,10 @@
 namespace rk {
 enum class UpscaleQuality { NativeAA, Quality, Balanced, Performance, UltraPerformance };
 std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexcept;
+// Creation-time plan that does not require an initialized provider. A later
+// provider query must be checked against this extent before evaluation.
+Extent planEarlyOwnedScene(Extent display,UpscaleQuality quality,
+    double manualScale) noexcept;
 enum class RenderDomain { World, Ui };
 struct ScissorExtent {
     std::uint32_t x{},y{},width{},height{};

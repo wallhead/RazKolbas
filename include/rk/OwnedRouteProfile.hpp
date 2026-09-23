@@ -17,6 +17,7 @@ struct OwnedRouteSite {
 };
 const OwnedRouteSite& reshade673FactoryCreateSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept;
+const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
 const OwnedRouteSite& enbContextOmSite() noexcept;
 const OwnedRouteSite& enbContextViewportSite() noexcept;
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept;
@@ -32,4 +33,8 @@ bool isSkyrim1170OwnedSceneBufferCall(std::uintptr_t returnAddress,
     std::uintptr_t gameBase,std::string_view verifiedGameHash,
     IDXGISwapChain* swap,IDXGISwapChain* selectedSwap,
     UINT index,REFIID iid) noexcept;
+bool isEnb20260508OwnedSceneBufferCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
+bool isEnb20260508ReducedDescriptionCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
 }

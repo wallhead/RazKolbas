@@ -20,6 +20,14 @@ const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept {
          0xcc,0xcc,0xcc,0xcc,0xcc}};
     return site;
 }
+const OwnedRouteSite& reshade673SwapGetDescSite() noexcept {
+    static constexpr OwnedRouteSite site{"reshade673.swap.get-desc-owned-scene-v1",
+        "059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc",
+        5157144,0x51c000,0x3d7f90,0x13b690,12,
+        {0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57,
+         0x48,0x83,0xec,0x70,0x44}};
+    return site;
+}
 const OwnedRouteSite& enbContextOmSite() noexcept {
     static constexpr OwnedRouteSite site{"enb20260508.context.om-owned-ui-v1",
         "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
@@ -72,5 +80,21 @@ bool isSkyrim1170OwnedSceneBufferCall(std::uintptr_t returnAddress,
         verifiedGameHash==gameHash&&returnAddress==gameBase+returnRva&&
         swap&&swap==selectedSwap&&index==0&&
         IsEqualIID(iid,__uuidof(ID3D11Texture2D));
+}
+bool isEnb20260508OwnedSceneBufferCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept {
+    constexpr std::string_view hash=
+        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58";
+    if(!enbBase||verifiedEnbHash!=hash||
+       enbBase>std::numeric_limits<std::uintptr_t>::max()-0x5e795)return false;
+    return returnAddress==enbBase+0x5e580||returnAddress==enbBase+0x5e795;
+}
+bool isEnb20260508ReducedDescriptionCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept {
+    constexpr std::string_view hash=
+        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58";
+    if(!enbBase||verifiedEnbHash!=hash||
+       enbBase>std::numeric_limits<std::uintptr_t>::max()-0x5e53e)return false;
+    return returnAddress==enbBase+0x5e53e||returnAddress==enbBase+0x4872d;
 }
 }

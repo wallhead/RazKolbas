@@ -58,6 +58,11 @@ TEST_CASE("Both observer IDs support selective disable lists", "[swap_observer]"
     REQUIRE_FALSE(rk::validDisabledPatchIds("unknown"));REQUIRE_FALSE(rk::validDisabledPatchIds(ids+","));
     REQUIRE_FALSE(rk::validDisabledPatchIds(std::string(rk::swapObserverPatchId)+","+std::string(rk::swapObserverPatchId)));
 }
+TEST_CASE("Cross-thread owned resize is deferred until the render owner", "[swap_observer]") {
+    REQUIRE_FALSE(rk::resizeNeedsOwnerThread(0,42));
+    REQUIRE_FALSE(rk::resizeNeedsOwnerThread(42,42));
+    REQUIRE(rk::resizeNeedsOwnerThread(42,43));
+}
 TEST_CASE("Swap profile selection includes only the observed exact ENB outer table", "[swap_observer]") {
     const auto* enb=rk::findSwapProfile("47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",0x1a4848);
     REQUIRE(enb!=nullptr);REQUIRE(enb->id==rk::enbSwapObserverPatchId);REQUIRE(enb->methodCount==3);

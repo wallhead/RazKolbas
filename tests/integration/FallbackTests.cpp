@@ -154,3 +154,36 @@ TEST_CASE("SDR fallback produces display-sized colour from a reduced frame", "[f
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::produceSdrSpatialFallback(context.Get(),frame.output(),0,4)));
 }
+
+TEST_CASE("Emergency SDR publication binds its display and restores prior state",
+    "[fallback]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=desc.Height=2;desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    constexpr std::array<std::uint8_t,16> pixels{
+        255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255};
+    const D3D11_SUBRESOURCE_DATA initial{pixels.data(),8,0};
+    ComPtr<ID3D11Texture2D> source;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,&initial,&source)));
+    desc.Width=desc.Height=4;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> display,prior;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&display)));
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&prior)));
+    ComPtr<ID3D11RenderTargetView> priorView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(prior.Get(),nullptr,&priorView)));
+    context->OMSetRenderTargets(1,priorView.GetAddressOf(),nullptr);
+    const auto published=rk::publishSdrSpatialFallbackToDisplay(
+        context.Get(),source.Get(),display.Get());
+    const auto reason=std::holds_alternative<rk::Error>(published)?
+        std::get<rk::Error>(published).message:"success";
+    INFO(reason);
+    REQUIRE(std::holds_alternative<rk::SpatialFallbackFrame>(published));
+    ComPtr<ID3D11RenderTargetView> restored;
+    context->OMGetRenderTargets(1,&restored,nullptr);
+    REQUIRE(restored.Get()==priorView.Get());
+}

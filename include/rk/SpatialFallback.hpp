@@ -32,4 +32,9 @@ Result<SpatialFallbackFrame> produceSdrSpatialFallback(ID3D11DeviceContext* cont
 Result<SpatialFallbackFrame> produceSdrSpatialFallbackToDisplay(
     ID3D11DeviceContext* context,ID3D11Texture2D* source,
     ID3D11Texture2D* display);
+// Temporarily binds an arbitrary display texture, publishes the spatial
+// frame, and restores every prior D3D11 binding before returning.
+Result<SpatialFallbackFrame> publishSdrSpatialFallbackToDisplay(
+    ID3D11DeviceContext* context,ID3D11Texture2D* source,
+    ID3D11Texture2D* display);
 }

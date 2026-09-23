@@ -10,4 +10,8 @@ using FactoryCreatedFn=void(*)(IDXGIFactory*,IUnknown*,
 HRESULT observeFactoryCreate(FactoryCreateFn next,IDXGIFactory* factory,
     IUnknown* device,DXGI_SWAP_CHAIN_DESC* description,IDXGISwapChain** output,
     FactoryCreatedFn observed,void* context) noexcept;
+// Select only the captured game factory and the verified native SDR flip
+// contract before consuming the process-lifetime early-route attempt.
+bool isOwnedSceneFactoryCandidate(IDXGIFactory* factory,
+    IDXGIFactory* expected,const DXGI_SWAP_CHAIN_DESC* description) noexcept;
 }

@@ -205,4 +205,21 @@ Result<SpatialFallbackFrame> produceSdrSpatialFallbackToDisplay(
         {},std::move(completion),
         output.Width,output.Height};
 }
+Result<SpatialFallbackFrame> publishSdrSpatialFallbackToDisplay(
+    ID3D11DeviceContext* context,ID3D11Texture2D* source,
+    ID3D11Texture2D* display) {
+    if(!context||!source||!display||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::InvalidInput,"Emergency SDR publication arguments are invalid"};
+    ComPtr<ID3D11Device> device;
+    context->GetDevice(device.GetAddressOf());
+    if(!device)return Error{ErrorCode::Unavailable,"Emergency SDR device is unavailable"};
+    ComPtr<ID3D11RenderTargetView> target;
+    if(FAILED(device->CreateRenderTargetView(display,nullptr,target.GetAddressOf()))||!target)
+        return Error{ErrorCode::Unavailable,"Emergency SDR display view is unavailable"};
+    auto isolated=D3D11StateScope::begin(context);
+    if(const auto error=std::get_if<Error>(&isolated))return *error;
+    auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
+    context->OMSetRenderTargets(1,target.GetAddressOf(),nullptr);
+    return produceSdrSpatialFallbackToDisplay(context,source,display);
+}
 }

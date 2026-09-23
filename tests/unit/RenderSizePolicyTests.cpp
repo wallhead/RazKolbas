@@ -11,6 +11,19 @@ TEST_CASE("Configured SR quality has a complete exact mapping", "[render_size_po
     REQUIRE_FALSE(rk::parseUpscaleQuality("quality").has_value());
 }
 
+TEST_CASE("Early owned scene sizing is deterministic before provider creation", "[render_size_policy]") {
+    const rk::Extent display{2560,1440};
+    const auto quality=rk::planEarlyOwnedScene(display,rk::UpscaleQuality::Quality,0.0);
+    REQUIRE(quality.width==1707);REQUIRE(quality.height==960);
+    const auto performance=rk::planEarlyOwnedScene(display,rk::UpscaleQuality::Performance,0.0);
+    REQUIRE(performance.width==1280);REQUIRE(performance.height==720);
+    const auto manual=rk::planEarlyOwnedScene(display,rk::UpscaleQuality::Quality,0.6);
+    REQUIRE(manual.width==1536);REQUIRE(manual.height==864);
+    REQUIRE_FALSE(rk::planEarlyOwnedScene(display,rk::UpscaleQuality::NativeAA,0.0).valid());
+    REQUIRE_FALSE(rk::planEarlyOwnedScene({0,1440},rk::UpscaleQuality::Quality,0.0).valid());
+    REQUIRE_FALSE(rk::planEarlyOwnedScene(display,rk::UpscaleQuality::Quality,0.1).valid());
+}
+
 TEST_CASE("Reduced world sizing requires both owned paths", "[render_size_policy]") {
     const rk::Extent display{2560,1440}, render{1280,720};
     auto native=rk::chooseRenderSize(display,render,false,true);

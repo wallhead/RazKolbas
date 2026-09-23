@@ -111,3 +111,38 @@ The earlier recommendation to preserve native ENB startup queries in
 `OWNED_SCENE_LIVE_CHAIN_1170.md` was a provisional strategy. It must now be
 reconsidered together with GetDesc and early scene-publication contracts.
 Do not broaden GetBuffer routing in isolation.
+
+## Runtime result: condition failed consistently
+
+The user-started 0.1.59 session on 2026-09-23 produced 64 samples. All had
+valid type-2 metadata and actual/metadata extent 1707x960, while the two ENB
+reference globals remained 2560x1440. The post-bind mask was `0x07` for a
+requested count of three; slots 5 and 6 were absent. There were no exceptions
+among the 64 records. This closes the diagnostic question: the recovered
+dimension requirement is false in the current late-alias design, and the
+associated attachment path is skipped.
+
+The selected correction is one creation-time resource contract. Allocation
+occurs in the already verified nested ReShade factory callback. ReShade swap
+table `0x3D7F90` slot 12 points to GetDesc RVA `0x13B690` in exact module
+SHA-256 `059168b9d8aaa694a02a64342409fa26dfdf335035f2c0184cc61581deffc3bc`;
+the first 16 bytes are
+`48 89 5c 24 08 48 89 74 24 10 57 48 83 ec 70 44`.
+That method is now a version-checked hook candidate alongside GetBuffer.
+Only exact ENB callers receive the reduced description, and only the two
+exact early ENB GetBuffer callers plus Skyrim's exact view-cache caller
+receive the scene. Presentation and diagnostics retain native access.
+
+Publication additionally requires the captured factory identity, a validated
+SDR flip creation descriptor, the exact ENB creation owner and unchanged ENB
+UI context sites. The scene device must match the nested swap and is checked
+again against the outer device/context/swap before UI integration. Provider
+preflight is optional for route completeness: if NGX is unavailable or its
+optimal size differs, the owned scene still publishes through the existing
+display-sized spatial fallback. A matching ResizeBuffers call disables new
+owned GetDesc/GetBuffer responses before forwarding and retains the old scene
+until process retirement. Cross-thread resize is rejected until cleanup is
+marshaled through the render-thread Present boundary. If outer device, UI,
+rectangle or native-target setup fails after early publication, the verified
+nested Present boundary performs display-sized spatial publication from the
+same scene instead of reverting ENB to another cached resource identity.

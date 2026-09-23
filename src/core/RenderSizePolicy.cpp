@@ -1,5 +1,6 @@
 #include "rk/RenderSizePolicy.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace rk {
 std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexcept {
@@ -9,6 +10,27 @@ std::optional<UpscaleQuality> parseUpscaleQuality(std::string_view value) noexce
     if(value=="Performance")return UpscaleQuality::Performance;
     if(value=="UltraPerformance")return UpscaleQuality::UltraPerformance;
     return std::nullopt;
+}
+Extent planEarlyOwnedScene(Extent display,UpscaleQuality quality,
+    double manualScale) noexcept {
+    if(!display.valid()||display.width>8192||display.height>8192||
+       !std::isfinite(manualScale)||manualScale<0.0||manualScale>=1.0||
+       (manualScale>0.0&&manualScale<0.125)||quality==UpscaleQuality::NativeAA)
+        return {};
+    double scale=manualScale;
+    if(scale==0.0) {
+        switch(quality) {
+        case UpscaleQuality::Quality:scale=2.0/3.0;break;
+        case UpscaleQuality::Balanced:scale=0.58;break;
+        case UpscaleQuality::Performance:scale=0.5;break;
+        case UpscaleQuality::UltraPerformance:scale=1.0/3.0;break;
+        default:return {};
+        }
+    }
+    const auto width=static_cast<std::uint32_t>(std::lround(display.width*scale));
+    const auto height=static_cast<std::uint32_t>(std::lround(display.height*scale));
+    if(!width||!height||width>=display.width&&height>=display.height)return {};
+    return {width,height};
 }
 RenderSizePlan chooseRenderSize(Extent display,Extent requested,
     bool worldTargetReady,bool displayPathReady) noexcept {

@@ -56,3 +56,29 @@ TEST_CASE("Factory CreateSwapChain trace preserves the real WARP COM result",
     swap.Reset();
     DestroyWindow(window);
 }
+
+TEST_CASE("Early owned scene admits only the captured native SDR factory contract",
+    "[factory_create_trace]") {
+    auto* expected=reinterpret_cast<IDXGIFactory*>(0x1000);
+    DXGI_SWAP_CHAIN_DESC desc{};
+    desc.BufferDesc.Width=2560;desc.BufferDesc.Height=1440;
+    desc.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount=3;desc.OutputWindow=reinterpret_cast<HWND>(0x2000);
+    desc.Windowed=TRUE;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    REQUIRE(rk::isOwnedSceneFactoryCandidate(expected,expected,&desc));
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(
+        reinterpret_cast<IDXGIFactory*>(0x1001),expected,&desc));
+    auto changed=desc;changed.BufferDesc.Format=DXGI_FORMAT_R10G10B10A2_UNORM;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+    changed=desc;changed.SampleDesc.Count=2;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+    changed=desc;changed.BufferCount=1;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+    changed=desc;changed.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+    changed=desc;changed.BufferUsage=DXGI_USAGE_SHADER_INPUT;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+    changed=desc;changed.OutputWindow=nullptr;
+    REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
+}

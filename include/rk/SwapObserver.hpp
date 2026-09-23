@@ -6,6 +6,7 @@ inline constexpr std::string_view swapObserverPatchId="reshade673.swapchain-obse
 inline constexpr std::string_view enbSwapObserverPatchId="enb20260508.swapchain-observe-v1";
 bool validDisabledPatchIds(std::string_view ids);
 bool patchDisabled(std::string_view ids,std::string_view id);
+bool resizeNeedsOwnerThread(DWORD ownerThread,DWORD currentThread) noexcept;
 enum class SwapCall { Release, Present, Resize, Present1, Resize1 };
 struct SwapEvent {
     SwapCall call{};

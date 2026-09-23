@@ -4,6 +4,9 @@
 #include <limits>
 #include <optional>
 namespace rk {
+bool resizeNeedsOwnerThread(DWORD ownerThread,DWORD currentThread) noexcept {
+    return ownerThread&&ownerThread!=currentThread;
+}
 namespace {
 std::string_view trimId(std::string_view id) {
     const auto first=id.find_first_not_of(" \t");

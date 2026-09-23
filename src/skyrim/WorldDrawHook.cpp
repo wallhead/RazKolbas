@@ -88,6 +88,8 @@ struct WorldState {
     OwnedSceneAdmissionGate menuSceneGate;
     bool ownedInputCaptureOnly{};
     bool ownedSpatialBaseline{};
+    UpscaleQuality earlyQuality{UpscaleQuality::Quality};
+    double manualRenderScale{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
@@ -1456,6 +1458,21 @@ void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
     state->createdSwap.store(reinterpret_cast<std::uintptr_t>(swap),std::memory_order_relaxed);
     state->createdDevice.store(reinterpret_cast<std::uintptr_t>(device),std::memory_order_release);
 }
+Result<Extent> planWorldOwnedScene(Extent display) noexcept {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!state->srRequested)
+        return Error{ErrorCode::Unsupported,"Owned world SR is not requested"};
+    const auto render=planEarlyOwnedScene(display,state->earlyQuality,
+        state->manualRenderScale);
+    if(!render.valid())
+        return Error{ErrorCode::InvalidInput,"Early owned scene extent is invalid"};
+    return render;
+#else
+    (void)display;
+    return Error{ErrorCode::Unsupported,"NVIDIA SDR SR runtime is not built"};
+#endif
+}
 Result<Extent> prepareWorldOwnedSrPlan(ID3D11Device* device,
     ID3D11DeviceContext* context,Extent display) {
 #ifdef RK_WITH_NGX
@@ -1470,6 +1487,14 @@ Result<Extent> prepareWorldOwnedSrPlan(ID3D11Device* device,
 #else
     (void)device;(void)context;(void)display;
     return Error{ErrorCode::Unsupported,"NVIDIA SDR SR runtime is not built"};
+#endif
+}
+void useWorldOwnedSpatialFallback() noexcept {
+#ifdef RK_WITH_NGX
+    if(auto* state=active.load(std::memory_order_acquire)) {
+        state->ownedNgxInitFailed=true;
+        state->statusDlssDisabled.store(true,std::memory_order_release);
+    }
 #endif
 }
 Result<bool> abandonWorldOwnedSrPlan(ID3D11DeviceContext* context) {
@@ -1538,6 +1563,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
        const auto error=std::get_if<Error>(&configured))return *error;
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;
+    pending->earlyQuality=*quality;
+    pending->manualRenderScale=settings.get<double>("Upscaling.ManualRenderScale");
     pending->ownedSpatialBaseline=
         settings.get<bool>("Diagnostics.SpatialBaselineOnly");
     if(pending->ownedSpatialBaseline)

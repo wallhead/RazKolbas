@@ -1,5 +1,71 @@
 # Implementation checkpoint
 
+## 0.1.59 proves the reduced-scene ENB dimension failure (2026-09-23, 12:09 launch)
+
+The user started Skyrim and loaded a save with ReShade unchanged. PID 4040
+started at 12:09:12 and exited normally after a window-close request once
+collection was complete. The exact 0.1.59 manifest and payload hashes matched
+the installed mod. This session produced 64 bounded ENB target samples from
+world-forwarded frame 0 through 37,800. Every sample reported:
+
+- actual and private-metadata HDR target `1707x960`, format 10;
+- readable ENB reference dimensions `2560x1440`;
+- `dimensionMatch=false`;
+- requested target count 3, resulting bound mask `0x07`, with slots 5/6 absent.
+
+There were zero error records. The three warning records were the existing
+first-frame owned-admission messages. Spatial publication continued and no
+NGX evaluation was used. This proves the dimension condition recovered at
+ENB RVA `0x691CB/0x691D3` is false on the reduced route and that its two
+auxiliary attachments are skipped in the observed calls. It does not identify
+the artistic names or contents of those attachments, nor does it exclude a
+separate ReShade issue after this condition is repaired.
+
+The full cumulative log is retained under ignored
+`artifacts/local/runtime-0.1.59-enb-target-probe-2026-09-23-1209/RazKolbas.log`,
+SHA-256 `9bdf8307b7656fc8bd7db6abc4f2ab8a34acf13b726f3f0d0c9c174948eb9678`.
+Current-session filtering produced 822 lines; all 64 probe lines matched the
+same failed dimension/attachment result.
+
+The next implementation moves owned scene allocation to the nested factory
+callback before ENB's first description/buffer query. A verified ReShade
+GetDesc slot 12 hook exposes reduced dimensions only to exact ENB callers
+`0x5E53E` and `0x4872D`; exact ENB buffer callers `0x5E580/0x5E795` and
+Skyrim `0xE4CC87` share the stable scene. RazKolbas and ReShade presentation
+callers continue to receive the native buffer. Provider/UI/presentation
+attachment remains in the outer callback and must match the early extent.
+Early publication is admitted only for the captured factory, the verified SDR
+flip descriptor, the exact ENB creation owner and unchanged ENB UI vtable
+sites. The reduced surface must share canonical D3D11 device identity with
+the nested swap, outer device, context and swap. NGX preflight failure or an
+optimal-size mismatch now commits the same route with display-sized spatial
+publication instead of abandoning the reduced scene. Resize atomically stops
+new owned queries before native resize, retains the old scene for outstanding
+references and defers cross-thread UI cleanup to the render thread. A foreign
+thread cannot forward ResizeBuffers while that cleanup remains pending; an
+owner-thread retry drains it synchronously before forwarding.
+
+The first test run failed on the missing APIs; the implemented path passes
+the focused 352 assertions in 23 cases and all 36 Debug and Release CTest
+groups. Independent review found the initial admission, provider-failure,
+device-lineage and resize gaps; each was corrected before packaging. If any
+late outer integration step fails, the nested ReShade Present hook now draws
+the same reduced scene to the native inner flip target with the existing
+spatial presenter. This preserves a complete display path after ENB has
+cached the early resource while leaving the normal path untouched once late
+integration succeeds.
+
+The supplied `PureDark_ENB_Integration_11.zip` was read only as reference
+evidence (SHA-256
+`46d41c628e3ea1ee4707f4eff94a2dc60f382cd7588f26b4c5b6a77252237db7`).
+Its independently decoded reference path confirms that AIO constructs the
+owned proxy during nested factory creation and has a host pre-Present
+missing-work path before forwarding Present. It identifies no ENB SDK
+resolution callback and supports the selected description-plus-resource
+contract. The archive remains outside the repository.
+
+Game runtime verification of this implementation is NOT RUN.
+
 ## 0.1.59 ENB target-dimension diagnostic installed (2026-09-23)
 
 Read-only RE of the exact installed ENB found that its HDR MRT attachment
