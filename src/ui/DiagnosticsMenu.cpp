@@ -70,16 +70,21 @@ bool persistSettings(MenuState& state) {
     state.saveMessage="Saved to RazKolbas.ini";
     return true;
 }
+struct MenuChoice { const char* value;const char* label; };
+const char* choiceLabel(std::string_view value,std::span<const MenuChoice> choices) {
+    for(const auto& choice:choices)if(value==choice.value)return choice.label;
+    return "Unknown";
+}
 bool choiceControl(const char* label,const char* key,
-    std::span<const char* const> choices,MenuState& state) {
+    std::span<const MenuChoice> choices,MenuState& state) {
     auto& current=state.requestedSettings.values.at(key);
     auto& selected=std::get<Choice>(current).value;
     bool changed=false;
-    if(ImGui::BeginCombo(label,selected.c_str())) {
-        for(const auto* choice:choices) {
-            const bool active=selected==choice;
-            if(ImGui::Selectable(choice,active)) {
-                selected=choice;changed=true;
+    if(ImGui::BeginCombo(label,choiceLabel(selected,choices))) {
+        for(const auto& choice:choices) {
+            const bool active=selected==choice.value;
+            if(ImGui::Selectable(choice.label,active)) {
+                selected=choice.value;changed=true;
             }
             if(active)ImGui::SetItemDefaultFocus();
         }
@@ -89,16 +94,22 @@ bool choiceControl(const char* label,const char* key,
 }
 void drawControls(MenuState& state,const DiagnosticsSnapshot& status) {
     if(!state.controlsConfigured)return;
-    ImGui::Separator();
-    ImGui::TextUnformatted("DLSS controls");
-    static constexpr const char* qualities[]{
-        "NativeAA","Quality","Balanced","Performance","UltraPerformance"};
-    static constexpr const char* presets[]{"Auto","J","K","L","M"};
+    static constexpr MenuChoice qualities[]{
+        {"Performance","Performance"},{"Balanced","Balanced"},
+        {"Quality","Quality"},{"UltraPerformance","Ultra Performance"},
+        {"NativeAA","Native (DLAA)"}};
+    static constexpr MenuChoice presets[]{
+        {"Auto","Default (Auto)"},{"J","Preset J"},{"K","Preset K"},
+        {"L","Preset L"},{"M","Preset M"}};
     bool restartChanged=false;
-    restartChanged|=choiceControl("Quality","Upscaling.Quality",qualities,state);
-    restartChanged|=choiceControl("Model preset","Upscaling.ModelPreset",presets,state);
+    ImGui::SetNextItemWidth(220.0f);
+    restartChanged|=choiceControl("Quality Level","Upscaling.Quality",qualities,state);
     if(ImGui::IsItemHovered())
-        ImGui::SetTooltip("K: recommended quality model\nJ: less ghosting, more flicker\nL: Ultra Performance default\nM: Performance default");
+        ImGui::SetTooltip("Selects the DLSS input resolution.\nNative uses DLAA at display resolution.");
+    ImGui::SetNextItemWidth(220.0f);
+    restartChanged|=choiceControl("DLSS Preset","Upscaling.ModelPreset",presets,state);
+    if(ImGui::IsItemHovered())
+        ImGui::SetTooltip("Presets select a trained model and do not change render resolution.\nK: recommended for DLAA, Quality and Balanced\nJ: less ghosting, more flicker\nL: Ultra Performance default\nM: Performance default");
     if(restartChanged) {
         state.settingsDirty=true;
         persistSettings(state);
@@ -107,21 +118,24 @@ void drawControls(MenuState& state,const DiagnosticsSnapshot& status) {
     const auto& activePreset=state.activeSettings.get<Choice>("Upscaling.ModelPreset").value;
     const auto& requestedQuality=state.requestedSettings.get<Choice>("Upscaling.Quality").value;
     const auto& requestedPreset=state.requestedSettings.get<Choice>("Upscaling.ModelPreset").value;
-    ImGui::TextDisabled("Active: %s / preset %s",activeQuality.c_str(),activePreset.c_str());
+    ImGui::TextDisabled("Active: %s / %s",
+        choiceLabel(activeQuality,qualities),choiceLabel(activePreset,presets));
     if(requestedQuality!=activeQuality||requestedPreset!=activePreset)
         ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
-            "Saved for next game launch");
+            "Quality or preset saved - restart Skyrim to apply");
 
     bool sharpening=state.requestedSettings.get<bool>("Upscaling.Sharpening");
     float sharpness=static_cast<float>(
         state.requestedSettings.get<double>("Upscaling.Sharpness"));
-    if(ImGui::Checkbox("Post-DLSS sharpening",&sharpening)) {
+    ImGui::Spacing();
+    if(ImGui::Checkbox("Enable Sharpening",&sharpening)) {
         state.requestedSettings.values["Upscaling.Sharpening"]=sharpening;
         state.pendingSharpening=SharpeningUpdate{sharpening,sharpness};
         state.settingsDirty=true;
         persistSettings(state);
     }
     ImGui::BeginDisabled(!sharpening);
+    ImGui::SetNextItemWidth(220.0f);
     if(ImGui::SliderFloat("Sharpness",&sharpness,0.0f,1.0f,"%.2f")) {
         state.requestedSettings.values["Upscaling.Sharpness"]=
             static_cast<double>(sharpness);
@@ -131,11 +145,52 @@ void drawControls(MenuState& state,const DiagnosticsSnapshot& status) {
     const bool sliderFinished=ImGui::IsItemDeactivatedAfterEdit();
     ImGui::EndDisabled();
     if(sliderFinished)persistSettings(state);
-    ImGui::TextDisabled("Effective post sharpness: %.2f (updates live)",
+    ImGui::TextDisabled("Applied after DLSS, before native UI. Effective: %.2f",
         status.postSharpness);
     if(state.settingsDirty)ImGui::TextDisabled("Release the slider to save");
     else if(!state.saveMessage.empty())
         ImGui::TextDisabled("%s",state.saveMessage.c_str());
+}
+void drawUpscalingTab(MenuState& state,const DiagnosticsSnapshot& status,
+    UINT width,UINT height,const char* mode) {
+    ImGui::Text("Upscaler: NVIDIA DLSS");
+    ImGui::Text("Current Mode: %s",mode);
+    ImGui::Separator();
+    ImGui::Text("Display Resolution: %u x %u",width,height);
+    if(status.engineDrsKnown) {
+        ImGui::Text("Render Resolution: %u x %u",status.renderWidth,status.renderHeight);
+        const auto scaleX=width?100.0f*static_cast<float>(status.renderWidth)/width:0.0f;
+        const auto scaleY=height?100.0f*static_cast<float>(status.renderHeight)/height:0.0f;
+        ImGui::Text("Render Scale: %.1f%% x %.1f%%",scaleX,scaleY);
+    } else ImGui::TextDisabled("Render Resolution: unavailable");
+    ImGui::Spacing();
+    drawControls(state,status);
+}
+void drawDiagnosticsTab(const DiagnosticsSnapshot& status,
+    UINT width,UINT height,const char* mode) {
+    ImGui::Text("Effective frame: %s",mode);
+    ImGui::Text("DLAA: %s",status.mode==DisplayMode::Dlaa?"On":"Off");
+    ImGui::Text("DLSS Super Resolution: %s",
+        status.mode==DisplayMode::DlssSr?"On":"Off");
+    ImGui::Text("Reduced scene source: %s",status.srSourceReady?
+        "ready":status.ownedSceneActive?"active; guides pending":
+        status.srRequested?"awaiting same-frame proof":"not requested");
+    ImGui::Text("Native display: %u x %u",width,height);
+    if(status.dlaaSuspendedByDrs)
+        ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
+            "RazKolbas DLAA suspended by Skyrim DRS transition");
+    ImGui::Separator();
+    ImGui::Text("World frames: %llu",
+        static_cast<unsigned long long>(status.worldFrames));
+    ImGui::Text("DLSS submissions: %llu",
+        static_cast<unsigned long long>(status.dlssFrames));
+    ImGui::Text("SR fallback frames: %llu",
+        static_cast<unsigned long long>(status.skippedFrames));
+    if(status.dlssDisabled)ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
+        "DLSS disabled for this session");
+    ImGui::Separator();
+    ImGui::TextDisabled("Skyrim TAA: %s",
+        status.skyrimTaaActive?"still enabled":"off");
 }
 void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
     UINT width,UINT height,const char* hotkeyName) {
@@ -143,45 +198,22 @@ void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
         status.mode==DisplayMode::DlssSr?"DLSS Super Resolution":
         status.mode==DisplayMode::SpatialFallback?"Spatial upscaling":"Native";
     ImGui::SetNextWindowPos(ImVec2(32,32),ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(370,0),ImGuiCond_FirstUseEver);
-    if(ImGui::Begin("RazKolbas  |  Diagnostics",nullptr,
+    ImGui::SetNextWindowSize(ImVec2(470,0),ImGuiCond_FirstUseEver);
+    if(ImGui::Begin("RazKolbas Upscaler",nullptr,
         ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize|
         ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextDisabled("%s to hide",hotkeyName);
-        ImGui::Text("Effective frame: %s",mode);
-        ImGui::Separator();
-        ImGui::Text("DLAA: %s",status.mode==DisplayMode::Dlaa?"On":"Off");
-        ImGui::Text("DLSS Super Resolution: %s",
-            status.mode==DisplayMode::DlssSr?"On":"Off");
-        ImGui::Text("Reduced scene source: %s",status.srSourceReady?
-            "ready":status.ownedSceneActive?"active; guides pending":
-            status.srRequested?"awaiting same-frame proof":"not requested");
-        ImGui::Text("Native display: %u x %u",width,height);
-        if(status.engineDrsKnown) {
-            ImGui::Text("%s: %u x %u",status.ownedSceneActive?
-                "Owned render target":"Skyrim DRS target",
-                status.renderWidth,status.renderHeight);
-            ImGui::Text("%s: %.1f%% x %.1f%%",status.ownedSceneActive?
-                "Owned scale":"Skyrim scale",
-                width?100.0f*static_cast<float>(status.renderWidth)/width:0.0f,
-                height?100.0f*static_cast<float>(status.renderHeight)/height:0.0f);
-        } else ImGui::TextDisabled("Skyrim DRS target: unavailable");
-        if(status.dlaaSuspendedByDrs)
-            ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
-                "RazKolbas DLAA suspended by Skyrim DRS transition");
-        ImGui::Separator();
-        ImGui::Text("World frames: %llu",
-            static_cast<unsigned long long>(status.worldFrames));
-        ImGui::Text("DLSS submissions: %llu",
-            static_cast<unsigned long long>(status.dlssFrames));
-        ImGui::Text("SR fallback frames: %llu",
-            static_cast<unsigned long long>(status.skippedFrames));
-        if(status.dlssDisabled)ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
-            "DLSS disabled for this session");
-        drawControls(state,status);
-        ImGui::Separator();
-        ImGui::TextDisabled("Skyrim TAA: %s",
-            status.skyrimTaaActive?"still enabled":"off");
+        if(ImGui::BeginTabBar("RazKolbas Tabs")) {
+            if(ImGui::BeginTabItem("Upscaling")) {
+                drawUpscalingTab(state,status,width,height,mode);
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Diagnostics")) {
+                drawDiagnosticsTab(status,width,height,mode);
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
     }
     ImGui::End();
 }

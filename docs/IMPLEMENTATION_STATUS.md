@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## 0.1.66 reference-aligned menu layout (2026-09-23)
+
+The supplied `SkyrimUpscaler.ini` and recovered `SettingGUI.cpp` strings were
+inspected as reference evidence. The reference menu uses an Upscaling tab,
+labels its primary controls `Quality Level`, `DLSS Preset`, `Enable
+Sharpening` and `Sharpness`, explains that presets do not alter render
+resolution, and separates user controls from performance/debug information.
+Its current INI also confirms that A-E were removed after DLSS 3.10.4 and
+describes J/K/L/M consistently with the pinned NVIDIA headers.
+
+RazKolbas now follows that information architecture without exposing reference
+features it has not implemented. The End window is titled `RazKolbas
+Upscaler` and has `Upscaling` and `Diagnostics` tabs. The primary tab shows
+current DLSS mode, display resolution, render resolution and scale before the
+quality, preset and live sharpening controls. Friendly labels such as `Native
+(DLAA)`, `Ultra Performance` and `Preset K` are mapped to the validated INI
+tokens. Tooltips explain resolution and preset behavior. Detailed admission,
+fallback and frame counters remain on the Diagnostics tab. Runtime visual and
+mouse-interaction verification is pending.
+
 ## 0.1.64 game result and 0.1.65 in-game DLSS controls (2026-09-23)
 
 The user-started 0.1.64 loaded-save run passed. The user reported that the
