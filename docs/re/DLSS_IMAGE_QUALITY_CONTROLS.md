@@ -1,6 +1,7 @@
 # DLSS image-quality controls
 
-Status: **MIP-BIAS IMPLEMENTED; GAME TEST PENDING** on 2026-09-23.
+Status: **SAMPLER CONTRACT RESOLVED; POST-DLSS DETAIL PASS IMPLEMENTED;
+GAME TEST PENDING** on 2026-09-23.
 
 ## Runtime trigger
 
@@ -86,6 +87,22 @@ context's vtable, one wrapper address and one of slots 10/26/32/61/65/70 to
 pointer-patch helper RVA `0x172060`, then retain each returned downstream
 method. This independently confirms the target interface and slot mapping.
 
-The next build records a bounded six-bit ownership mask and power-of-two call
-summaries for each stage. Those summaries separate later slot replacement,
-no live calls, and descriptors rejected by the zero-bias/anisotropy predicate.
+The 0.1.63 run recorded a full `0x3f/0x3f` ownership mask and live calls through
+all observed stages. Pixel-stage traffic exceeded 16 million calls. Anisotropic
+samplers used existing bias `-1.0`; later pixel-stage traffic also showed
+`-0.5`. Zero-bias samples had no anisotropy. The reference predicate therefore
+rejects every observed sampler by design, explaining the zero replacements
+without changing the recovered contract.
+
+RazKolbas now keeps NGX's unsupported integrated sharpness field neutral and
+applies an independent contrast-limited five-tap filter to the display-sized
+DLSS texture before publication. Per channel, the shader derives an allowed
+negative neighbor weight from the four-neighbor minimum/maximum, clamps the
+combined lobe to `[-0.1875,0]`, applies `exp2(2*s-2)` gain for the configured
+`s` in `[0,1]`, and normalizes by `1 + 4*lobe`. It saturates RGB and preserves
+center alpha. The source SRVs and
+pipeline objects are cached; D3D11 context state is isolated and restored.
+Because publication precedes the existing native UI composition route, the
+filter affects the reconstructed scene rather than the native UI. This is an
+independent implementation informed by the recovered stage placement; it does
+not copy a reference shader or require a reference host DLL.

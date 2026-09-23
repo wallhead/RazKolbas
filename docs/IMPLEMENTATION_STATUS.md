@@ -1,5 +1,70 @@
 # Implementation checkpoint
 
+## 0.1.63 sampler result and 0.1.64 post-DLSS detail pass (2026-09-23)
+
+The user-started 0.1.63 loaded-save run resolved the sampler question. All six
+hooks remained installed (`0x3f/0x3f`) and received live traffic. The pixel
+stage exceeded 16 million calls. Every observed anisotropic sampler already
+had an authored negative bias, normally `-1.0`; later pixel-stage traffic also
+used `-0.5`. Observed zero-bias samplers had `MaxAnisotropy == 0`. Consequently
+no descriptor satisfied the reference predicate of zero bias plus anisotropy
+greater than one, and RazKolbas correctly created no replacement. Over the
+same run, native `2560x1440` mode-2 publication reached 8,760 DLSS submissions
+with zero errors, zero Present failures and zero fallback in flight. The four
+warnings were expected startup/admission messages. The responsive game was
+closed after evidence collection. The ignored filtered log is
+`artifacts/local/runtime-0.1.63-sampler-trace-2026-09-23-1937/current-session.log`,
+SHA-256
+`c0f8eac598c49475948e82a5f02f367af8dc1c070982eb229c30de3b0b1a1ec3`.
+
+This rules out hook overwrite, wrong vtable and missing sampler calls for this
+load order. Overriding ENB's existing `-1.0`/`-0.5` values would violate the
+recovered reference contract and could add shimmer. The temporary per-call
+descriptor telemetry is removed. The retained sampler path now caches
+permanently ineligible sampler identities, matching the reference behavior and
+avoiding repeated descriptor reads.
+
+The next candidate implements the missing independent image-detail control as
+a native-resolution contrast-limited five-tap D3D11 pass on the completed DLSS output. It runs
+immediately before publication into the active display target, so the existing
+native UI route composes afterward and is not sharpened. NGX receives neutral
+integrated sharpness because the pinned SDK marks that field unsupported. The
+pass preserves alpha, maps configured `Upscaling.Sharpness` in `[0,1]` to the
+recovered `exp2(2*s-2)` gain, bounds its negative lobe to `[-0.1875,0]`,
+caches shaders/constants and the three persistent output SRVs, and restores
+the caller's D3D11 state. A WARP test first failed with the renderer absent,
+then verified the expected adaptive five-tap output and argument validation.
+A presenter-level nonuniform fixture proves enabled sharpening changes the
+published pixel, disabled sharpening performs an exact copy, NGX receives
+neutral sharpness, and the active RTV is restored. All 38
+CTest groups pass in both Debug and Release. Actual Skyrim appearance and
+stability remain NOT RUN for this candidate.
+
+Source commit `4825fc0` is pushed to `codex/razkolbas-bootstrap`. Release DLL
+SHA-256 is
+`5c7b2171aa9c5661a5dcc78d5abda63b300af8da594687da3c58c16dc1eb1fb2`.
+The MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.64-post-sharpen-4825fc0.zip`
+has SHA-256
+`cb9f19e7654b9c11cd5f066ccb7a4f25304bae88de35f0039e1c247301bc435a`.
+Independent extraction verified exactly the four manifest payloads plus the
+manifest, every payload hash, and the NVIDIA runtime signature.
+
+Skyrim was absent during installation. All four prior 0.1.63 payloads matched
+their manifest before the complete mod was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.64-4825fc0`. Only the DLL and manifest
+were replaced. The installed user INI and signed NVIDIA runtime remain
+unchanged at SHA-256
+`2b3afaa42d207c07eb28d5de0f8fc53e5a7fdeb4179022d0b8134ec9f0d19d6c`
+and
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the 0.1.64 manifest, SHA-256
+`71af55c9e3363e6206591001ba38c6f9cd297b6a6d690aca484dfca397379167`,
+whose status is `EXPERIMENTAL_DLSS_POST_SHARPEN_PENDING_GAME_TEST`.
+The next user-started loaded-save run should verify continuous DLSS, an
+`ngxSharpness=0; postSharpness=0.3` startup line, no errors or Present
+failures, retained ENB/ReShade appearance and improved perceived scene detail.
+
 ## 0.1.62 mip-detail correction installed; game test pending (2026-09-23)
 
 The 0.1.61 run proved continuous owned DLSS evaluation and correct ENB/UI
