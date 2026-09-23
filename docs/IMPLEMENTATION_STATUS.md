@@ -1,5 +1,23 @@
 # Implementation checkpoint
 
+### Latest steering: reuse the known-good DLAA baseline
+
+The user clarified that the earlier native-resolution DLAA image looked
+correct. This removes the need to request a separate pure-native baseline
+run. Before any further launch, the temporary safe-mode setting was replaced
+with `SafeMode=false`, `Upscaling.Quality=NativeAA`, `ManualRenderScale=0.0`
+and `SpatialBaselineOnly=false`. The existing code excludes NativeAA from
+`srRequested`; owned-scene preparation therefore returns before reduced
+allocation, UI substitution or renderer-rectangle activation. The previous
+spatial INI remains backed up as recorded below. No DLL changed; the installed
+manifest was refreshed and all four payloads verified.
+
+This configures the existing native DLAA path; it is not a claim that the
+current binary has reproduced the earlier visual result. The next technical
+investigation is the difference between that previously good native path and
+the owned reduced path: renderer/resource sizing, ENB input identities and
+publication order. The safe-mode launch request below is superseded.
+
 ## 0.1.58 visual mismatch persists; native comparison prepared (2026-09-23)
 
 The user ran the spatial-only build and reported that ENB appeared missing.
