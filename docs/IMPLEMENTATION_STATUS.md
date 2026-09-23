@@ -1,5 +1,45 @@
 # Implementation checkpoint
 
+## 0.1.58 visual mismatch persists; native comparison prepared (2026-09-23)
+
+The user ran the spatial-only build and reported that ENB appeared missing.
+The current session (process 10660, started 11:32:21) confirms zero provider
+submissions, successful sampled Presents and menu-route activation at frame
+8792. The equal-frame admission fix worked: 49 admission records represent
+49 unique world frames. However, the menu gate still revoked admission when
+depth diversity fell, switching publication back to pre-Present. Thus the
+previous claim of a stable same-boundary spatial comparison was incorrect.
+This run does not establish the cause of the missing-effects appearance.
+
+The log is cumulative across launches. Current-session analysis must filter by
+startup timestamp; totals across the full file are not this run's results.
+The 441-line filtered snapshot contains three expected startup admission
+warnings, two sampled menu publications and 31 pre-Present publications.
+Full log SHA-256: `ccdfe4ecea6bec065025a8ef705c6c84968c0c9c60c3256b0c762ab2f416ab2d`.
+Filtered snapshot SHA-256:
+`2e376d5bbf236ae3f4c2f8f49905475ce602d7e740523ae7cabf1e01dd0e642a`.
+Both remain ignored under `artifacts/local/runtime-0.1.58-2026-09-23-1132/`.
+ENB's on-disk `UseEffect=true` and changed native-buffer hashes across ENB
+show activity, not full effect correctness or matching guide inputs.
+
+After collecting evidence, Skyrim closed normally. The installed INI now has
+`General.SafeMode=true`, which the verified startup predicate checks before
+installing any RazKolbas rendering hook. This is a true native comparison:
+no owned reduced-scene route, DLSS processing or RazKolbas overlay. No source
+or binary change was made, and ENB/ReShade settings were left untouched.
+The previous INI and manifest are backed up under ignored
+`artifacts/local/native-baseline-2026-09-23/`. All installed payloads match the
+updated manifest; INI SHA-256 is
+`6683d20b08b285ce7794b70324950ec264543067c08d154fb23fa75daede17bb`.
+The existing downloadable 0.1.58 spatial-baseline ZIP remains unchanged and
+does not contain this native-comparison setting.
+
+Next action: user starts Skyrim and loads the same save to establish whether
+ordinary ENB appearance returns with all RazKolbas render hooks absent.
+Do not re-enable DLSS or call visual parity fixed. Before another reduced-route
+candidate, revisit publication ownership and ENB input/resource ordering;
+passing resource-identity tests does not prove correct effects placement.
+
 ## 0.1.57 live depth evidence and spatial-baseline candidate (2026-09-23)
 
 The user-run 0.1.57 session loaded a world without a RazKolbas warning, error
