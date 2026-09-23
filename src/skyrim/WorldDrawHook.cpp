@@ -87,6 +87,7 @@ struct WorldState {
     OwnedSceneAdmissionGate ownedSceneGate;
     OwnedSceneAdmissionGate menuSceneGate;
     bool ownedInputCaptureOnly{};
+    bool ownedSpatialBaseline{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
@@ -546,6 +547,8 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     state->menuSceneGate.ready():state->ownedSceneGate.ready();
                 if(!sourceReady)
                     return Error{ErrorCode::Unavailable,"World colour and depth have not passed the owned NGX admission gate"};
+                if(state->ownedSpatialBaseline)
+                    return Error{ErrorCode::Unavailable,"Configured spatial baseline; NGX not submitted"};
                 if(state->ownedInputCaptureOnly) {
                     if(!state->ownedInputCaptureAttempted) {
                         state->ownedInputCaptureAttempted=true;
@@ -1535,6 +1538,10 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
        const auto error=std::get_if<Error>(&configured))return *error;
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;
+    pending->ownedSpatialBaseline=
+        settings.get<bool>("Diagnostics.SpatialBaselineOnly");
+    if(pending->ownedSpatialBaseline)
+        spdlog::info("Owned reduced route configured for spatial baseline; NGX submissions disabled");
 #endif
     pending->expectedRenderer=base+renderer1170Rva;
     constexpr std::array<std::uint8_t,7> cameraLoad{0x48,0x8d,0x0d,0xb5,0x85,0x44,0x02};

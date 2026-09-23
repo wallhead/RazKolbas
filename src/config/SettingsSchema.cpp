@@ -67,6 +67,7 @@ const std::vector<Field>& settingsSchema() {
         {"Diagnostics.LogResourceGenerations", false, 0, 2, {}},
         {"Diagnostics.GraphicsDebugValidation", false, 0, 2, {}},
         {"Diagnostics.ProbeReducedWorld", false, 0, 2, {}},
+        {"Diagnostics.SpatialBaselineOnly", false, 0, 2, {}},
         {"Patching.EnableVersionedPatches", true, 0, 2, {}},
         {"Patching.ExperimentalPatches", false, 0, 2, {}},
         {"Patching.DisabledPatchIds", Text{""}, 0, 2, {}},

@@ -82,8 +82,9 @@ public:
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
         const D3D11_VIEWPORT* views) noexcept;
-    // Read-only trace for the exact singleton original-depth read used by the
-    // verified ENB context. This build forwards the binding unchanged.
+    // Trace the exact singleton original-depth read used by the verified ENB
+    // context. During NativeUi, only that resource is replaced by its
+    // display-sized sampled-depth companion.
     void onPSSetShaderResources(ID3D11DeviceContext* context,UINT start,UINT count,
         ID3D11ShaderResourceView* const* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
@@ -119,6 +120,9 @@ private:
     std::array<AuxiliaryCompanion,4> auxiliaries_{};
     Microsoft::WRL::ComPtr<IUnknown> depthSourceId_;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthSourceView_,nativeDepthView_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthSourceShaderView_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> nativeSampledDepthView_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> nativeSampledDepthClearView_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
     Microsoft::WRL::ComPtr<IUnknown> sceneId_,nativeId_;

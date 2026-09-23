@@ -227,6 +227,7 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(redirect.beginObservation(7));
     redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    redirect.onPSSetShaderResources(context.Get(),3,1,&sampledDepth);
     for(unsigned pass=0;pass<3;++pass) {
         redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
         redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
@@ -268,6 +269,15 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     D3D11_TEXTURE2D_DESC nativeDepthDesc{};nativeDepth->GetDesc(&nativeDepthDesc);
     REQUIRE(nativeDepthDesc.Width==display.width);
     REQUIRE(nativeDepthDesc.Height==display.height);
+    redirect.onPSSetShaderResources(context.Get(),3,1,&sampledDepth);
+    boundDepthSrv.Reset();
+    context->PSGetShaderResources(3,1,&boundDepthSrv);
+    REQUIRE(boundDepthSrv!=nullptr);
+    auto sampledResource=viewResource(boundDepthSrv.Get());
+    REQUIRE(identity(sampledResource.Get()).Get()!=identity(depth.Get()).Get());
+    REQUIRE(identity(sampledResource.Get()).Get()!=identity(nativeDepth.Get()).Get());
+    REQUIRE(viewExtent(boundDepthSrv.Get()).width==display.width);
+    REQUIRE(viewExtent(boundDepthSrv.Get()).height==display.height);
     UINT viewportCount=1;D3D11_VIEWPORT nativeViewport{};
     context->RSGetViewports(&viewportCount,&nativeViewport);
     REQUIRE(nativeViewport.Width==display.width);

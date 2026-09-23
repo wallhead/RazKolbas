@@ -70,11 +70,12 @@ struct ColorSampleStats {
 class OwnedSceneAdmissionGate {
 public:
     bool needsSample(std::uint64_t frame,std::uint64_t generation) noexcept {
-        if(generation_!=generation||frame<=lastSample_) {
+        if(generation_!=generation||frame<lastSample_) {
             generation_=generation;
             lastSample_=0;
             consecutiveSceneSamples_=0;
         }
+        if(lastSample_&&frame==lastSample_)return false;
         return !lastSample_||frame-lastSample_>=30;
     }
     void record(std::uint64_t frame,std::optional<ColorSampleStats> color,
@@ -94,11 +95,12 @@ private:
 class WorldDepthGate {
 public:
     bool needsSample(std::uint64_t frame,std::uint64_t generation) noexcept {
-        if(generation_!=generation||frame<=lastSample_) {
+        if(generation_!=generation||frame<lastSample_) {
             generation_=generation;
             lastSample_=0;
             consecutiveWorldSamples_=0;
         }
+        if(lastSample_&&frame==lastSample_)return false;
         return !lastSample_||frame-lastSample_>=30;
     }
     void record(std::uint64_t frame,std::optional<DepthSampleStats> sample) noexcept {

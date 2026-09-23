@@ -72,6 +72,37 @@ HRESULT createNativeDepth(ID3D11Device* device,ID3D11DepthStencilView* source,
     if(FAILED(hr))return hr;
     return device->CreateDepthStencilView(texture.Get(),&viewDesc,&result);
 }
+HRESULT createNativeSampledDepth(ID3D11Device* device,
+    ID3D11DepthStencilView* depthSource,ID3D11ShaderResourceView* shaderSource,
+    Extent display,ComPtr<ID3D11DepthStencilView>& clearView,
+    ComPtr<ID3D11ShaderResourceView>& sampledView) noexcept {
+    if(!device||!depthSource||!shaderSource||!display.valid())return E_INVALIDARG;
+    auto depthResource=resource(depthSource);
+    auto shaderResource=resource(shaderSource);
+    if(!sameObject(depthResource.Get(),shaderResource.Get()))return E_INVALIDARG;
+    ComPtr<ID3D11Texture2D> sourceTexture;
+    if(!depthResource||FAILED(depthResource.As(&sourceTexture)))return E_INVALIDARG;
+    D3D11_TEXTURE2D_DESC textureDesc{};sourceTexture->GetDesc(&textureDesc);
+    D3D11_DEPTH_STENCIL_VIEW_DESC depthDesc{};depthSource->GetDesc(&depthDesc);
+    D3D11_SHADER_RESOURCE_VIEW_DESC shaderDesc{};shaderSource->GetDesc(&shaderDesc);
+    if(textureDesc.ArraySize!=1||textureDesc.MipLevels!=1||
+       textureDesc.SampleDesc.Count!=1||
+       depthDesc.ViewDimension!=D3D11_DSV_DIMENSION_TEXTURE2D||
+       depthDesc.Texture2D.MipSlice!=0||
+       shaderDesc.ViewDimension!=D3D11_SRV_DIMENSION_TEXTURE2D||
+       shaderDesc.Texture2D.MostDetailedMip!=0||
+       shaderDesc.Texture2D.MipLevels!=1)return E_NOTIMPL;
+    textureDesc.Width=display.width;textureDesc.Height=display.height;
+    textureDesc.Usage=D3D11_USAGE_DEFAULT;textureDesc.CPUAccessFlags=0;
+    textureDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
+    textureDesc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> texture;
+    auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
+    if(FAILED(hr))return hr;
+    hr=device->CreateDepthStencilView(texture.Get(),&depthDesc,&clearView);
+    if(FAILED(hr))return hr;
+    return device->CreateShaderResourceView(texture.Get(),&shaderDesc,&sampledView);
+}
 bool hasStencil(DXGI_FORMAT format) noexcept {
     return format==DXGI_FORMAT_D24_UNORM_S8_UINT||
         format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
@@ -247,12 +278,24 @@ HRESULT NativeUiRedirector::prepareObservedCompanions() noexcept {
             route_.plan().display,nativeDepthView_);
         if(FAILED(hr))return hr;
     }
+    if(depthSourceView_&&depthSourceShaderView_&&!nativeSampledDepthView_) {
+        const auto hr=createNativeSampledDepth(device.Get(),depthSourceView_.Get(),
+            depthSourceShaderView_.Get(),route_.plan().display,
+            nativeSampledDepthClearView_,nativeSampledDepthView_);
+        if(FAILED(hr))return hr;
+        D3D11_DEPTH_STENCIL_VIEW_DESC desc{};
+        nativeSampledDepthClearView_->GetDesc(&desc);
+        const auto flags=D3D11_CLEAR_DEPTH|
+            (hasStencil(desc.Format)?D3D11_CLEAR_STENCIL:0u);
+        context_->ClearDepthStencilView(nativeSampledDepthClearView_.Get(),flags,1.0f,0);
+    }
     return companionsReady()?S_OK:S_FALSE;
 }
 bool NativeUiRedirector::companionsReady() const noexcept {
     if(observationContractFault_||validRouteObservations_<2||
        !observedMrtDepth_||!observedSingleDepth_||
-       !depthSourceId_||!nativeDepthView_)return false;
+       !depthSourceId_||!depthSourceShaderView_||!nativeDepthView_||
+       !nativeSampledDepthView_||!nativeSampledDepthClearView_)return false;
     unsigned auxiliaryCount{};
     for(const auto& item:auxiliaries_) {
         if(item.sourceId&&!item.nativeView)return false;
@@ -393,10 +436,18 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
         auto value=resource(views[0]);
         auto id=canonical(value.Get());
         if(id&&depthSourceId_&&id.Get()==depthSourceId_.Get()) {
+            if(!depthSourceShaderView_)depthSourceShaderView_=views[0];
             ++observation_.sampledDepthReads;
             if(observation_.firstSampledDepthSlot==~0u)
                 observation_.firstSampledDepthSlot=start;
         } else ++observation_.otherSingletonReads;
+    }
+    if(eligible(context)&&count==1&&views&&views[0]&&nativeSampledDepthView_) {
+        auto value=resource(views[0]);auto id=canonical(value.Get());
+        if(id&&depthSourceId_&&id.Get()==depthSourceId_.Get()) {
+            auto* replacement=nativeSampledDepthView_.Get();
+            next_.ps(context,start,1,&replacement);return;
+        }
     }
     next_.ps(context,start,count,views);
 }
@@ -411,5 +462,7 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     observedMrtDepth_=observedSingleDepth_=false;
     for(auto& auxiliary:auxiliaries_)auxiliary={};
     depthSourceId_.Reset();depthSourceView_.Reset();nativeDepthView_.Reset();
+    depthSourceShaderView_.Reset();nativeSampledDepthView_.Reset();
+    nativeSampledDepthClearView_.Reset();
 }
 }

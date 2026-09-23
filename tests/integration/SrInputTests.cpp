@@ -121,11 +121,14 @@ TEST_CASE("Owned scene admission rejects a black transition despite world depth"
     const rk::ColorSampleStats blackColor{0,1};
     REQUIRE(gate.needsSample(1,4));
     gate.record(1,blackColor,worldDepth);
+    REQUIRE_FALSE(gate.needsSample(1,4));
     gate.record(31,blackColor,worldDepth);
     REQUIRE_FALSE(gate.ready());
     gate.record(61,color,worldDepth);
     REQUIRE_FALSE(gate.ready());
     gate.record(91,color,worldDepth);
+    REQUIRE(gate.ready());
+    REQUIRE_FALSE(gate.needsSample(91,4));
     REQUIRE(gate.ready());
     gate.record(121,color,std::nullopt);
     REQUIRE_FALSE(gate.ready());
@@ -139,6 +142,7 @@ TEST_CASE("Owned SR waits for two recent world depth samples and falls back when
     const rk::DepthSampleStats world{95,94};
     REQUIRE(gate.needsSample(1,7));
     gate.record(1,menu);
+    REQUIRE_FALSE(gate.needsSample(1,7));
     REQUIRE_FALSE(gate.ready());
     REQUIRE_FALSE(gate.needsSample(30,7));
     REQUIRE(gate.needsSample(31,7));

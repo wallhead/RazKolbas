@@ -1,5 +1,33 @@
 # Implementation checkpoint
 
+## 0.1.57 live depth evidence and spatial-baseline candidate (2026-09-23)
+
+The user-run 0.1.57 session loaded a world without a RazKolbas warning, error
+or Present failure, but the user reported that the image did not match the
+ordinary ENB/ReShade appearance. All first twelve bounded traces observed one
+exact original-depth singleton PS read at slot 3. The menu route activated at
+frame 20,882 with zero DLSS submissions, demonstrating a same-boundary spatial
+publication. The log also showed 392 admission entries across only 112 unique
+frames: repeated menu callbacks in the same world frame were incorrectly
+treated as frame rewinds, which reset readiness and toggled publication
+between menu and pre-Present. The process was closed normally after evidence
+collection. The ignored log snapshot and its hash are recorded in
+`re/NATIVE_UI_RESOURCE_ROUTE.md`.
+
+Source now ignores duplicate same-frame admission requests while preserving
+generation and real-rewind resets. During NativeUi, only a singleton SRV whose
+underlying resource exactly matches the learned original depth is replaced by
+a separate display-sized sampled-depth resource; the writable native DSV and
+all unrelated bindings remain distinct. A default-off
+`Diagnostics.SpatialBaselineOnly` setting supports the next controlled visual
+comparison with the same reduced scene and UI route but continuous spatial
+publication and zero NGX submissions. Debug and Release each pass all 35 CTest
+groups. The RTX 4080 SUPER replay completed 600 pooled frames with zero
+fallbacks and output SHA-256
+`9e24bc310a96dbeb827811488e7712457da160d242bd12370dbbdd05cdb65d37`.
+Actual-game visual parity for this candidate is **NOT RUN** until the user
+starts Skyrim.
+
 ## PureDark Consolidated Verified 10 follow-up (2026-09-23)
 
 The user-supplied pass-10 RE bundle was independently hash-checked: all 2,034

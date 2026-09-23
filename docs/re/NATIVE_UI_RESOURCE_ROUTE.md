@@ -1,5 +1,47 @@
 # Native UI resource route
 
+## 0.1.57 sampled-depth trace and baseline correction (2026-09-23)
+
+The user started 0.1.57, loaded a world and reported that the image still did
+not look like the original ENB/ReShade output. The process remained responsive
+and produced no RazKolbas warning, error or Present failure before it was
+closed normally. The preserved local log is
+`artifacts/local/runtime-0.1.57-2026-09-23-1106/RazKolbas.log`, SHA-256
+`ca183c1dac05293b0d9cb791da031492d92bf8d06ae1ad541fcade10130a8ab6`.
+
+Every one of the first twelve bounded menu traces contained exactly one
+singleton read of the observed original depth at pixel-shader slot 3. Each
+trace also contained the established eight render-target/viewport events and
+seven unrelated singleton reads. This is live evidence for the reference
+route's separate sampled late-depth resource and is sufficient to permit the
+narrow identity-based substitution. The route also activated at frame 20,882
+with zero DLSS submissions, proving that the same menu boundary can publish a
+spatial baseline independently of provider success.
+
+The run exposed a separate admission defect. The menu callback can execute
+multiple times in one world frame, but `needsSample` treated an equal frame as
+a timeline rewind. The log consequently contained 392 admission entries for
+only 112 unique frames, repeatedly reset readiness and alternated between the
+menu and pre-Present routes. Equal-frame calls are now ignored while a true
+frame rewind or generation change still resets the gate.
+
+The exact original-depth singleton is now replaced during NativeUi by a
+distinct display-sized SRV backed by its own depth texture. It is separate
+from the display-sized writable DSV, uses the source view formats, and is
+created and cleared outside the intercepted context callback. All unrelated
+slots and resources continue unchanged. WARP verifies the resource identity,
+display extent and separation from both the original reduced depth and the
+writable native depth.
+
+`Diagnostics.SpatialBaselineOnly` was added as a default-off restart setting.
+When enabled for the next controlled package, the owned reduced route and
+native UI translation remain active while NGX submission is suppressed and
+the current frame is spatially published. This provides a stable ordinary
+image comparison before DLSS is re-enabled. Debug and Release each pass all
+35 CTest groups. The Release RTX 4080 SUPER replay completed 600 pooled
+1707x960-to-2560x1440 evaluations with zero fallbacks; output SHA-256 was
+`9e24bc310a96dbeb827811488e7712457da160d242bd12370dbbdd05cdb65d37`.
+
 ## 0.1.55 user-run evidence (2026-09-22)
 
 The user started the installed 0.1.55 diagnostic, loaded a save and reported a

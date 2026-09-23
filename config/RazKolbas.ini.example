@@ -118,6 +118,9 @@ LogResourceGenerations = false
 GraphicsDebugValidation = false
 ; Retired ratio-only experiment. A true value is rejected without changing the renderer.
 ProbeReducedWorld = false
+; Diagnostic comparison mode: retain reduced rendering and final UI routing,
+; but publish the current frame with the spatial scaler instead of DLSS.
+SpatialBaselineOnly = false
 
 [Patching]
 ; These settings control product runtime behavior, not Codex's permission to RE.

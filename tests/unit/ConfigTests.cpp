@@ -37,6 +37,14 @@ TEST_CASE("Schema defaults preserve user intent and unknown INI data", "[config]
     REQUIRE(settings.get<rk::Choice>("Upscaling.Provider").value == "DLSS");
     REQUIRE_FALSE(settings.get<bool>("FrameGeneration.Enabled"));
     REQUIRE_FALSE(settings.get<bool>("NeuralRendering.Enabled"));
+    REQUIRE_FALSE(settings.get<bool>("Diagnostics.SpatialBaselineOnly"));
+    const auto baseline=rk::parseIni(
+        "[Diagnostics]\nSpatialBaselineOnly=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(baseline));
+    REQUIRE(std::get<rk::Settings>(baseline).get<bool>(
+        "Diagnostics.SpatialBaselineOnly"));
+    REQUIRE(rk::classifyChange(rk::defaultSettings(),
+        std::get<rk::Settings>(baseline))==rk::ChangeCategory::RestartRequired);
     const auto text = rk::serializeIni(settings);
     REQUIRE(std::holds_alternative<std::string>(text));
     REQUIRE(std::get<std::string>(text).find("SecretSauce = 42") != std::string::npos);
