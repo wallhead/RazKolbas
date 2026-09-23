@@ -9,6 +9,7 @@
 #include "rk/DrsHook.hpp"
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
+#include "rk/EnbTargetProbe.hpp"
 #include "rk/OwnedSwapBufferRoute.hpp"
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/NativeFlipTarget.hpp"
@@ -70,6 +71,9 @@ struct UiHookLease {
     UiContextNext next{};
     NativeUiRedirector redirect;
     std::atomic<bool> armed{false};
+    std::uintptr_t enbProbeBase{};
+    EnbTargetProbeBudget enbProbeBudget;
+    unsigned enbProbeSamples{};
 };
 std::atomic<UiHookLease*> uiHook{nullptr};
 std::mutex uiInstallMutex;
@@ -106,6 +110,25 @@ void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
         const auto phaseBefore=ownedDomain.phase();
         const auto worldBefore=worldDrawForwardedCalls();
         state->redirect.onOMSetRenderTargets(context,count,views,depth);
+        // Sample after the existing downstream bind; never issue a replacement
+        // bind. Throttled through the same render-dispatch lock as the hook.
+        if(state->enbProbeBase&&phaseBefore==ScenePhase::World&&count>=2&&
+            count<=8&&views&&views[0]&&state->enbProbeBudget.admit(worldBefore)) {
+            const auto sample=inspectEnbTargets(context,views[0]);
+            if(sample.format==10||sample.format==26) {
+                ++state->enbProbeSamples;
+                state->enbProbeBudget.accepted();
+                const auto reference=readEnbTargetProbeExtent(state->enbProbeBase);
+                const bool match=reference&&sample.metadataValid&&
+                    reference->width==sample.metadata.width&&reference->height==sample.metadata.height;
+                try {spdlog::info("ENB target probe #{}: worldForwarded={}; requestedCount={}; actual={}x{} format={}; metadataValid={} metadata={}x{} format={}; referenceReadable={} reference={}x{}; dimensionMatch={}; boundMask=0x{:02x}; slots5and6={}; observation-only",
+                    state->enbProbeSamples,worldBefore,count,sample.actual.width,sample.actual.height,
+                    sample.format,sample.metadataValid,sample.metadata.width,sample.metadata.height,
+                    sample.metadataFormat,reference.has_value(),reference?reference->width:0,
+                    reference?reference->height:0,match,sample.boundMask,(sample.boundMask&0x60)==0x60);
+                } catch(...) {}
+            }
+        }
         if(!faultBefore&&state->redirect.compatibilityFault()) {
             const auto fault=state->redirect.compatibilityFaultInfo();
             try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{}",
@@ -701,6 +724,7 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
             if(const auto error=std::get_if<Error>(&checked))return *error;
         }
         auto pending=std::make_unique<UiHookLease>(domain);
+        if(validateEnbTargetProbeImage(mapped,id.hash))pending->enbProbeBase=base;
         pending->next={reinterpret_cast<UiContextNext::OM>(base+omSite.methodRva),
             reinterpret_cast<UiContextNext::VP>(base+viewportSite.methodRva),
             reinterpret_cast<UiContextNext::PS>(base+psSite.methodRva)};

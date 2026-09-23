@@ -1,5 +1,39 @@
 # Implementation checkpoint
 
+## ENB target-dimension diagnostic implemented (2026-09-23)
+
+Read-only RE of the exact installed ENB found that its HDR MRT attachment
+path compares RTV private-data dimensions against globals populated from
+swap GetDesc. A mismatch skips slots 5 and 6. ENB refreshes those globals
+through another GetDesc path as well. This is a concrete integration
+condition, not yet the measured cause of the user's missing-effects image.
+Evidence, exact RVAs, metadata layout and limits are in
+`docs/re/ENB_TARGET_DIMENSION_CONTRACT.md`.
+
+The new read-only diagnostic uses the existing owned-world OM hook. After
+the unchanged downstream bind it samples actual texture size, ENB metadata,
+current reference dimensions and bound-target mask. The module hash and
+comparison bytes must match. Sampling includes failed candidates in its
+budget (eight attempts per 600-call window, at most 64 windows). It does
+not change rendering, metadata, shaders or effect settings.
+
+Validation: the test-first build failed because the new probe API did not
+yet exist; the budget regression build likewise failed before that API was
+added. Final `tools/Build.ps1 -Preset win-dev` and `-Preset win-release`
+both passed all 36 CTest groups. WARP tests distinguish actual dimensions
+from deliberately different private metadata, reject short metadata, check
+binding preservation and target-mask reporting, and cover real inaccessible
+memory plus sample-budget exhaustion. Static exact-byte validation against
+the installed ENB also passed. Independent review identified the initial
+unbounded non-HDR inspection path; it was corrected and re-reviewed.
+
+The new probe's Skyrim runtime test is NOT RUN. ReShade remains a possible
+contributor to reduced-path ordering or resource issues; no ReShade-off
+comparison has been performed. The established native DLAA visual result
+remains the baseline. Next: install a spatial reduced-scene diagnostic build
+with ReShade unchanged, then obtain the probe records from a user-started
+save load. No game was launched by the assistant.
+
 ## Native DLAA visual baseline confirmed (2026-09-23, 11:39 launch)
 
 The user started Skyrim with the NativeAA configuration and reported the image
