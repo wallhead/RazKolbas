@@ -1,5 +1,30 @@
 # Implementation checkpoint
 
+## 0.1.61 live DLSS test installed; game test pending (2026-09-23)
+
+After the 0.1.60 spatial route passed both runtime checks and the user's
+visual ENB check, Skyrim was closed and that exact install was backed up under
+ignored
+`artifacts/local/mo2-install-backup-0.1.60-early-enb-contract-e186b1c-visual-good/`.
+The 0.1.61 payload reuses the reviewed `e186b1c` binary and official signed
+NVIDIA runtime. Its only functional configuration change is
+`SpatialBaselineOnly=false`; `Provider=Auto`, `Quality=Quality`, and
+`ManualRenderScale=0.666667` are unchanged. This lets the already validated
+early ENB/UI resource contract proceed to live NGX evaluation.
+
+The payload is installed at `D:/TESV_EX/MO2/mods/RazKolbas`, and all four
+manifest payload hashes match after installation. Installed DLL SHA-256 is
+`8b256903a729a5447bf393172fc68d2f87968fe0740b93a40b1581f52fd5efd7`;
+INI SHA-256 is
+`2b3afaa42d207c07eb28d5de0f8fc53e5a7fdeb4179022d0b8134ec9f0d19d6c`;
+manifest SHA-256 is
+`8ef3cba44e3cd46854c46ddce9669abe08988f127bc34e90b4e47630309ed07b`.
+MO2 package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.61-live-dlss-e186b1c.zip` has
+SHA-256
+`81501d0adee368e0a3e08305a969704ae5ca4bc8a0827d34d310388aeaa72833`.
+Game runtime verification is NOT RUN.
+
 ## 0.1.60 early ENB contract passes runtime and visual test (2026-09-23, 13:08 launch)
 
 Commit `e186b1c` implements creation-time reduced scene publication for the
