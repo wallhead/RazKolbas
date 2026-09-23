@@ -49,6 +49,35 @@ automatic bias near `-0.5849625`, at least one cached replacement, continuous
 DLSS evaluation, ENB/ReShade appearance, stability and perceived texture
 detail.
 
+### 0.1.62 runtime result and 0.1.63 sampler trace
+
+The user started 0.1.62 at 19:09 and loaded a save. All six exact sampler
+slots installed with automatic bias `-0.5849625`. The early ENB contract
+remained correct at `1707x960`, DLSS created and first evaluated successfully,
+and native `2560x1440` mode-2 publication reached 2,820 provider submissions
+with zero fallback in flight. The session had zero errors and zero Present
+failures; its four warnings were the expected startup/admission warnings.
+However, no sampler replacement was created. The mip-bias correction therefore
+did not affect this run. The assistant closed the responsive game after
+collecting evidence. The filtered ignored session log is
+`artifacts/local/runtime-0.1.62-mip-bias-2026-09-23-1909/current-session.log`,
+SHA-256
+`674d8030181cf7004e8a98575bef43bb9a8de867d580bead1bccf84beb7d44a5`.
+
+Fresh independent disassembly of supplied `SkyrimUpscaler.dll`, SHA-256
+`94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb`,
+confirms that its D3D creation wrapper at RVA `0x155D40` loads the returned
+immediate context and patches slots 10/26/32/61/65/70 through helper RVA
+`0x172060`; wrappers and saved downstream globals match the supplied excerpts.
+This corroborates the six-slot target but does not yet distinguish a later
+owner overwrite from a live descriptor that fails the reference predicate.
+
+Source now adds bounded diagnostic evidence. It reports sampler-hook ownership
+as a six-bit mask and, at power-of-two calls for each stage, reports non-null,
+zero-bias, anisotropy and eligible counts plus the first descriptor values.
+Debug and Release each pass all 37 CTest groups. The next diagnostic package
+must be installed and run before changing the sampler predicate or hook layer.
+
 ## 0.1.61 live DLSS runs continuously; quality correction required (2026-09-23, 16:54 launch)
 
 After the 0.1.60 spatial route passed both runtime checks and the user's

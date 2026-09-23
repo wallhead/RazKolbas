@@ -69,3 +69,23 @@ exact ENB sites, automatic/manual bias and parameter delivery to the prepared
 evaluation path. Any partial composite-hook conflict retains an unarmed,
 process-lifetime lease and defers retry until the next launch. Visual
 improvement from the mip-bias correction remains a required game test.
+
+## First runtime result and installer cross-check
+
+The 0.1.62 loaded-save run installed all six sampler slots at automatic bias
+`-0.5849625`, retained correct ENB dimensions and continuously evaluated DLSS,
+but created zero cached replacement samplers. No mip-bias effect is claimed for
+that run.
+
+Independent Capstone disassembly of supplied `SkyrimUpscaler.dll`, SHA-256
+`94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb`,
+locates the installer inside its D3D11 creation wrapper RVA `0x155D40`. After
+the downstream creation call, RVAs `0x1560F9` and `0x1560FC` load the returned
+device and immediate context. RVAs `0x1563B8..0x156459` pass the immediate
+context's vtable, one wrapper address and one of slots 10/26/32/61/65/70 to
+pointer-patch helper RVA `0x172060`, then retain each returned downstream
+method. This independently confirms the target interface and slot mapping.
+
+The next build records a bounded six-bit ownership mask and power-of-two call
+summaries for each stage. Those summaries separate later slot replacement,
+no live calls, and descriptors rejected by the zero-bias/anisotropy predicate.

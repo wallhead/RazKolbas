@@ -83,10 +83,15 @@ struct UiHookLease {
     using Sampler=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,
         ID3D11SamplerState* const*);
     std::array<Sampler,6> nextSamplers{};
+    std::array<void**,6> samplerSlots{};
+    std::array<void*,6> samplerProxies{};
+    std::array<std::uint64_t,6> samplerCalls{};
     UiContextNext next{};
     NativeUiRedirector redirect;
     SamplerBiasCache samplerBias;
     std::size_t loggedSamplerReplacements{};
+    std::atomic<std::uint64_t> samplerOwnershipChecks{};
+    std::atomic<unsigned> lastSamplerOwnershipMask{~0u};
     std::atomic<bool> armed{false};
     std::uintptr_t enbProbeBase{};
     EnbTargetProbeBudget enbProbeBudget;
@@ -183,6 +188,25 @@ void STDMETHODCALLTYPE uiSamplerProxy(ID3D11DeviceContext* context,UINT start,UI
        count>D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT||
        start>D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT-count) {
         state->nextSamplers[Stage](context,start,count,samplers);return;
+    }
+    const auto call=++state->samplerCalls[Stage];
+    if((call&(call-1))==0) {
+        std::size_t nonNull{},zeroBias{},anisotropy{},eligible{};
+        D3D11_FILTER firstFilter{};float firstBias{};UINT firstAnisotropy{};
+        bool capturedFirst{};
+        for(UINT i=0;i<count;++i)if(auto* sampler=samplers[i]) {
+            D3D11_SAMPLER_DESC desc{};sampler->GetDesc(&desc);++nonNull;
+            if(!capturedFirst) {
+                firstFilter=desc.Filter;firstBias=desc.MipLODBias;
+                firstAnisotropy=desc.MaxAnisotropy;capturedFirst=true;
+            }
+            const bool zero=desc.MipLODBias==0.0f;
+            const bool aniso=desc.MaxAnisotropy>1;
+            zeroBias+=zero;anisotropy+=aniso;eligible+=zero&&aniso;
+        }
+        try {spdlog::info("Owned sampler trace: stage={} call={} start={} count={} nonNull={} zeroBias={} anisotropyGt1={} eligible={} firstFilter={} firstBias={} firstMaxAnisotropy={}",
+            Stage,call,start,count,nonNull,zeroBias,anisotropy,eligible,
+            static_cast<unsigned>(firstFilter),firstBias,firstAnisotropy);}catch(...) {}
     }
     std::array<ID3D11SamplerState*,D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT> mapped{};
     const auto changed=state->samplerBias.remap(context,
@@ -1052,8 +1076,10 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
             &uiSamplerProxy<0>,&uiSamplerProxy<1>,&uiSamplerProxy<2>,
             &uiSamplerProxy<3>,&uiSamplerProxy<4>,&uiSamplerProxy<5>};
         for(std::size_t i=0;i<samplerSites.size();++i) {
+            published->samplerSlots[i]=table+samplerSites[i].slot;
+            published->samplerProxies[i]=reinterpret_cast<void*>(replacements[i]);
             const auto applied=published->samplerPatches[i].apply(
-                table+samplerSites[i].slot,
+                published->samplerSlots[i],
                 reinterpret_cast<void*>(published->nextSamplers[i]),
                 reinterpret_cast<void*>(replacements[i]));
             if(const auto error=std::get_if<Error>(&applied)) {
@@ -1079,7 +1105,23 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
 }
 NativeUiRedirector* ownedUiRedirector() noexcept {
     auto* state=uiHook.load(std::memory_order_acquire);
-    return state&&state->armed.load(std::memory_order_acquire)?&state->redirect:nullptr;
+    if(!state||!state->armed.load(std::memory_order_acquire))return nullptr;
+    const auto check=state->samplerOwnershipChecks.fetch_add(1,
+        std::memory_order_relaxed)+1;
+    if((check&(check-1))==0) {
+        unsigned mask{};
+        for(std::size_t i=0;i<state->samplerSlots.size();++i)
+            if(state->samplerSlots[i]&&
+               std::atomic_ref<void*>(*state->samplerSlots[i]).load(
+                   std::memory_order_acquire)==state->samplerProxies[i])
+                mask|=1u<<i;
+        const auto prior=state->lastSamplerOwnershipMask.exchange(mask,
+            std::memory_order_relaxed);
+        if(mask!=prior||check==1)try {spdlog::info(
+            "Owned sampler hook ownership: check={} mask=0x{:02x}/0x3f",
+            check,mask);}catch(...) {}
+    }
+    return &state->redirect;
 }
 OwnedSceneDomain* activeOwnedSceneDomain() noexcept {
     auto* state=bufferTrace.load(std::memory_order_acquire);
