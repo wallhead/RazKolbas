@@ -24,8 +24,24 @@ CTest groups. The Release RTX 4080 SUPER harness completed 600 pooled
 `3a774c87b2cdc40de4a8fe0ef010cf445af38fc3657951fba25001261a442f70`.
 Independent review found one exception-containment issue in the menu probe;
 the callback and generic forwarder now both preserve original menu forwarding,
-with an injected-throw regression. Packaging and the game trace remain pending
-in this checkpoint.
+with an injected-throw regression. The game trace remains pending in this
+checkpoint.
+
+Source commit `1f3799f` was packaged and installed as 0.1.57. MO2 package
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.57-phase-receipt-depth-trace-1f3799f.zip`
+has SHA-256
+`bcb99bf295cb0abe2cb72a991f6e8026e9f1dbb8f812faff9bef73c71f87d5d0`.
+Independent extraction found exactly the four manifest-listed payloads plus the
+manifest and verified every payload hash. The prior installed mod matched its
+0.1.56 manifest and was copied to ignored backup
+`artifacts/local/mo2-install-backup-0.1.57-1f3799f`. SkyrimSE.exe was absent;
+only the RazKolbas DLL and manifest were replaced. Installed DLL SHA-256 is
+`4806eff823686c8f0cfaaf43cf4746831a76da07fc61e2196c9594f385324b42`.
+The user INI and signed NVIDIA SR runtime remain byte-identical at SHA-256
+`fb1e7c233a4581e2e931cc319348ec4d2a41d30c80fde1a18266559194dbefbf`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+Runtime source-phase admission and PS-depth trace are **NOT RUN** until the user
+starts Skyrim and loads a save. The assistant did not start the game.
 
 ## Scope
 
