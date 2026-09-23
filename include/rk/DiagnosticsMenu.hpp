@@ -2,8 +2,11 @@
 #include <Windows.h>
 #include <dxgi.h>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
+#include "rk/Settings.hpp"
 
 namespace rk {
 enum class DisplayMode : std::uint8_t { Native, Dlaa, DlssSr, SpatialFallback };
@@ -16,9 +19,18 @@ struct DiagnosticsSnapshot {
     std::uint64_t worldFrames{},dlssFrames{},skippedFrames{};
     bool dlssDisabled{},skyrimTaaActive{true},engineDrsKnown{},dlaaSuspendedByDrs{};
     bool srRequested{},srSourceReady{},ownedSceneActive{};
+    float postSharpness{};
+};
+
+struct SharpeningUpdate {
+    bool enabled{};
+    float sharpness{};
 };
 
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept;
 void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale) noexcept;
+void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale,
+    const Settings& settings,const std::filesystem::path& iniPath) noexcept;
+std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

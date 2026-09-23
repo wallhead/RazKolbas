@@ -1,5 +1,41 @@
 # Implementation checkpoint
 
+## 0.1.64 game result and 0.1.65 in-game DLSS controls (2026-09-23)
+
+The user-started 0.1.64 loaded-save run passed. The user reported that the
+image looked good and that DLSS appeared to be working. The session reached
+20,400 world frames and 13,470 successful owned DLSS publications from
+`1707x960` to `2560x1440`, with no fallback in flight, no error/critical log
+records and no failed Present. The four warnings were the expected early-route
+and first-three-frame admission messages. The startup evaluation recorded
+neutral NGX sharpening and the separate native-resolution pass at `0.3`.
+The ignored session log is
+`artifacts/local/runtime-0.1.64-post-sharpen-2026-09-23-2016/current-session.log`,
+SHA-256
+`d663bafdbadeae509fa7365f9b98ce50979a8eb07554fc65d17202c693f99948`.
+
+The next candidate adds controls to the existing End menu. Post-DLSS
+sharpening has an enable checkbox and a `[0,1]` slider. Changes are queued by
+the Present-side menu and consumed at the verified world-render boundary, so
+the active presenter changes without recreating the NVIDIA feature. The INI
+is saved when the checkbox changes or the slider is released. Quality offers
+NativeAA, Quality, Balanced, Performance and UltraPerformance. Model preset
+offers Auto, J, K, L and M, exactly matching the usable choices in the pinned
+NGX headers. Quality and model changes are persisted and labelled for the next
+game launch because they alter feature creation and owned render dimensions.
+The selected non-Auto model preset is written to the quality-specific NVIDIA
+hint before feature creation.
+
+The supplied `PureDark_Sharpening_12.zip` passed its 155-payload manifest
+check. Its ordinary sharpening reconstruction confirms the current stage
+placement, five-tap RGB formula, gain mapping and direct code-value filtering.
+It also identifies deliberate reference details that the RazKolbas safety
+implementation does not claim to reproduce bit-for-bit: unclamped
+out-of-bounds loads, the `0x7EF19FFF` reciprocal approximation, alpha forced
+to one, and singular arithmetic without epsilon guards. Exact evidence and
+the implementation comparison are recorded in
+`docs/re/SHARPENING_REFERENCE.md`.
+
 ## 0.1.63 sampler result and 0.1.64 post-DLSS detail pass (2026-09-23)
 
 The user-started 0.1.63 loaded-save run resolved the sampler question. All six

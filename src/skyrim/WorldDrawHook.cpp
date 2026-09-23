@@ -92,7 +92,7 @@ struct WorldState {
     double manualRenderScale{};
     bool automaticMipBias{true};
     double manualMipBias{};
-    float srSharpness{};
+    std::atomic<float> srSharpness{};
     std::uint64_t ownedEvaluationLimit{};
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
@@ -487,6 +487,20 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         auto* device=reinterpret_cast<ID3D11Device*>(numbers.device);
         auto* context=reinterpret_cast<ID3D11DeviceContext*>(numbers.context);
         auto* swap=reinterpret_cast<IDXGISwapChain*>(numbers.swap);
+        if(const auto update=consumeDiagnosticsSharpeningUpdate()) {
+            const auto configuredSr=state->srPresenter.configureSharpness(
+                update->enabled,update->sharpness);
+            if(const auto error=std::get_if<Error>(&configuredSr))
+                throw std::runtime_error(error->message);
+            const auto configuredDlaa=state->sdrPresenter.configureSharpness(
+                update->enabled,update->sharpness);
+            if(const auto error=std::get_if<Error>(&configuredDlaa))
+                throw std::runtime_error(error->message);
+            state->srSharpness.store(update->enabled?update->sharpness:0.0f,
+                std::memory_order_release);
+            spdlog::info("Live post-DLSS sharpening changed: enabled={}; sharpness={}",
+                update->enabled,update->sharpness);
+        }
         auto* ui=ownedUiRedirector();
         if(!ui||ui->compatibilityFault())
             throw std::runtime_error("Owned UI context layout changed");
@@ -613,7 +627,8 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     const auto jitter=std::get<NgxJitter>(renderJitter);
                     spdlog::info("Owned NGX evaluation parameters: jitter=({},{}); MVScale={}x{}; ngxSharpness=0; postSharpness={}; autoExposure=true; reset=true",
                         jitter.x,jitter.y,domain->plan().render.width,
-                        domain->plan().render.height,state->srSharpness);
+                        domain->plan().render.height,
+                        state->srSharpness.load(std::memory_order_relaxed));
                 }
                 auto evaluated=state->srPresenter.evaluateOwnedScene(device,context,sources,
                     domain->plan().display.width,domain->plan().display.height,
@@ -770,6 +785,16 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     state->forwarder.dispatch(world,flags);
     state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
 #ifdef RK_WITH_NGX
+    if(!activeOwnedSceneDomain())if(const auto update=consumeDiagnosticsSharpeningUpdate()) {
+        const auto configuredSr=state->srPresenter.configureSharpness(
+            update->enabled,update->sharpness);
+        const auto configuredDlaa=state->sdrPresenter.configureSharpness(
+            update->enabled,update->sharpness);
+        if(std::holds_alternative<bool>(configuredSr)&&
+           std::holds_alternative<bool>(configuredDlaa))
+            state->srSharpness.store(update->enabled?update->sharpness:0.0f,
+                std::memory_order_release);
+    }
     if(activeOwnedSceneDomain()||ownedScenePreviouslyActive())return;
 #endif
     std::array<float,4> drsRatios{};
@@ -1294,6 +1319,7 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
     snapshot.skippedFrames=state->statusSkippedFrames.load(std::memory_order_relaxed);
     snapshot.dlssDisabled=state->statusDlssDisabled.load(std::memory_order_relaxed);
+    snapshot.postSharpness=state->srSharpness.load(std::memory_order_relaxed);
     if(auto* domain=activeOwnedSceneDomain()) {
         snapshot.ownedSceneActive=true;
         snapshot.renderWidth=domain->plan().render.width;
@@ -1582,10 +1608,22 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(!quality)return Error{ErrorCode::InvalidInput,"Unrecognized SR quality setting"};
     if(const auto configured=pending->srPresenter.configureQuality(*quality);
        const auto error=std::get_if<Error>(&configured))return *error;
-    pending->srSharpness=settings.get<bool>("Upscaling.Sharpening")?
-        static_cast<float>(settings.get<double>("Upscaling.Sharpness")):0.0f;
+    if(const auto configured=pending->srPresenter.configureModelPreset(
+        settings.get<Choice>("Upscaling.ModelPreset").value);
+       const auto error=std::get_if<Error>(&configured))return *error;
+    if(const auto configured=pending->sdrPresenter.configureModelPreset(
+        settings.get<Choice>("Upscaling.ModelPreset").value);
+       const auto error=std::get_if<Error>(&configured))return *error;
+    pending->srSharpness.store(settings.get<bool>("Upscaling.Sharpening")?
+        static_cast<float>(settings.get<double>("Upscaling.Sharpness")):0.0f,
+        std::memory_order_relaxed);
     if(const auto configured=pending->srPresenter.configureSharpness(
-        settings.get<bool>("Upscaling.Sharpening"),pending->srSharpness);
+        settings.get<bool>("Upscaling.Sharpening"),
+        pending->srSharpness.load(std::memory_order_relaxed));
+       const auto error=std::get_if<Error>(&configured))return *error;
+    if(const auto configured=pending->sdrPresenter.configureSharpness(
+        settings.get<bool>("Upscaling.Sharpening"),
+        pending->srSharpness.load(std::memory_order_relaxed));
        const auto error=std::get_if<Error>(&configured))return *error;
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;
@@ -1663,7 +1701,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
     menuRelay.release();
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; menu marker is read-only for bounded resource tracing; owned SR publishes at pre-Present; requested={}; configuredQuality={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value); } catch (...) {}
+    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; menu marker is read-only for bounded resource tracing; owned SR publishes at pre-Present; requested={}; configuredQuality={}; modelPreset={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value,settings.get<Choice>("Upscaling.ModelPreset").value); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

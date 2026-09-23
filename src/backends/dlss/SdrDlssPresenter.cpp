@@ -46,6 +46,30 @@ std::optional<NVSDK_NGX_PerfQuality_Value> ngxQuality(UpscaleQuality quality) no
     }
     return std::nullopt;
 }
+std::optional<NVSDK_NGX_DLSS_Hint_Render_Preset> ngxPreset(
+    std::string_view preset) noexcept {
+    if(preset=="Auto")return NVSDK_NGX_DLSS_Hint_Render_Preset_Default;
+    if(preset=="J")return NVSDK_NGX_DLSS_Hint_Render_Preset_J;
+    if(preset=="K")return NVSDK_NGX_DLSS_Hint_Render_Preset_K;
+    if(preset=="L")return NVSDK_NGX_DLSS_Hint_Render_Preset_L;
+    if(preset=="M")return NVSDK_NGX_DLSS_Hint_Render_Preset_M;
+    return std::nullopt;
+}
+const char* presetParameter(UpscaleQuality quality) noexcept {
+    switch(quality) {
+    case UpscaleQuality::NativeAA:
+        return NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA;
+    case UpscaleQuality::Quality:
+        return NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality;
+    case UpscaleQuality::Balanced:
+        return NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced;
+    case UpscaleQuality::Performance:
+        return NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance;
+    case UpscaleQuality::UltraPerformance:
+        return NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance;
+    }
+    return nullptr;
+}
 fs::path moduleDirectory() {
     HMODULE self{};
     if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
@@ -155,9 +179,17 @@ Result<bool> SdrDlssPresenter::configureQuality(UpscaleQuality quality) noexcept
     return true;
 }
 
-Result<bool> SdrDlssPresenter::configureSharpness(bool enabled,float sharpness) noexcept {
+Result<bool> SdrDlssPresenter::configureModelPreset(
+    std::string_view preset) noexcept {
     if(ngxStartAttempted_||initialized_||preparedGeneration_)
-        return Error{ErrorCode::Conflict,"Cannot change NVIDIA sharpness during an active feature"};
+        return Error{ErrorCode::Conflict,"Cannot change NVIDIA model preset during an active feature"};
+    if(!ngxPreset(preset))
+        return Error{ErrorCode::InvalidInput,"Unknown NVIDIA model preset"};
+    modelPreset_=preset;
+    return true;
+}
+
+Result<bool> SdrDlssPresenter::configureSharpness(bool enabled,float sharpness) noexcept {
     if(!std::isfinite(sharpness)||sharpness<0.0f||sharpness>1.0f)
         return Error{ErrorCode::InvalidInput,"NVIDIA sharpness is outside 0..1"};
     sharpness_=enabled?sharpness:0.0f;
@@ -269,6 +301,12 @@ Result<bool> SdrDlssPresenter::initialize(ID3D11Device* device,
     create.Feature.InTargetHeight=displayHeight;
     const auto quality=ngxQuality(reduced?quality_:UpscaleQuality::NativeAA);
     if(!quality)return Error{ErrorCode::InvalidInput,"Unknown NVIDIA quality"};
+    const auto preset=ngxPreset(modelPreset_);
+    const auto* presetKey=presetParameter(reduced?quality_:UpscaleQuality::NativeAA);
+    if(!preset||!presetKey)
+        return Error{ErrorCode::InvalidInput,"Unknown NVIDIA model preset or quality"};
+    if(*preset!=NVSDK_NGX_DLSS_Hint_Render_Preset_Default)
+        NVSDK_NGX_Parameter_SetI(parameters_,presetKey,static_cast<int>(*preset));
     create.Feature.InPerfQualityValue=*quality;
     create.InFeatureCreateFlags=NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|
         NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;

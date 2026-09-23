@@ -62,6 +62,26 @@ TEST_CASE("Invalid input rejects whole snapshot rather than publishing partial v
     settings.values["Upscaling.Sharpness"] = std::numeric_limits<double>::quiet_NaN();
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateSettings(settings)));
 }
+TEST_CASE("DLSS menu choices accept only implemented quality and current model presets", "[config]") {
+    for(const auto preset:{"Auto","J","K","L","M"}) {
+        const auto parsed=rk::parseIni(std::string("[Upscaling]\nModelPreset=")+preset+"\n");
+        REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+        REQUIRE(std::get<rk::Settings>(parsed).get<rk::Choice>(
+            "Upscaling.ModelPreset").value==preset);
+    }
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::parseIni("[Upscaling]\nModelPreset=A\n")));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::parseIni("[Upscaling]\nQuality=UltraQuality\n")));
+    auto live=rk::defaultSettings();
+    live.values["Upscaling.Sharpening"]=false;
+    live.values["Upscaling.Sharpness"]=0.75;
+    REQUIRE(rk::classifyChange(rk::defaultSettings(),live)==
+        rk::ChangeCategory::Live);
+    live.values["Upscaling.Quality"]=rk::Choice{"Balanced"};
+    REQUIRE(rk::classifyChange(rk::defaultSettings(),live)==
+        rk::ChangeCategory::Recreate);
+}
 TEST_CASE("Failed replacement preserves last-good state; restart remains pending", "[config]") {
     rk::SettingsTransaction transaction;
     auto before = transaction.snapshot();

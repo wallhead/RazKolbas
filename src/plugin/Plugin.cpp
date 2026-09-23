@@ -29,14 +29,14 @@ void rendererObserved(const rk::RendererSnapshot&) {
     std::scoped_lock lock(hostMutex);
     if (host.attachRenderer(true)) spdlog::info("RendererAttached: device identity captured; observation only, no frame processing");
 }
-rk::Settings loadSettings() {
+rk::Settings loadSettings(std::filesystem::path& path) {
     HMODULE self = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            reinterpret_cast<LPCWSTR>(&onMessage), &self)) throw std::runtime_error("Cannot resolve plugin module");
     wchar_t filename[32768];
     const auto count = GetModuleFileNameW(self, filename, 32768);
     if (!count || count >= 32768) throw std::runtime_error("Cannot resolve plugin path");
-    auto path = std::filesystem::path(filename).parent_path() / "RazKolbas.ini";
+    path = std::filesystem::path(filename).parent_path() / "RazKolbas.ini";
     if (!std::filesystem::exists(path)) return rk::defaultSettings();
     std::ifstream input(path);
     if (!input) throw std::runtime_error("Cannot read RazKolbas.ini");
@@ -49,7 +49,7 @@ rk::Settings loadSettings() {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 34, 0});
+    metadata.PluginVersion({0, 1, 65, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -72,10 +72,11 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
         std::scoped_lock lock(hostMutex);
         if (host.state() != rk::HostState::Created) return host.state() != rk::HostState::Stopping;
         if (!rk::initializeLogging()) return false;
-        auto settings = loadSettings();
+        std::filesystem::path iniPath;
+        auto settings = loadSettings(iniPath);
         rk::configureDiagnosticsMenu(settings.get<bool>("Interface.Enabled"),
             settings.get<rk::Text>("Interface.ToggleMenuKey").value,
-            settings.get<double>("Interface.FontScale"));
+            settings.get<double>("Interface.FontScale"),settings,iniPath);
         const auto messaging = static_cast<SKSE::detail::SKSEMessagingInterface*>(skse->QueryInterface(SKSE::LoadInterface::kMessaging));
         if (!messaging || !messaging->RegisterListener || messaging->interfaceVersion < SKSE::MessagingInterface::kVersion) {
             spdlog::error("SKSE messaging interface unavailable; initialization aborted");

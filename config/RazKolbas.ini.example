@@ -25,7 +25,7 @@ AllowCrossAdapter = false
 Provider = Auto
 ; NativeAA / Quality / Balanced / Performance / UltraPerformance, as supported.
 Quality = Quality
-; Separate provider model choice from SDK-independent quality names.
+; Auto / J / K / L / M from the pinned NVIDIA SDK. K is generally recommended.
 ModelPreset = Auto
 AutoExposure = true
 Sharpening = true

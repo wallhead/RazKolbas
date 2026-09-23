@@ -76,14 +76,18 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     }};
     REQUIRE(std::holds_alternative<rk::Error>(presenter.configureQuality(
         static_cast<rk::UpscaleQuality>(99))));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        presenter.configureModelPreset("A")));
     REQUIRE(std::holds_alternative<rk::Error>(presenter.configureSharpness(true,1.1f)));
     REQUIRE(std::get<bool>(presenter.configureQuality(rk::UpscaleQuality::Balanced)));
+    REQUIRE(std::get<bool>(presenter.configureModelPreset("K")));
     REQUIRE(std::get<bool>(presenter.configureSharpness(true,0.6f)));
     auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
         scene.cropped(),{10,3,true},{0.125f,-0.25f});
     REQUIRE(std::holds_alternative<rk::Error>(
         presenter.configureQuality(rk::UpscaleQuality::Performance)));
-    REQUIRE(std::holds_alternative<rk::Error>(presenter.configureSharpness(false,0.0f)));
+    REQUIRE(std::holds_alternative<rk::Error>(presenter.configureModelPreset("J")));
+    REQUIRE(std::get<bool>(presenter.configureSharpness(false,0.0f)));
     REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
     const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
     REQUIRE(token.has_value());

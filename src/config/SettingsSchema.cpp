@@ -12,7 +12,7 @@ const std::vector<Field>& settingsSchema() {
         {"Adapter.AllowCrossAdapter", false, 0, 2, {}},
         {"Upscaling.Provider", Choice{"Auto"}, 0, 2, {"Auto","Native","DLSS","FSR","XeSS"}},
         {"Upscaling.Quality", Choice{"Quality"}, 0, 2, {"NativeAA","Quality","Balanced","Performance","UltraPerformance"}},
-        {"Upscaling.ModelPreset", Text{"Auto"}, 0, 2, {}},
+        {"Upscaling.ModelPreset", Choice{"Auto"}, 0, 2, {"Auto","J","K","L","M"}},
         {"Upscaling.AutoExposure", true, 0, 2, {}},
         {"Upscaling.Sharpening", true, 0, 2, {}},
         {"Upscaling.Sharpness", double{0.30}, 0, 1, {}},

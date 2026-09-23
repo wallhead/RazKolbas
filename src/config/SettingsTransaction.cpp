@@ -8,7 +8,9 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
         if (before.values.at(key) != after.values.at(key)) return ChangeCategory::RestartRequired;
     for (const auto& [key, value] : before.values) {
         if (value == after.values.at(key)) continue;
-        if (!key.starts_with("Interface.") && !key.starts_with("Diagnostics.") && key != "General.LogLevel") return ChangeCategory::Recreate;
+        if (!key.starts_with("Interface.") && !key.starts_with("Diagnostics.") &&
+            key != "General.LogLevel" && key != "Upscaling.Sharpening" &&
+            key != "Upscaling.Sharpness") return ChangeCategory::Recreate;
     }
     return ChangeCategory::Live;
 }

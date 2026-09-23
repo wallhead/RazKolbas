@@ -6,7 +6,11 @@
 #include <wrl/client.h>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <filesystem>
 #include <mutex>
+#include <optional>
+#include <span>
+#include <string>
 
 namespace rk {
 namespace {
@@ -23,6 +27,12 @@ struct MenuState {
     bool enabled{};
     bool visible{},endWasDown{},failed{};
     std::uint64_t visibleFrames{};
+    Settings activeSettings;
+    Settings requestedSettings;
+    std::filesystem::path iniPath;
+    std::optional<SharpeningUpdate> pendingSharpening;
+    std::string saveMessage;
+    bool controlsConfigured{},settingsDirty{};
 };
 MenuState& menu() {
     // The plugin and swap observer are pinned for the process lifetime.
@@ -48,8 +58,87 @@ void updateMouse(HWND window,ImGuiIO& io) {
     io.AddMouseButtonEvent(0,(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0);
     io.AddMouseButtonEvent(1,(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0);
 }
-void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
-    const char* hotkeyName) {
+bool persistSettings(MenuState& state) {
+    if(!state.controlsConfigured||state.iniPath.empty())return false;
+    const auto saved=saveIni(state.iniPath,state.requestedSettings);
+    if(const auto error=std::get_if<Error>(&saved)) {
+        state.saveMessage="Save failed: "+error->message;
+        spdlog::warn("Diagnostics settings save failed: {}",error->message);
+        return false;
+    }
+    state.settingsDirty=false;
+    state.saveMessage="Saved to RazKolbas.ini";
+    return true;
+}
+bool choiceControl(const char* label,const char* key,
+    std::span<const char* const> choices,MenuState& state) {
+    auto& current=state.requestedSettings.values.at(key);
+    auto& selected=std::get<Choice>(current).value;
+    bool changed=false;
+    if(ImGui::BeginCombo(label,selected.c_str())) {
+        for(const auto* choice:choices) {
+            const bool active=selected==choice;
+            if(ImGui::Selectable(choice,active)) {
+                selected=choice;changed=true;
+            }
+            if(active)ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+void drawControls(MenuState& state,const DiagnosticsSnapshot& status) {
+    if(!state.controlsConfigured)return;
+    ImGui::Separator();
+    ImGui::TextUnformatted("DLSS controls");
+    static constexpr const char* qualities[]{
+        "NativeAA","Quality","Balanced","Performance","UltraPerformance"};
+    static constexpr const char* presets[]{"Auto","J","K","L","M"};
+    bool restartChanged=false;
+    restartChanged|=choiceControl("Quality","Upscaling.Quality",qualities,state);
+    restartChanged|=choiceControl("Model preset","Upscaling.ModelPreset",presets,state);
+    if(ImGui::IsItemHovered())
+        ImGui::SetTooltip("K: recommended quality model\nJ: less ghosting, more flicker\nL: Ultra Performance default\nM: Performance default");
+    if(restartChanged) {
+        state.settingsDirty=true;
+        persistSettings(state);
+    }
+    const auto& activeQuality=state.activeSettings.get<Choice>("Upscaling.Quality").value;
+    const auto& activePreset=state.activeSettings.get<Choice>("Upscaling.ModelPreset").value;
+    const auto& requestedQuality=state.requestedSettings.get<Choice>("Upscaling.Quality").value;
+    const auto& requestedPreset=state.requestedSettings.get<Choice>("Upscaling.ModelPreset").value;
+    ImGui::TextDisabled("Active: %s / preset %s",activeQuality.c_str(),activePreset.c_str());
+    if(requestedQuality!=activeQuality||requestedPreset!=activePreset)
+        ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
+            "Saved for next game launch");
+
+    bool sharpening=state.requestedSettings.get<bool>("Upscaling.Sharpening");
+    float sharpness=static_cast<float>(
+        state.requestedSettings.get<double>("Upscaling.Sharpness"));
+    if(ImGui::Checkbox("Post-DLSS sharpening",&sharpening)) {
+        state.requestedSettings.values["Upscaling.Sharpening"]=sharpening;
+        state.pendingSharpening=SharpeningUpdate{sharpening,sharpness};
+        state.settingsDirty=true;
+        persistSettings(state);
+    }
+    ImGui::BeginDisabled(!sharpening);
+    if(ImGui::SliderFloat("Sharpness",&sharpness,0.0f,1.0f,"%.2f")) {
+        state.requestedSettings.values["Upscaling.Sharpness"]=
+            static_cast<double>(sharpness);
+        state.pendingSharpening=SharpeningUpdate{sharpening,sharpness};
+        state.settingsDirty=true;
+    }
+    const bool sliderFinished=ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::EndDisabled();
+    if(sliderFinished)persistSettings(state);
+    ImGui::TextDisabled("Effective post sharpness: %.2f (updates live)",
+        status.postSharpness);
+    if(state.settingsDirty)ImGui::TextDisabled("Release the slider to save");
+    else if(!state.saveMessage.empty())
+        ImGui::TextDisabled("%s",state.saveMessage.c_str());
+}
+void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
+    UINT width,UINT height,const char* hotkeyName) {
     const char* mode=status.mode==DisplayMode::Dlaa?"DLAA":
         status.mode==DisplayMode::DlssSr?"DLSS Super Resolution":
         status.mode==DisplayMode::SpatialFallback?"Spatial upscaling":"Native";
@@ -89,6 +178,7 @@ void drawStatus(const DiagnosticsSnapshot& status,UINT width,UINT height,
             static_cast<unsigned long long>(status.skippedFrames));
         if(status.dlssDisabled)ImGui::TextColored(ImVec4(1.0f,0.6f,0.3f,1.0f),
             "DLSS disabled for this session");
+        drawControls(state,status);
         ImGui::Separator();
         ImGui::TextDisabled("Skyrim TAA: %s",
             status.skyrimTaaActive?"still enabled":"off");
@@ -112,6 +202,27 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,
     if(fontScale>=0.5&&fontScale<=4.0)state.fontScale=static_cast<float>(fontScale);
 }
 
+void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale,
+    const Settings& settings,const std::filesystem::path& iniPath) noexcept {
+    configureDiagnosticsMenu(enabled,key,fontScale);
+    auto& state=menu();
+    std::scoped_lock guard(state.mutex);
+    state.activeSettings=settings;
+    state.requestedSettings=settings;
+    state.iniPath=iniPath;
+    state.controlsConfigured=true;
+    state.settingsDirty=false;
+    state.saveMessage.clear();
+}
+
+std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept {
+    auto& state=menu();
+    std::scoped_lock guard(state.mutex);
+    auto update=state.pendingSharpening;
+    state.pendingSharpening.reset();
+    return update;
+}
+
 void drawDiagnosticsMenu(IDXGISwapChain* swap,
     const DiagnosticsSnapshot& snapshot) noexcept {
     if(!swap)return;
@@ -124,6 +235,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         const bool focused=GetForegroundWindow()==swapDesc.OutputWindow;
         const bool endDown=focused&&(GetAsyncKeyState(state.hotkey)&0x8000)!=0;
         if(endDown&&!state.endWasDown) {
+            if(state.visible&&state.settingsDirty)persistSettings(state);
             state.visible=!state.visible;
             state.visibleFrames=0;
             spdlog::info("Diagnostics menu {} by {} key",
@@ -177,7 +289,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         updateMouse(swapDesc.OutputWindow,io);
         ImGui_ImplDX11_NewFrame();
         ImGui::NewFrame();
-        drawStatus(snapshot,backDesc.Width,backDesc.Height,state.hotkeyName);
+        drawStatus(state,snapshot,backDesc.Width,backDesc.Height,state.hotkeyName);
         ImGui::Render();
         ++state.visibleFrames;
         if(state.visibleFrames<=3||state.visibleFrames%600==0)
