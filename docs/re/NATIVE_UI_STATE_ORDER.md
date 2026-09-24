@@ -42,6 +42,8 @@ viewport setter and leaves viewport origin and depth range intact. Unknown
 attachments continue through the existing compatibility-fault path.
 
 Debug and Release complete builds each passed all 40 CTest groups after the
-repair. This proves the D3D11 state transition in isolation. Attribution of
-the user's two symbols and their actual-game removal remain unverified until
-the installed 0.1.71 candidate is run.
+repair. This proves the D3D11 state transition in isolation. The user then ran
+0.1.71 and reported that both symbols remained, so this defect is not their
+cause. Installed 0.1.72 captures the exact prepared colour input, raw DLSS
+output before sharpening/UI and final composition from one frame; its runtime
+capture is pending.

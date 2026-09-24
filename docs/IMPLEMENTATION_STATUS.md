@@ -1,5 +1,38 @@
 # Implementation checkpoint
 
+## 0.1.72 same-frame DLSS stage capture (2026-09-25)
+
+The user started installed 0.1.71, loaded the affected scene and reported that
+the two centre symbols remained. The process stayed responsive, Present calls
+continued succeeding, the owned 1707x960-to-2560x1440 route activated at frame
+11042 and real DLSS submissions began at frame 11131. This **FAILS** the
+0.1.71 visual symptom test and rules out the repaired target/viewport ordering
+defect as the cause of those symbols. Skyrim closed normally at the user's
+request after the log evidence was collected.
+
+Source 0.1.72 adds one bounded diagnostic for the next run. On the first valid
+evaluation token it reads back the exact prepared reduced colour input and the
+raw display-sized DLSS output before post-sharpening. At the same frame's
+pre-Present boundary it reads the final display composition and atomically
+saves all three raw images plus extents, formats and hashes below
+`Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures`. The
+diagnostic then disables itself for that process. A new WARP test first failed
+because the evaluated-stage API was absent, then verified the selected input
+and output extents and output pixels. Complete Debug and Release builds each
+passed all 40 CTest groups. Source commit `c162112` is pushed.
+
+The verified archive is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.72-three-stage-capture-c162112.zip`,
+SHA-256
+`0f320868e3ede731981a4ca6a26a3f1d725508d3ae28ad9eb2dff10035a10808`.
+Independent extraction verified the exact manifest file set and every payload
+hash. With Skyrim stopped, 0.1.71 was backed up below ignored
+`artifacts/local/mo2-install-backup-0.1.72-c162112-20260925`; only the DLL and
+manifest were replaced. Installed DLL SHA-256 is
+`c7fb2ad8109176d7d13db469948c9abda6c620b9f2244045443e499fb57803b4`.
+The NVIDIA runtime and loose user INI remained byte-identical. Actual-game
+three-stage capture is **NOT RUN** and requires one user-started save load.
+
 ## 0.1.71 native UI viewport-order repair (2026-09-25)
 
 The user's 0.1.70 Quality screenshot showed two red/white symbols near the
@@ -37,8 +70,9 @@ manifest were replaced. Installed DLL SHA-256 is
 The signed NVIDIA runtime and loose user INI remained byte-identical at
 `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`
 and `b95d0ce49ce0ac9c9e03375cf4e1fc2d2eacbdf5234cbd6a2a5354c6c2db611c`.
-Actual-game removal of the two symbols is **NOT RUN**; the next evidence is a
-user-started save-load check of the same scene.
+Actual-game removal of the two symbols **FAILED** in the user-started run
+recorded above. The repair remains because its isolated state regression is
+real, but it is not attributed to the visible symbols.
 
 ## 0.1.70 startup depth retry and sharpening verification (2026-09-24)
 

@@ -1,10 +1,10 @@
 # Open implementation problems
 
-Checkpoint: RazKolbas 0.1.71 is installed for the next user-started run. The
+Checkpoint: RazKolbas 0.1.72 is installed for the next user-started run. The
 0.1.70 reduced Quality route reached at least 5,460 DLSS submissions from
-1707x960 to 2560x1440 with the native UI route active. A deterministic stale
-reduced-viewport transition found after the user's centre-symbol screenshot is
-repaired and build-tested, but its actual-game effect is not yet verified.
+1707x960 to 2560x1440 with the native UI route active. The deterministic stale
+reduced-viewport repair did not remove the two centre symbols in 0.1.71.
+0.1.72 will capture their first proven composition stage from one frame.
 This file describes remaining work, not completed features.
 The detailed run record is in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 and the render-size evidence is in
@@ -12,7 +12,7 @@ and the render-size evidence is in
 
 | Priority | Problem and measured state | Next proof or implementation step |
 |---|---|---|
-| P0 | The 0.1.70 owned reduced route submitted real DLSS continuously and the user reported a good image, but two red/white centre symbols appeared in one screenshot. Their owner and composition stage are unproven. A reproduced native-target/reduced-viewport state mismatch is repaired in installed 0.1.71. | Run 0.1.71 in the same scene. If the symbols remain, capture the prepared DLSS colour input, DLSS output before sharpening/UI, final composition and effective draw state for the affected frame. |
+| P0 | The 0.1.70 owned reduced route submitted real DLSS continuously and the user reported a good image, but two red/white centre symbols appeared. The 0.1.71 viewport-order repair did not remove them, so their owner and first composition stage remain unproven. | Run installed 0.1.72 once. Compare its same-frame prepared DLSS colour input, raw DLSS output before sharpening/UI and final composition; change only the stage that first contains the symbols. |
 | P0 | Long-run presentation ownership across ENB, ReShade, SKSE, SSE Display Tweaks, scene transitions and resize remains only partially verified. The current owned route chains the observed owners and preserved ENB appearance in the latest user report. | Exercise save load, interior/exterior transition and resize with the native UI route active; record any route downgrade, Present failure or visual-order change. |
 | P1 | NVIDIA NGX accepted cropped R32_FLOAT depth in a synthetic 1280x720-to-2560x1440 30-frame replay, including a post-evaluation injected fallback with clean retirement. Actual Skyrim motion-vector units, jitter, stable reduced source pixels and same-frame game handoff remain unverified. | Inspect the new 0.1.32 source-acceptance and `Reduced DLSS SR displayed` logs, then check visual quality and UI before treating this branch as working in game. |
 | P1 | The 0.1.68 user-started test proved the corrected `ControlMap +0x129` byte changes, but camera movement still reached gameplay. Runtime 0.1.69 successfully chained the verified input-dispatch CALL through the existing OpenAnimationReplacer owner. The user exercised the menu and sharpening controls, but camera suppression, focus-loss restoration and downstream-mod behavior were not explicitly reported as passed. | Verify no camera movement while dragging, normal controls after closing, focus-loss restoration and the next-launch quality/model transition. |
@@ -22,6 +22,6 @@ and the render-size evidence is in
 | P2 | FSR and XeSS SR/FG providers, capability selection and full configuration behavior remain incomplete. The current working display path is experimental NVIDIA SDR DLAA. | Continue the plan's provider-specific integration after the shared world/source/presentation contract is proven. |
 
 The owner no longer wants manual DRS console commands. Do not request another
-command-driven game run. The next evidence is a normal user-started 0.1.71
-save-load run at the same scene, followed by the bounded A/B/C capture only if
-the centre symbols persist. The assistant must not start or close Skyrim.
+command-driven game run. The next evidence is one normal user-started 0.1.72
+save-load run at the same scene; the bounded A/B/C capture is automatic. The
+assistant must not start or close Skyrim without the user's instruction.
