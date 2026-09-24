@@ -223,7 +223,8 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
                 const auto stats=std::get<DepthSampleStats>(sampled);
                 if(!stats.worldLike()) {
                     state->copiedFrame.reset();state->copyEvent.Reset();
-                    state->nextCopyFrame=state->forwarded.load(std::memory_order_relaxed)+600;
+                    state->nextCopyFrame=state->forwarded.load(std::memory_order_relaxed)+
+                        worldDepthProbeRetryDelay(state->copyAttempts);
                     state->copyStatus.store(WorldState::CopyStatus::NotAttempted,std::memory_order_release);
                     if(state->copyAttempts<=3||state->copyAttempts%6==0)
                         spdlog::info("Offscreen DLAA waiting for world-like depth: attempt={}; sampled distinct={}; nonFar={}; next world call >= {}",
@@ -337,11 +338,8 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
         }
         return;
     }
-    if(state->copyAttempts>=24) {
-        state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
-        try { spdlog::warn("Offscreen DLAA world-depth readiness not reached in 24 attempts; no NGX evaluation"); } catch(...) {}
-        return;
-    }
+    if(state->copyAttempts==24)
+        try { spdlog::warn("Offscreen DLAA initial depth window expired; startup scene is still clear, continuing low-frequency probes"); } catch(...) {}
     state->copyStatus.store(WorldState::CopyStatus::Failed,std::memory_order_release);
     ++state->copyAttempts;
     try {
@@ -790,10 +788,16 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
             update->enabled,update->sharpness);
         const auto configuredDlaa=state->sdrPresenter.configureSharpness(
             update->enabled,update->sharpness);
-        if(std::holds_alternative<bool>(configuredSr)&&
-           std::holds_alternative<bool>(configuredDlaa))
+        if(const auto srError=std::get_if<Error>(&configuredSr))
+            try { spdlog::warn("Live SR sharpening update rejected: {}",srError->message); } catch(...) {}
+        else if(const auto dlaaError=std::get_if<Error>(&configuredDlaa))
+            try { spdlog::warn("Live DLAA sharpening update rejected: {}",dlaaError->message); } catch(...) {}
+        else {
             state->srSharpness.store(update->enabled?update->sharpness:0.0f,
                 std::memory_order_release);
+            try { spdlog::info("Live post-DLSS sharpening changed: enabled={}; sharpness={}",
+                update->enabled,update->sharpness); } catch(...) {}
+        }
     }
     if(activeOwnedSceneDomain()||ownedScenePreviouslyActive())return;
 #endif

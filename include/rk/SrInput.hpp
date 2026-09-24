@@ -60,6 +60,12 @@ struct DepthSampleStats {
     unsigned distinct{},nonFar{};
     bool worldLike() const noexcept { return distinct>=16&&nonFar>=16; }
 };
+// Main-menu and loading scenes can expose only cleared depth for several
+// minutes. Keep the first probe window responsive, then reduce the diagnostic
+// readback rate without permanently disabling DLAA before a save is loaded.
+inline constexpr std::uint64_t worldDepthProbeRetryDelay(unsigned attempts) noexcept {
+    return attempts<24?600:1800;
+}
 struct ColorSampleStats {
     unsigned nonBlack{},distinct{};
     bool sceneLike() const noexcept { return nonBlack>=16&&distinct>=16; }

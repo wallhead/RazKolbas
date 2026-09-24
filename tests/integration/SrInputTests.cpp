@@ -93,6 +93,13 @@ TEST_CASE("Raw depth sample gate distinguishes a menu clear from world geometry"
     REQUIRE(std::holds_alternative<rk::Error>(rk::sampleWorldDepth(bytes,width,height,width*4-1)));
 }
 
+TEST_CASE("World depth probing continues after a long main-menu startup", "[sr_input]") {
+    REQUIRE(rk::worldDepthProbeRetryDelay(1)==600);
+    REQUIRE(rk::worldDepthProbeRetryDelay(23)==600);
+    REQUIRE(rk::worldDepthProbeRetryDelay(24)==1800);
+    REQUIRE(rk::worldDepthProbeRetryDelay(200)==1800);
+}
+
 TEST_CASE("Owned scene admission rejects a black transition despite world depth", "[sr_input]") {
     constexpr UINT width=64,height=64;
     std::vector<std::uint8_t> pixels(width*height*4,0);
