@@ -388,7 +388,23 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
                     compatible=false;
             }
             if(compatible) {
-                next_.om(context,count,replacements.data(),replacementDepth);return;
+                next_.om(context,count,replacements.data(),replacementDepth);
+                // A menu may set its reduced viewport while an offscreen target
+                // is bound, then restore the cached scene target without setting
+                // the viewport again. Keep the translated native target and its
+                // effective viewport in the same coordinate space.
+                UINT viewportCount=1;
+                D3D11_VIEWPORT viewport{};
+                context->RSGetViewports(&viewportCount,&viewport);
+                if(viewportCount==1) {
+                    auto width=viewport.Width,height=viewport.Height;
+                    if(route_.remapFullUiViewport(width,height,
+                        viewport.TopLeftX,viewport.TopLeftY,true)) {
+                        viewport.Width=width;viewport.Height=height;
+                        next_.viewport(context,1,&viewport);
+                    }
+                }
+                return;
             }
             if(!compatibilityFault_) {
                 faultInfo_={count,sceneSlot,depth!=nullptr,0,0};

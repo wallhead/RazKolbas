@@ -71,6 +71,30 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     const float green[4]{0,1,0,1};
     context->ClearRenderTargetView(nativeView.Get(),green);
     REQUIRE(SUCCEEDED(redirect.commitPublishedUi(1)));
+
+    // Some custom menus set their reduced viewport while an offscreen target
+    // is active, then restore the cached scene RTV without setting the
+    // viewport again. Once the scene RTV is translated to the native target,
+    // the effective viewport must be native too.
+    D3D11_TEXTURE2D_DESC offscreenDesc=desc;
+    offscreenDesc.Width=render.width;
+    offscreenDesc.Height=render.height;
+    ComPtr<ID3D11Texture2D> offscreen;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&offscreenDesc,nullptr,&offscreen)));
+    ComPtr<ID3D11RenderTargetView> offscreenView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(offscreen.Get(),nullptr,
+        &offscreenView)));
+    auto* offscreenRaw=offscreenView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),1,&offscreenRaw,nullptr);
+    redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
+    UINT reorderedCount=1;
+    D3D11_VIEWPORT reorderedViewport{};
+    context->RSGetViewports(&reorderedCount,&reorderedViewport);
+    REQUIRE(reorderedCount==1);
+    REQUIRE(reorderedViewport.Width==display.width);
+    REQUIRE(reorderedViewport.Height==display.height);
+
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
     ComPtr<ID3D11RenderTargetView> bound;
