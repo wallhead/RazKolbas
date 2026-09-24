@@ -40,6 +40,7 @@ struct MenuState {
     MenuInputCapture inputCapture;
     bool inputCaptureWarningLogged{};
     std::uintptr_t controlMapSingletonRva{};
+    std::uintptr_t ignoreKeyboardMouseOffset{};
 };
 MenuState& menu() {
     // The plugin and swap observer are pinned for the process lifetime.
@@ -79,7 +80,7 @@ bool memoryRangeAvailable(const void* address,std::size_t size,bool writable) no
         access==PAGE_EXECUTE_READWRITE||access==PAGE_EXECUTE_WRITECOPY;
 }
 std::uint8_t* resolveIgnoreKeyboardMouse(MenuState& state) noexcept {
-    if(!state.controlMapSingletonRva)return nullptr;
+    if(!state.controlMapSingletonRva||!state.ignoreKeyboardMouseOffset)return nullptr;
     const auto game=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     if(!game||state.controlMapSingletonRva>
        std::numeric_limits<std::uintptr_t>::max()-game)return nullptr;
@@ -88,9 +89,8 @@ std::uint8_t* resolveIgnoreKeyboardMouse(MenuState& state) noexcept {
     void* controls{};
     std::memcpy(&controls,slot,sizeof(controls));
     if(!controls)return nullptr;
-    constexpr std::uintptr_t ignoreKeyboardMouseOffset=0x121;
     const auto flag=reinterpret_cast<std::uint8_t*>(controls)+
-        ignoreKeyboardMouseOffset;
+        state.ignoreKeyboardMouseOffset;
     return memoryRangeAvailable(flag,sizeof(*flag),true)?flag:nullptr;
 }
 void updateGameInputCapture(MenuState& state,bool shouldCapture) noexcept {
@@ -297,7 +297,8 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,
 
 void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale,
     const Settings& settings,const std::filesystem::path& iniPath,
-    std::uintptr_t controlMapSingletonRva) noexcept {
+    std::uintptr_t controlMapSingletonRva,
+    std::uintptr_t ignoreKeyboardMouseOffset) noexcept {
     configureDiagnosticsMenu(enabled,key,fontScale);
     auto& state=menu();
     std::scoped_lock guard(state.mutex);
@@ -305,6 +306,7 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale
     state.requestedSettings=settings;
     state.iniPath=iniPath;
     state.controlMapSingletonRva=controlMapSingletonRva;
+    state.ignoreKeyboardMouseOffset=ignoreKeyboardMouseOffset;
     state.controlsConfigured=true;
     state.settingsDirty=false;
     state.saveMessage.clear();

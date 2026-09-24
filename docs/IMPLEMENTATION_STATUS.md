@@ -1,5 +1,29 @@
 # Implementation checkpoint
 
+## 0.1.68 Anniversary Edition menu input layout fix (2026-09-24)
+
+The user tested installed 0.1.67 and reported that the camera still moved
+while using the mouse over the End menu. The current log proved that the
+capture path resolved its singleton and believed the target byte was already
+`true` before capture. That disproved the assumed shared `+0x121` field
+layout rather than the state machine.
+
+Skyrim 1.6.1170 has an AE-only Marketplace input-context pointer. It shifts
+the `ControlMap` runtime data from `+0xE8` to `+0xF0`; therefore
+`ignoreKeyboardMouse` is at `+0x129`, eight bytes after the 1.5.97 member at
+`+0x121`. This is independently documented by the Community Shaders
+CommonLibSSE-NG versioned runtime-data accessor and by a live 1.6.1170 byte
+diff of the neighboring `enabledControls` member in CommonLibSSE-NG issue
+111. RazKolbas 0.1.68 now selects the singleton RVA and field offset together:
+1.5.97 uses `0x2ec5bd0/+0x121`; 1.6.1170 uses
+`0x30fda10/+0x129`. Startup logs the selected pair.
+
+Test-first validation reproduced the defect: the new AE profile assertion
+failed with `0x121` before the correction and passed with `0x129` afterward.
+Debug and Release each pass all 39 CTest groups. Runtime camera suppression
+and menu interaction are **NOT RUN** for 0.1.68 until the corrected DLL is
+installed and the user starts Skyrim.
+
 ## 0.1.67 menu input capture candidate (2026-09-24)
 
 The user verified that the 0.1.66 End menu renders and its widgets receive
@@ -29,9 +53,11 @@ SHA-256 `c4093c569a3c83b26587f4b9ea4c55de9ae6e73b84a2af9fb3fbd30e2fe0d452`.
 The canonical 1.5.97 CSV at source commit
 `99070858ff1b9cedf94ed45762405ff16cb61ca0` was read only and had SHA-256
 `abc579c9edb3a339c4c98406a11fa5c86257631e90bddc29fe404870f8401eaa`.
-No game or reference file was modified. Camera suppression, menu interaction
-and focus-loss restoration are **NOT RUN** in Skyrim until the 0.1.67 DLL is
-installed and the user starts the game.
+No game or reference file was modified. The subsequent user-started Skyrim
+test **FAILED** camera suppression: ImGui remained interactive, but moving the
+mouse also rotated the camera. The log showed capture enable/release events
+and a pre-existing `true` value at the incorrectly assumed `+0x121` field.
+The failure is addressed by the versioned layout in 0.1.68 above.
 
 Source commit `746884c` is pushed to `codex/razkolbas-bootstrap`. The verified
 MO2 archive

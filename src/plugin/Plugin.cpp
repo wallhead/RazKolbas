@@ -6,6 +6,7 @@
 #include "rk/Settings.hpp"
 #include "rk/RendererBootstrap.hpp"
 #include "rk/DiagnosticsMenu.hpp"
+#include "rk/MenuInputCapture.hpp"
 #include <fstream>
 #include <mutex>
 
@@ -19,10 +20,12 @@ bool supportedHost(const SKSE::detail::SKSEInterface* skse) {
     return skse->runtimeVersion == REL::Version(1, 5, 97, 0).pack() ||
            skse->runtimeVersion == REL::Version(1, 6, 1170, 0).pack();
 }
-std::uintptr_t controlMapSingletonRva(const SKSE::detail::SKSEInterface* skse) {
-    if(skse->runtimeVersion==REL::Version(1,5,97,0).pack())return 0x2ec5bd0;
-    if(skse->runtimeVersion==REL::Version(1,6,1170,0).pack())return 0x30fda10;
-    return 0;
+rk::MenuInputProfile menuInputProfile(const SKSE::detail::SKSEInterface* skse) {
+    if(skse->runtimeVersion==REL::Version(1,5,97,0).pack())
+        return rk::menuInputProfile(rk::MenuInputRuntime::SkyrimSe1597);
+    if(skse->runtimeVersion==REL::Version(1,6,1170,0).pack())
+        return rk::menuInputProfile(rk::MenuInputRuntime::SkyrimAe161170);
+    return {};
 }
 void onMessage(SKSE::MessagingInterface::Message* message) {
     if (!message) return;
@@ -54,7 +57,7 @@ rk::Settings loadSettings(std::filesystem::path& path) {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 67, 0});
+    metadata.PluginVersion({0, 1, 68, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -79,10 +82,14 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
         if (!rk::initializeLogging()) return false;
         std::filesystem::path iniPath;
         auto settings = loadSettings(iniPath);
+        const auto inputProfile=menuInputProfile(skse);
         rk::configureDiagnosticsMenu(settings.get<bool>("Interface.Enabled"),
             settings.get<rk::Text>("Interface.ToggleMenuKey").value,
             settings.get<double>("Interface.FontScale"),settings,iniPath,
-            controlMapSingletonRva(skse));
+            inputProfile.controlMapSingletonRva,
+            inputProfile.ignoreKeyboardMouseOffset);
+        spdlog::info("Diagnostics input profile: ControlMap RVA=0x{:x}, ignoreKeyboardMouse=+0x{:x}",
+            inputProfile.controlMapSingletonRva,inputProfile.ignoreKeyboardMouseOffset);
         const auto messaging = static_cast<SKSE::detail::SKSEMessagingInterface*>(skse->QueryInterface(SKSE::LoadInterface::kMessaging));
         if (!messaging || !messaging->RegisterListener || messaging->interfaceVersion < SKSE::MessagingInterface::kVersion) {
             spdlog::error("SKSE messaging interface unavailable; initialization aborted");

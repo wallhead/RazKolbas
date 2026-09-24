@@ -1,6 +1,17 @@
 #include "rk/MenuInputCapture.hpp"
 #include <catch2/catch_test_macros.hpp>
 
+TEST_CASE("Menu input profile follows the runtime-specific ControlMap layout",
+    "[menu_input_capture]") {
+    const auto se=rk::menuInputProfile(rk::MenuInputRuntime::SkyrimSe1597);
+    REQUIRE(se.controlMapSingletonRva==0x2ec5bd0);
+    REQUIRE(se.ignoreKeyboardMouseOffset==0x121);
+
+    const auto ae=rk::menuInputProfile(rk::MenuInputRuntime::SkyrimAe161170);
+    REQUIRE(ae.controlMapSingletonRva==0x30fda10);
+    REQUIRE(ae.ignoreKeyboardMouseOffset==0x129);
+}
+
 TEST_CASE("Menu mouse capture blocks Skyrim input and restores the previous state",
     "[menu_input_capture]") {
     rk::MenuInputCapture capture;

@@ -31,7 +31,8 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
 void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale) noexcept;
 void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale,
     const Settings& settings,const std::filesystem::path& iniPath,
-    std::uintptr_t controlMapSingletonRva) noexcept;
+    std::uintptr_t controlMapSingletonRva,
+    std::uintptr_t ignoreKeyboardMouseOffset) noexcept;
 std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

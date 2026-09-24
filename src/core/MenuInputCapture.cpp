@@ -1,6 +1,16 @@
 #include "rk/MenuInputCapture.hpp"
 
 namespace rk {
+MenuInputProfile menuInputProfile(MenuInputRuntime runtime) noexcept {
+    switch(runtime) {
+    case MenuInputRuntime::SkyrimSe1597:
+        return {0x2ec5bd0,0x121};
+    case MenuInputRuntime::SkyrimAe161170:
+        return {0x30fda10,0x129};
+    }
+    return {};
+}
+
 std::optional<bool> MenuInputCapture::update(
     bool shouldCapture,bool currentlyIgnored) noexcept {
     if(shouldCapture) {
