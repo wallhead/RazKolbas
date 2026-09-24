@@ -1,5 +1,45 @@
 # Implementation checkpoint
 
+## 0.1.71 native UI viewport-order repair (2026-09-25)
+
+The user's 0.1.70 Quality screenshot showed two red/white symbols near the
+centre while the reduced 1707x960-to-2560x1440 DLSS route and native UI route
+were active. The screenshot does not identify the widget owner or prove that
+the symbols entered the DLSS input. The supplied UI-boundary report, SHA-256
+`687382c2f295fca0016af9d156ef0ecc28df817d6fdfbc478a30b9dd8e94ff45`,
+corrected an earlier interpretation: Skyrim's base `IMenu::PostDisplay()`
+calls `uiMovie->Display()`, so the current callback precedes the menu movie
+draw. Moving that callback earlier was therefore not justified.
+
+The preserved `RazKolbas_UI_State_DeepDive_14.zip`, SHA-256
+`ae8470da530613cd26e7508fc171fc3b08e68117c690ceec2102aeb9fad8d8d2`,
+passed all hashes in its own `SHA256SUMS.txt`. Its strongest source-level
+finding reproduced in the current tree: a custom menu can bind an offscreen
+reduced target, set a reduced viewport, then restore the cached scene RTV
+without another viewport call. RazKolbas translated that scene RTV to the
+native target but left the effective viewport reduced. The new WARP test first
+failed with a 32x32 effective viewport where the translated target required
+64x64. The redirector now repairs that still-reduced full-scene viewport at
+the successful target transition while preserving unrelated targets, origin
+and depth range. The focused test then passed, and complete Debug and Release
+builds each passed all 40 CTest groups. Source commit `65b3a76` is pushed.
+
+The verified MO2 archive is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.71-ui-viewport-65b3a76.zip`,
+SHA-256
+`d679ddeb272576e43a47a5d5ba8a3d7c476de0011b179c92ed936e5fe437bf6b`.
+Independent extraction found exactly the four manifest payloads plus the
+manifest and verified every payload hash. With Skyrim stopped, the old mod was
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.71-65b3a76-20260925`; only the DLL and
+manifest were replaced. Installed DLL SHA-256 is
+`f54693d720c3b9692542da6975d5ffea1597bbbf596199b69fcd395626cc7d4b`.
+The signed NVIDIA runtime and loose user INI remained byte-identical at
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`
+and `b95d0ce49ce0ac9c9e03375cf4e1fc2d2eacbdf5234cbd6a2a5354c6c2db611c`.
+Actual-game removal of the two symbols is **NOT RUN**; the next evidence is a
+user-started save-load check of the same scene.
+
 ## 0.1.70 startup depth retry and sharpening verification (2026-09-24)
 
 The user reported that the sharpening slider had no visible effect in the
