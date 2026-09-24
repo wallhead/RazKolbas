@@ -28,9 +28,18 @@ has SHA-256
 its Release DLL is
 `a96c2482eadab13d508435a404e6a5c6dc9f81f1934e3d99ed9eb91eddab2351`.
 Independent extraction found exactly four manifest payloads plus the manifest,
-all payload hashes passed, and the NVIDIA runtime signature is valid. Skyrim
-was running when installation was attempted, so no installed file was touched
-and 0.1.65 remains active. Installing 0.1.66 is pending a normal game exit.
+all payload hashes passed, and the NVIDIA runtime signature is valid. The
+first installation attempt stopped without changing files because Skyrim was
+running. After the user exited, all installed 0.1.65 payloads matched their
+manifest and the complete mod was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.66-35b5b2e`. Only the DLL and manifest
+were replaced. The installed 0.1.66 DLL matches the hash above; the user INI
+remains
+`2b3afaa42d207c07eb28d5de0f8fc53e5a7fdeb4179022d0b8134ec9f0d19d6c`
+and the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All four installed payloads match the 0.1.66 manifest. Runtime visual and
+mouse-interaction verification remains pending.
 
 ## 0.1.64 game result and 0.1.65 in-game DLSS controls (2026-09-23)
 
