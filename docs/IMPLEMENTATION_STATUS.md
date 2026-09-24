@@ -21,8 +21,30 @@ diff of the neighboring `enabledControls` member in CommonLibSSE-NG issue
 Test-first validation reproduced the defect: the new AE profile assertion
 failed with `0x121` before the correction and passed with `0x129` afterward.
 Debug and Release each pass all 39 CTest groups. Runtime camera suppression
-and menu interaction are **NOT RUN** for 0.1.68 until the corrected DLL is
-installed and the user starts Skyrim.
+and menu interaction remain **NOT RUN** for 0.1.68 until the user starts
+Skyrim.
+
+Source commit `3bf5b55` is installed and ready for that test. The verified MO2
+archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.68-ae-menu-input-fix-3bf5b55.zip`
+has SHA-256
+`04755170df6b1d795248646c9d65ace3f6758b2c3f593394bd4ee866e000ebbb`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest, all payload hashes passed, and the NVIDIA runtime signature is
+valid. Skyrim was closed for installation. Only the DLL and manifest were
+replaced; the user-edited INI remains
+`38c8cc8051065d35cafd18ae7c0179c0dcde89a74cb8623e032d90e93671cec8`
+and the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The installed DLL is
+`e0e34e4c27bdfd96d4521bd4eedbb379f90a3810f4ac5aa4b3cb11ffc5623d95`.
+All installed payloads match the final manifest status
+`EXPERIMENTAL_AE_MENU_INPUT_CAPTURE_PENDING_GAME_TEST`. The prior installation
+is preserved in ignored
+`artifacts/local/mo2-install-backup-0.1.68-3bf5b55`; after an initial wildcard
+copy syntax error, the rollback snapshot was reconstructed from the verified
+0.1.67 stage plus the untouched INI/runtime and validated against the old
+manifest (whose sole expected mismatch is the user-edited INI).
 
 ## 0.1.67 menu input capture candidate (2026-09-24)
 
