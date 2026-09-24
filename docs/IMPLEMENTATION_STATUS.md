@@ -29,8 +29,28 @@ process lifetime. Patch identity and recovery are recorded in
 Test-first validation observed both new behavioral cases fail against the
 initial stubs. The completed implementation passes 16 focused assertions.
 Debug and Release each pass all 40 CTest groups. Runtime hook installation,
-SmartTalk coexistence and camera suppression are **NOT RUN** until the 0.1.69
-DLL is installed and the user starts Skyrim.
+SmartTalk coexistence and camera suppression remain **NOT RUN** until the user
+starts Skyrim.
+
+Source commit `78474f4` is installed and ready for that test. The independently
+verified MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.69-menu-input-dispatch-78474f4.zip`
+has SHA-256
+`1147270d7ca50a7fd94bfd6b8eab281a94df0c196b41093bb3ff616ce6ffdaa5`.
+It contains exactly the four manifest payloads plus the manifest; all hashes
+pass and the NVIDIA runtime signature is valid. Skyrim was closed for the
+installation. The prior physical mod state is preserved in ignored
+`artifacts/local/mo2-install-backup-0.1.69-78474f4`. Its sole old-manifest
+mismatch was a missing `RazKolbas.ini` after the 0.1.68 run. Installation
+restored that INI from the independently verified 0.1.68 extraction at its
+previously recorded SHA-256
+`38c8cc8051065d35cafd18ae7c0179c0dcde89a74cb8623e032d90e93671cec8`.
+Installed DLL SHA-256 is
+`553ca500015f795bf441dba620281b173a13833d49c4de90f31e1c6acb485e0b`;
+the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match manifest status
+`EXPERIMENTAL_MENU_INPUT_DISPATCH_PENDING_GAME_TEST`.
 
 ## 0.1.68 Anniversary Edition menu input layout fix (2026-09-24)
 
