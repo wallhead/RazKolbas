@@ -1,0 +1,50 @@
+{
+  "id": "skyrim1170.menu-input-dispatch-v1",
+  "purpose": "Prevent Skyrim camera and gameplay controls from consuming mouse/keyboard events while the RazKolbas diagnostics menu is visible.",
+  "target": {
+    "module": "SkyrimSE.exe",
+    "sha256": "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+    "file_size": 37157144,
+    "image_size": 59179008,
+    "architecture": "x86-64",
+    "version": "1.6.1170.0"
+  },
+  "location": {
+    "address_library_id": 68617,
+    "function_rva": "0xcd8f40",
+    "call_rva": "0xcd8fbb",
+    "call_offset": "0x7b",
+    "prefix_hex": "48894c2440488bce",
+    "suffix_hex": "488b0da1844d02e8d41c00000fb686e0000000"
+  },
+  "original": {
+    "instruction": "E8 rel32",
+    "validation": "The opcode, eight-byte argument setup and nineteen-byte continuation must match exactly. The rel32 displacement is decoded at runtime because an existing compatible hook may own the call. Both the immediate target and a recognized FF 25 absolute relay destination must be committed executable memory."
+  },
+  "replacement": {
+    "builder": "prepareNearCallRelay + applyCallInstruction",
+    "representation": "E8 rel32 to a W^X near relay; relay is FF 25 00000000 followed by the absolute RazKolbas proxy address"
+  },
+  "abi": {
+    "calling_convention": "Windows x64",
+    "arguments": "RCX is the existing input dispatcher; RDX is InputEvent* const*",
+    "behavior": "The proxy calls the previous hook chain exactly once. It forwards the original event list when the menu is hidden and a static one-element null list when the menu is visible and focused.",
+    "registers_stack_return": "The generated relay changes no registers or flags. The C++ proxy follows the platform ABI and returns the prior chain's void result."
+  },
+  "lifetime": {
+    "installation": "SKSEPlugin_Load startup boundary before world/input threads run",
+    "ownership": "The plugin DLL is pinned and the sealed relay remains allocated for process lifetime.",
+    "removal": "No hot removal; disabling takes effect on the next launch."
+  },
+  "recovery": {
+    "disable": "Add skyrim1170.menu-input-dispatch-v1 to Patching.DisabledPatchIds or disable experimental versioned patches, then restart Skyrim.",
+    "failure_scope": "Any identity, surrounding-code, executable-chain, relay-allocation or exact-write mismatch leaves the call unchanged and logs the rejection."
+  },
+  "evidence": [
+    "2026-09-24 user test: 0.1.68 wrote ControlMap::ignoreKeyboardMouse at verified AE +0x129, but camera movement continued.",
+    "Live 1.6.1170 disassembly: Address Library ID 68617 resolved to RVA 0xcd8f40 and the dispatch CALL is at +0x7b/RVA 0xcd8fbb.",
+    "The active call already chained through an executable SKSE relay to SmartTalk.dll; the new patch preserves that target as its next owner.",
+    "DynamicShaderFrameGen reference uses the same dispatch boundary and a null event list while its menu is visible.",
+    "Unit tests cover exact caller validation, variable prior-owner displacement, empty-list selection, chained target decoding and invalid plans."
+  ]
+}

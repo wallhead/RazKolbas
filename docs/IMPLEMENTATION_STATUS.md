@@ -1,5 +1,37 @@
 # Implementation checkpoint
 
+## 0.1.69 input-dispatch menu capture candidate (2026-09-24)
+
+The user-started 0.1.68 test **FAILED** camera suppression. Live inspection
+proved that RazKolbas selected `ControlMap +0x129`, wrote the byte while the
+menu was open, and restored it on close. The camera still moved, so the
+`ignoreKeyboardMouse` field is insufficient for this gameplay input path.
+
+The working DynamicShaderFrameGen reference suppresses input one level lower:
+at the `BSInputDeviceManager` dispatch boundary it forwards a static null
+event list while its menu is visible. Live 1.6.1170 disassembly mapped Address
+Library ID 68617 to function RVA `0xcd8f40` and confirmed the relevant direct
+CALL at `+0x7b` / RVA `0xcd8fbb`. Its exact argument setup passes the
+dispatcher in RCX and `InputEvent* const*` in RDX. The active call was already
+redirected through an SKSE relay to `SmartTalk.dll`; replacing it blindly
+would break that mod.
+
+Source 0.1.69 validates the executable hash, exact eight-byte argument setup,
+CALL opcode and exact nineteen-byte continuation. It decodes and validates the
+current executable target, installs its own register-preserving near relay at
+the SKSE startup boundary, and keeps the previous target as the next owner in
+the chain. While the End menu is visible and Skyrim is focused, the proxy
+passes a one-element null event list to that chain; otherwise it forwards the
+original pointer unchanged. The callback DLL and relay remain valid for the
+process lifetime. Patch identity and recovery are recorded in
+`patches/skyrim1170-menu-input-dispatch-v1.json`.
+
+Test-first validation observed both new behavioral cases fail against the
+initial stubs. The completed implementation passes 16 focused assertions.
+Debug and Release each pass all 40 CTest groups. Runtime hook installation,
+SmartTalk coexistence and camera suppression are **NOT RUN** until the 0.1.69
+DLL is installed and the user starts Skyrim.
+
 ## 0.1.68 Anniversary Edition menu input layout fix (2026-09-24)
 
 The user tested installed 0.1.67 and reported that the camera still moved
@@ -20,9 +52,9 @@ diff of the neighboring `enabledControls` member in CommonLibSSE-NG issue
 
 Test-first validation reproduced the defect: the new AE profile assertion
 failed with `0x121` before the correction and passed with `0x129` afterward.
-Debug and Release each pass all 39 CTest groups. Runtime camera suppression
-and menu interaction remain **NOT RUN** for 0.1.68 until the user starts
-Skyrim.
+Debug and Release each pass all 39 CTest groups. The subsequent user-started
+test **FAILED** camera suppression even though live memory and logs confirmed
+the correct byte changed. This result motivated the dispatch hook in 0.1.69.
 
 Source commit `3bf5b55` is installed and ready for that test. The verified MO2
 archive

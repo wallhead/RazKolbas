@@ -34,5 +34,6 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale
     std::uintptr_t controlMapSingletonRva,
     std::uintptr_t ignoreKeyboardMouseOffset) noexcept;
 std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
+bool diagnosticsMenuCapturingInput() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

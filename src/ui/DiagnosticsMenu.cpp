@@ -7,6 +7,7 @@
 #include <wrl/client.h>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
@@ -19,6 +20,7 @@
 namespace rk {
 namespace {
 using Microsoft::WRL::ComPtr;
+std::atomic<bool> inputDispatchCapture{};
 struct MenuState {
     std::mutex mutex;
     ComPtr<ID3D11Device> device;
@@ -94,6 +96,7 @@ std::uint8_t* resolveIgnoreKeyboardMouse(MenuState& state) noexcept {
     return memoryRangeAvailable(flag,sizeof(*flag),true)?flag:nullptr;
 }
 void updateGameInputCapture(MenuState& state,bool shouldCapture) noexcept {
+    inputDispatchCapture.store(shouldCapture,std::memory_order_release);
     try {
         auto* flag=resolveIgnoreKeyboardMouse(state);
         if(!flag) {
@@ -318,6 +321,10 @@ std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept {
     auto update=state.pendingSharpening;
     state.pendingSharpening.reset();
     return update;
+}
+
+bool diagnosticsMenuCapturingInput() noexcept {
+    return inputDispatchCapture.load(std::memory_order_acquire);
 }
 
 void drawDiagnosticsMenu(IDXGISwapChain* swap,

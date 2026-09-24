@@ -1,4 +1,5 @@
 #include "rk/RendererBootstrap.hpp"
+#include "rk/MenuInputHook.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include "rk/SwapObserver.hpp"
@@ -1249,6 +1250,9 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         const auto world=installWorldDrawPassThrough(game,identity.hash,settings);
         if(const auto error=std::get_if<Error>(&world))
             spdlog::warn("World-draw pass-through not installed: {}",error->message);
+        const auto menuInput=installMenuInputDispatchHook(game,identity.hash,settings);
+        if(const auto error=std::get_if<Error>(&menuInput))
+            spdlog::warn("Menu input dispatch hook not installed: {}",error->message);
         const auto rect=installOwnedRendererRectHook(game,identity.hash,settings);
         if(const auto error=std::get_if<Error>(&rect))
             spdlog::warn("Owned renderer rectangle pass-through not installed: {}",
