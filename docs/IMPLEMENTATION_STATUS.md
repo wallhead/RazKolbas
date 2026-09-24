@@ -37,9 +37,21 @@ The user's latest INI was preserved at SHA-256
 `138ed26a1e8f42d855cd764d50667bf4110333e62f3b3ce84930f0fb0b5f929d`.
 The prior mod and loose INI are backed up in ignored
 `artifacts/local/mo2-install-backup-0.1.70-ee00286-20260924-223454`.
-Skyrim was closed before installation. The installed 0.1.70 build has not yet
-run; runtime startup-retry and new sharpening-log verification remain
-**NOT RUN**.
+Skyrim was closed before installation.
+
+The user then started 0.1.70 with Quality mode. Runtime installation and the
+reduced route **PASS**: the plugin selected `requested=true`, created a
+1707x960 owned scene for the 2560x1440 display, admitted real world colour and
+depth at frame 32221, created the NGX feature and activated the native UI
+resource route. The first evaluation used game jitter `(-0.125,0.27777776)`,
+MV scale 1707x960, neutral NGX sharpening and post-sharpness 0.7. The route
+reached at least 5,460 provider submissions with zero fallbacks in flight and
+no post-activation warning or error. Live menu interaction toggled sharpening
+and swept its value; each change reached the presenter, and the saved setting
+settled at enabled/0.75. The menu closed and released mouse capture. Visual
+quality, camera suppression, focus-loss restoration and a post-load scene
+transition still require the user's explicit observation; they are not
+inferred from the log.
 
 ## 0.1.69 input-dispatch menu capture candidate (2026-09-24)
 
