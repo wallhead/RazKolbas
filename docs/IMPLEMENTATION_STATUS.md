@@ -33,6 +33,24 @@ No game or reference file was modified. Camera suppression, menu interaction
 and focus-loss restoration are **NOT RUN** in Skyrim until the 0.1.67 DLL is
 installed and the user starts the game.
 
+Source commit `746884c` is pushed to `codex/razkolbas-bootstrap`. The verified
+MO2 archive
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.67-menu-input-capture-746884c.zip`
+has SHA-256
+`219c92f9cb68342c2300df81ad23daa39731b5462ee2c8097292127cc043ae2c`.
+Independent extraction found exactly the four manifest-listed payloads plus
+the manifest, all payload hashes passed, and the NVIDIA runtime signature is
+valid. Skyrim was already closed. The complete prior mod was backed up to
+ignored `artifacts/local/mo2-install-backup-0.1.67-746884c`; its only old
+manifest mismatch was the INI intentionally changed through the 0.1.66 menu.
+Only the installed DLL and manifest were replaced. Installed DLL SHA-256 is
+`437c7c6c7befba41f20c97a043b3d5ec1be4ec1e1ad1af3f01fb4302656be67d`.
+The preserved user INI and signed NVIDIA runtime retain SHA-256
+`45027f3506e40ec4dbfee157a704f25c98b4cc1491582a42a082858afd2a4887`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All installed payloads match the final manifest status
+`EXPERIMENTAL_MENU_INPUT_CAPTURE_PENDING_GAME_TEST`.
+
 ## 0.1.66 reference-aligned menu layout (2026-09-23)
 
 The supplied `SkyrimUpscaler.ini` and recovered `SettingGUI.cpp` strings were
