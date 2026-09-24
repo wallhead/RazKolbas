@@ -19,6 +19,11 @@ bool supportedHost(const SKSE::detail::SKSEInterface* skse) {
     return skse->runtimeVersion == REL::Version(1, 5, 97, 0).pack() ||
            skse->runtimeVersion == REL::Version(1, 6, 1170, 0).pack();
 }
+std::uintptr_t controlMapSingletonRva(const SKSE::detail::SKSEInterface* skse) {
+    if(skse->runtimeVersion==REL::Version(1,5,97,0).pack())return 0x2ec5bd0;
+    if(skse->runtimeVersion==REL::Version(1,6,1170,0).pack())return 0x30fda10;
+    return 0;
+}
 void onMessage(SKSE::MessagingInterface::Message* message) {
     if (!message) return;
     // T05 must prove an early renderer boundary. PostLoad is not that proof.
@@ -49,7 +54,7 @@ rk::Settings loadSettings(std::filesystem::path& path) {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 66, 0});
+    metadata.PluginVersion({0, 1, 67, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
@@ -76,7 +81,8 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::detail::SKSEIn
         auto settings = loadSettings(iniPath);
         rk::configureDiagnosticsMenu(settings.get<bool>("Interface.Enabled"),
             settings.get<rk::Text>("Interface.ToggleMenuKey").value,
-            settings.get<double>("Interface.FontScale"),settings,iniPath);
+            settings.get<double>("Interface.FontScale"),settings,iniPath,
+            controlMapSingletonRva(skse));
         const auto messaging = static_cast<SKSE::detail::SKSEMessagingInterface*>(skse->QueryInterface(SKSE::LoadInterface::kMessaging));
         if (!messaging || !messaging->RegisterListener || messaging->interfaceVersion < SKSE::MessagingInterface::kVersion) {
             spdlog::error("SKSE messaging interface unavailable; initialization aborted");

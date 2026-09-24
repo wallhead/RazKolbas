@@ -1,12 +1,16 @@
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/D3D11StateScope.hpp"
+#include "rk/MenuInputCapture.hpp"
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -33,6 +37,9 @@ struct MenuState {
     std::optional<SharpeningUpdate> pendingSharpening;
     std::string saveMessage;
     bool controlsConfigured{},settingsDirty{};
+    MenuInputCapture inputCapture;
+    bool inputCaptureWarningLogged{};
+    std::uintptr_t controlMapSingletonRva{};
 };
 MenuState& menu() {
     // The plugin and swap observer are pinned for the process lifetime.
@@ -57,6 +64,60 @@ void updateMouse(HWND window,ImGuiIO& io) {
     else io.AddMousePosEvent(-3.4e38f,-3.4e38f);
     io.AddMouseButtonEvent(0,(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0);
     io.AddMouseButtonEvent(1,(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0);
+}
+bool memoryRangeAvailable(const void* address,std::size_t size,bool writable) noexcept {
+    if(!address||!size)return false;
+    MEMORY_BASIC_INFORMATION info{};
+    if(!VirtualQuery(address,&info,sizeof(info))||info.State!=MEM_COMMIT||
+       (info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+    const auto start=reinterpret_cast<std::uintptr_t>(address);
+    const auto regionEnd=reinterpret_cast<std::uintptr_t>(info.BaseAddress)+info.RegionSize;
+    if(start>regionEnd||size>regionEnd-start)return false;
+    if(!writable)return true;
+    const auto access=info.Protect&0xff;
+    return access==PAGE_READWRITE||access==PAGE_WRITECOPY||
+        access==PAGE_EXECUTE_READWRITE||access==PAGE_EXECUTE_WRITECOPY;
+}
+std::uint8_t* resolveIgnoreKeyboardMouse(MenuState& state) noexcept {
+    if(!state.controlMapSingletonRva)return nullptr;
+    const auto game=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+    if(!game||state.controlMapSingletonRva>
+       std::numeric_limits<std::uintptr_t>::max()-game)return nullptr;
+    const auto slot=reinterpret_cast<const void*>(game+state.controlMapSingletonRva);
+    if(!memoryRangeAvailable(slot,sizeof(void*),false))return nullptr;
+    void* controls{};
+    std::memcpy(&controls,slot,sizeof(controls));
+    if(!controls)return nullptr;
+    constexpr std::uintptr_t ignoreKeyboardMouseOffset=0x121;
+    const auto flag=reinterpret_cast<std::uint8_t*>(controls)+
+        ignoreKeyboardMouseOffset;
+    return memoryRangeAvailable(flag,sizeof(*flag),true)?flag:nullptr;
+}
+void updateGameInputCapture(MenuState& state,bool shouldCapture) noexcept {
+    try {
+        auto* flag=resolveIgnoreKeyboardMouse(state);
+        if(!flag) {
+            if(shouldCapture&&!state.inputCaptureWarningLogged) {
+                state.inputCaptureWarningLogged=true;
+                spdlog::warn("Diagnostics mouse capture unavailable: Skyrim ControlMap flag was not resolved");
+            }
+            return;
+        }
+        const bool wasActive=state.inputCapture.active();
+        const auto requested=state.inputCapture.update(
+            shouldCapture,*flag!=0);
+        if(requested)*flag=*requested?1u:0u;
+        if(wasActive!=state.inputCapture.active())
+            spdlog::info("Diagnostics mouse capture {} (restored state={})",
+                state.inputCapture.active()?"enabled":"released",
+                *flag!=0);
+    } catch(...) {
+        if(!state.inputCaptureWarningLogged) {
+            state.inputCaptureWarningLogged=true;
+            try { spdlog::warn("Diagnostics mouse capture unavailable after an unexpected error"); }
+            catch(...) {}
+        }
+    }
 }
 bool persistSettings(MenuState& state) {
     if(!state.controlsConfigured||state.iniPath.empty())return false;
@@ -235,13 +296,15 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,
 }
 
 void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale,
-    const Settings& settings,const std::filesystem::path& iniPath) noexcept {
+    const Settings& settings,const std::filesystem::path& iniPath,
+    std::uintptr_t controlMapSingletonRva) noexcept {
     configureDiagnosticsMenu(enabled,key,fontScale);
     auto& state=menu();
     std::scoped_lock guard(state.mutex);
     state.activeSettings=settings;
     state.requestedSettings=settings;
     state.iniPath=iniPath;
+    state.controlMapSingletonRva=controlMapSingletonRva;
     state.controlsConfigured=true;
     state.settingsDirty=false;
     state.saveMessage.clear();
@@ -257,13 +320,19 @@ std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept {
 
 void drawDiagnosticsMenu(IDXGISwapChain* swap,
     const DiagnosticsSnapshot& snapshot) noexcept {
-    if(!swap)return;
     auto& state=menu();
     std::unique_lock guard(state.mutex,std::try_to_lock);
-    if(!guard||state.failed||!state.enabled)return;
+    if(!guard)return;
+    if(!swap||state.failed||!state.enabled) {
+        updateGameInputCapture(state,false);
+        return;
+    }
     try {
         DXGI_SWAP_CHAIN_DESC swapDesc{};
-        if(FAILED(swap->GetDesc(&swapDesc))||!swapDesc.OutputWindow)return;
+        if(FAILED(swap->GetDesc(&swapDesc))||!swapDesc.OutputWindow) {
+            updateGameInputCapture(state,false);
+            return;
+        }
         const bool focused=GetForegroundWindow()==swapDesc.OutputWindow;
         const bool endDown=focused&&(GetAsyncKeyState(state.hotkey)&0x8000)!=0;
         if(endDown&&!state.endWasDown) {
@@ -274,6 +343,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
                 state.visible?"opened":"closed",state.hotkeyName);
         }
         state.endWasDown=endDown;
+        updateGameInputCapture(state,state.visible&&focused);
         if(!state.visible||!focused) {
             if(state.imgui) {
                 ImGui::SetCurrentContext(state.imgui);
@@ -331,9 +401,11 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         context->OMSetRenderTargets(1,target.GetAddressOf(),nullptr);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
     } catch(const std::exception& error) {
+        updateGameInputCapture(state,false);
         state.failed=true;
         try { spdlog::warn("Diagnostics menu disabled: {}",error.what()); } catch(...) {}
     } catch(...) {
+        updateGameInputCapture(state,false);
         state.failed=true;
         try { spdlog::warn("Diagnostics menu disabled after an unexpected error"); } catch(...) {}
     }

@@ -1,5 +1,38 @@
 # Implementation checkpoint
 
+## 0.1.67 menu input capture candidate (2026-09-24)
+
+The user verified that the 0.1.66 End menu renders and its widgets receive
+mouse input, but Skyrim also receives the same mouse movement and rotates the
+camera. The existing menu polls Win32 cursor/button state directly for ImGui
+and does not suppress the engine input path, so the duplicated input is the
+measured cause.
+
+Source 0.1.67 adds a small ownership-aware capture state machine. While the
+RazKolbas menu is visible and Skyrim owns focus, the Present callback sets the
+engine `ControlMap::ignoreKeyboardMouse` byte. ImGui continues using its
+independent Win32 polling. Closing the menu, losing focus or disabling the
+menu restores the exact value observed when capture began. A conflicting
+owner that clears the byte while capture is active is overridden on the next
+menu frame; a block already owned by Skyrim or another mod is preserved on
+release. The singleton slot is version-gated to supported runtimes: canonical
+Address Library ID 514705 maps to RVA `0x2ec5bd0` for 1.5.97, and ID 400863
+maps to RVA `0x30fda10` for the installed 1.6.1170 database. The field offset
+is the CommonLibSSE-NG `ControlMap::ignoreKeyboardMouse` layout at `+0x121`.
+Both the singleton slot and heap byte must be committed/readable, and the byte
+must also be writable, before RazKolbas changes it.
+
+Test-first validation observed the three new cases fail against the initial
+no-op state machine, then pass after implementation. Debug and Release each
+pass all 39 CTest groups. The 1.6.1170 Address Library file is unchanged at
+SHA-256 `c4093c569a3c83b26587f4b9ea4c55de9ae6e73b84a2af9fb3fbd30e2fe0d452`.
+The canonical 1.5.97 CSV at source commit
+`99070858ff1b9cedf94ed45762405ff16cb61ca0` was read only and had SHA-256
+`abc579c9edb3a339c4c98406a11fa5c86257631e90bddc29fe404870f8401eaa`.
+No game or reference file was modified. Camera suppression, menu interaction
+and focus-loss restoration are **NOT RUN** in Skyrim until the 0.1.67 DLL is
+installed and the user starts the game.
+
 ## 0.1.66 reference-aligned menu layout (2026-09-23)
 
 The supplied `SkyrimUpscaler.ini` and recovered `SettingGUI.cpp` strings were
