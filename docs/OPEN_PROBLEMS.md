@@ -2,7 +2,7 @@
 
 Checkpoint: installed 0.1.72 captured the reported centre symbols only in the
 final native composition; its prepared DLSS input and raw DLSS output are
-clean. Source 0.1.73 adds one automatic same-frame snapshot before each live
+clean. Installed 0.1.73 adds one automatic same-frame snapshot before each live
 menu `PostDisplay` so the next run can identify the owning menu interval.
 This file describes remaining work, not completed features.
 The detailed run record is in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)

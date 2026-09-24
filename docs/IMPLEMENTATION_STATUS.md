@@ -27,6 +27,22 @@ pixel packing and bounds rejection. Complete Debug and Release builds each pass
 all 40 CTest groups. Actual-game validation remains pending at this source
 checkpoint.
 
+Source commit `d8997ae` is pushed. The independently verified package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.73-ui-owner-d8997ae.zip`, SHA-256
+`597c04ae8ffb46152fe1dcb7670ad883861360d9f0640dfa968ec4cd0f8ffca0`.
+It contains exactly the four manifest payloads plus the manifest, and every
+extracted payload hash matches. With Skyrim stopped, the complete prior mod was
+copied to ignored
+`artifacts/local/mo2-install-backup-0.1.73-d8997ae-20260925`. Only the plugin
+DLL and manifest were replaced. Installed DLL SHA-256 is
+`c8f09384c9448646dd23b9de94d1e28c90e5fa652c36e9eeba31e13d2c189d12`.
+The loose user INI remains
+`b95d0ce49ce0ac9c9e03375cf4e1fc2d2eacbdf5234cbd6a2a5354c6c2db611c`
+and the signed NVIDIA SR runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The actual-game menu sequence is **NOT RUN** and requires one user-started
+save load in the affected scene.
+
 ## 0.1.72 same-frame DLSS stage capture (2026-09-25)
 
 The user started installed 0.1.71, loaded the affected scene and reported that
