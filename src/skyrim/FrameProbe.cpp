@@ -69,9 +69,11 @@ Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
     return result;
 }
 Result<bool> saveProbeBundle(const std::filesystem::path& directory,
-    std::span<const ProbeImage> images,std::span<const std::string_view> names) {
+    std::span<const ProbeImage> images,std::span<const std::string_view> names,
+    std::string_view description) {
     namespace fs=std::filesystem;
-    if(directory.empty()||!directory.is_absolute()||images.empty()||
+    if(directory.empty()||!directory.is_absolute()||description.empty()||
+       description.find('\n')!=std::string_view::npos||images.empty()||
        images.size()>3||images.size()!=names.size())
         return Error{ErrorCode::InvalidInput,"Probe bundle path or image count is invalid"};
     for(std::size_t i=0;i<images.size();++i) {
@@ -98,7 +100,7 @@ Result<bool> saveProbeBundle(const std::filesystem::path& directory,
         }
         std::ofstream manifest(directory/"manifest.pending");
         manifest.exceptions(std::ios::failbit|std::ios::badbit);
-        manifest<<"RazKolbas prepared SR input capture; no NGX submission\n";
+        manifest<<description<<"\n";
         for(std::size_t i=0;i<images.size();++i) {
             const auto& image=images[i];
             manifest<<names[i]<<" width="<<image.descriptor.Width

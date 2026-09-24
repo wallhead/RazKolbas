@@ -92,6 +92,17 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
     REQUIRE(token.has_value());
     REQUIRE(evaluations==1);
+    const auto stages=presenter.captureEvaluated(scene.context.Get(),*token);
+    REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(stages));
+    const auto& stageImages=std::get<std::vector<rk::ProbeImage>>(stages);
+    REQUIRE(stageImages.size()==2);
+    REQUIRE(stageImages[0].descriptor.Width==4);
+    REQUIRE(stageImages[0].descriptor.Height==3);
+    REQUIRE(stageImages[1].descriptor.Width==8);
+    REQUIRE(stageImages[1].descriptor.Height==6);
+    REQUIRE(stageImages[1].pixels[0]==64);
+    REQUIRE(stageImages[1].pixels[1]==128);
+    REQUIRE(stageImages[1].pixels[2]==191);
     // A completed evaluation remains publishable until this frame is handed off.
     const std::array<ID3D11Texture2D*,1> evaluatedTarget{scene.display.Get()};
     const auto completed=rk::readbackCandidates(scene.context.Get(),evaluatedTarget);

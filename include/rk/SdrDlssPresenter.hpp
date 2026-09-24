@@ -4,6 +4,7 @@
 #include "rk/JitterContract.hpp"
 #include "rk/RenderSizePolicy.hpp"
 #include "rk/SdrPostSharpen.hpp"
+#include "rk/FrameProbe.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <Windows.h>
@@ -72,6 +73,10 @@ public:
     Result<std::optional<SrEvaluationToken>> evaluateOwnedScene(ID3D11Device* device,
         ID3D11DeviceContext* context,std::span<ID3D11Texture2D* const> sources,
         UINT outputWidth,UINT outputHeight,SrFrameMetadata metadata,NgxJitter jitter);
+    // Bounded CPU evidence for the exact prepared colour input and raw DLSS
+    // output selected by a still-valid evaluation token. No publication occurs.
+    Result<std::vector<ProbeImage>> captureEvaluated(ID3D11DeviceContext* context,
+        SrEvaluationToken token) const;
     Result<bool> publishEvaluated(ID3D11DeviceContext* context,
         SrEvaluationToken token,ID3D11Texture2D* destination);
     std::size_t retainedPreparedFrames() const noexcept;

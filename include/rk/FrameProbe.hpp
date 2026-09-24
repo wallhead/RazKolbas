@@ -25,5 +25,6 @@ Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
 // Existing captures are never replaced; the manifest appears only when all
 // raw files have been written successfully.
 Result<bool> saveProbeBundle(const std::filesystem::path& directory,
-    std::span<const ProbeImage> images,std::span<const std::string_view> names);
+    std::span<const ProbeImage> images,std::span<const std::string_view> names,
+    std::string_view description="RazKolbas prepared SR input capture; no NGX submission");
 }

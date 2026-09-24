@@ -70,6 +70,13 @@ struct WorldState {
     std::optional<StagePairCapture> stagePair;
     std::uint64_t stagePairFrame{};
 #ifdef RK_WITH_NGX
+    struct OwnedSrStageCapture {
+        std::uint64_t frame{};
+        std::vector<ProbeImage> images;
+    };
+    std::mutex ownedSrStageMutex;
+    std::optional<OwnedSrStageCapture> ownedSrStages;
+    bool ownedSrStageAttempted{};
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
         UINT width{},height{};
@@ -642,6 +649,21 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 }
                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
                 if(!token)return false;
+                if(!state->ownedSrStageAttempted) {
+                    state->ownedSrStageAttempted=true;
+                    auto stages=state->srPresenter.captureEvaluated(context,*token);
+                    if(const auto error=std::get_if<Error>(&stages))
+                        spdlog::warn("Owned SR three-stage capture frame {} could not read prepared input/output: {}",
+                            sequence,error->message);
+                    else {
+                        std::scoped_lock lock(state->ownedSrStageMutex);
+                        state->ownedSrStages.emplace(WorldState::OwnedSrStageCapture{
+                            sequence,std::move(std::get<std::vector<ProbeImage>>(stages))});
+                        state->presentTargetProbeDue.store(true,std::memory_order_release);
+                        spdlog::info("Owned SR three-stage capture frame {} recorded prepared input and raw DLSS output; awaiting final pre-Present composition",
+                            sequence);
+                    }
+                }
                 const auto published=state->srPresenter.publishEvaluated(context,*token,display);
                 if(state->ownedEvaluationLimit&&
                    state->srPresenter.submittedFrames()==state->ownedEvaluationLimit&&
@@ -1415,7 +1437,14 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
     const bool ownedProbe=ownedRemaining!=0;
-    if(!usualProbe&&!ownedProbe)return;
+    bool ownedSrStageProbe=false;
+#ifdef RK_WITH_NGX
+    {
+        std::scoped_lock lock(state->ownedSrStageMutex);
+        ownedSrStageProbe=state->ownedSrStages.has_value();
+    }
+#endif
+    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe)return;
     if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -1439,6 +1468,71 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
             }
 #endif
         }
+#ifdef RK_WITH_NGX
+        if(ownedSrStageProbe) {
+            std::scoped_lock lock(state->ownedSrStageMutex);
+            if(state->ownedSrStages) {
+                const auto frame=state->forwarded.load(std::memory_order_relaxed);
+                if(state->ownedSrStages->frame!=frame)
+                    spdlog::warn("Owned SR three-stage capture discarded: another world frame arrived before Present");
+                else if(auto* domain=activeOwnedSceneDomain()) {
+                    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+                    const auto native=device?acquireNativeFlipTarget(swap,
+                        reinterpret_cast<ID3D11Device*>(device),domain->plan().display):
+                        Result<NativeFlipTarget>{Error{ErrorCode::Unavailable,
+                            "Owned capture device is absent"}};
+                    if(const auto nativeError=std::get_if<Error>(&native))
+                        spdlog::warn("Owned SR final composition capture unavailable: {}",
+                            nativeError->message);
+                    else {
+                        const std::array<ID3D11Texture2D*,1> finalTexture{
+                            std::get<NativeFlipTarget>(native).texture.Get()};
+                        auto finalImage=readbackCandidates(
+                            reinterpret_cast<ID3D11DeviceContext*>(context),finalTexture,
+                            16*1024*1024);
+                        if(const auto readbackError=std::get_if<Error>(&finalImage))
+                            spdlog::warn("Owned SR final composition readback unavailable: {}",
+                                readbackError->message);
+                        else {
+                            auto& images=state->ownedSrStages->images;
+                            images.emplace_back(std::move(
+                                std::get<std::vector<ProbeImage>>(finalImage).front()));
+                            PWSTR documents=nullptr;
+                            const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+                                KF_FLAG_DEFAULT,nullptr,&documents);
+                            struct FreeDocuments {
+                                PWSTR value;~FreeDocuments(){CoTaskMemFree(value);}
+                            } free{documents};
+                            if(FAILED(found)||!documents)
+                                spdlog::warn("Owned SR three-stage capture Documents directory unavailable");
+                            else {
+                                const auto directory=std::filesystem::path(documents)/
+                                    "My Games"/"Skyrim Special Edition"/"SKSE"/
+                                    "RazKolbasCaptures"/
+                                    ("owned-sr-stages-"+
+                                    std::to_string(GetCurrentProcessId())+"-"+
+                                    std::to_string(frame)+"-"+
+                                    std::to_string(GetTickCount64()));
+                                const std::array<std::string_view,3> names{
+                                    "prepared-color-input.raw",
+                                    "dlss-output-pre-sharpen.raw",
+                                    "final-composition.raw"};
+                                const auto saved=saveProbeBundle(directory,images,names,
+                                    "RazKolbas same-frame owned SR stages: exact prepared colour input, raw DLSS output before sharpening/UI, final pre-Present composition");
+                                if(const auto saveError=std::get_if<Error>(&saved))
+                                    spdlog::warn("Owned SR three-stage capture save unavailable: {}",
+                                        saveError->message);
+                                else
+                                    spdlog::info("Owned SR three-stage capture complete for frame {} at {}",
+                                        frame,directory.string());
+                            }
+                        }
+                    }
+                }
+                state->ownedSrStages.reset();
+            }
+        }
+#endif
         logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
             state->worldColourIdentity.load(std::memory_order_relaxed));
         std::scoped_lock lock(state->stagePairMutex);

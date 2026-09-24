@@ -537,6 +537,22 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
         metadata.frameId,metadata.generation,
         static_cast<unsigned>(&slot-preparedSlots_.data())}};
 }
+Result<std::vector<ProbeImage>> SdrDlssPresenter::captureEvaluated(
+    ID3D11DeviceContext* context,SrEvaluationToken token) const {
+    if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
+       token.slot>=preparedSlots_.size())
+        return Error{ErrorCode::InvalidInput,"Evaluated SR capture arguments are invalid"};
+    const auto& slot=preparedSlots_[token.slot];
+    if(!slot.frame||!slot.evaluated||slot.published||
+       slot.metadata.frameId!=token.frameId||
+       slot.metadata.generation!=token.generation||
+       token.frameId!=lastPreparedAttemptFrameId_||
+       token.generation!=preparedGeneration_)
+        return Error{ErrorCode::Conflict,"Evaluated SR capture token is stale"};
+    const std::array<ID3D11Texture2D*,2> textures{
+        slot.frame->color(),slot.frame->output()};
+    return readbackCandidates(context,textures,24*1024*1024);
+}
 Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     SrEvaluationToken token,ID3D11Texture2D* destination) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||

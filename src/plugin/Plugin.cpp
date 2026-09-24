@@ -57,7 +57,7 @@ rk::Settings loadSettings(std::filesystem::path& path) {
 
 extern "C" __declspec(dllexport) constinit SKSE::PluginVersionData SKSEPlugin_Version = [] {
     SKSE::PluginVersionData metadata;
-    metadata.PluginVersion({0, 1, 71, 0});
+    metadata.PluginVersion({0, 1, 72, 0});
     metadata.PluginName("RazKolbas");
     metadata.AuthorName("RazKolbas contributors");
     metadata.UsesNoStructs();
