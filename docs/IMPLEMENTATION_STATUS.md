@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## 0.1.73 same-frame per-menu UI owner trace (2026-09-25)
+
+The user started installed 0.1.72 in the affected scene and confirmed that the
+two centre symbols were visible. Frame 17461 produced the automatic three-stage
+bundle `owned-sr-stages-26912-17461-31821953`. Its manifest SHA-256 is
+`3f70cd06f0a50d1363ff5612cbff1b43b375a1af71f3ff190cf94079cff9a05e`.
+The 1707x960 prepared DLSS colour input and the 2560x1440 raw DLSS output before
+post-sharpening are both clean. The symbols first appear in the same frame's
+2560x1440 final pre-Present composition. This runtime result rules out source
+contamination, DLSS reconstruction, post-sharpening and temporal ghosting as
+their origin. It places the first draw in Skyrim's later native UI composition.
+Skyrim then closed normally at the user's request.
+
+Source 0.1.73 adds a single-process, single-frame owner trace. When the first
+valid DLSS evaluation arms the existing three-stage capture, each verified
+pre-`IMenu::PostDisplay` callback now reads only the centre half-width by
+half-height region of the native target. It names that snapshot with the
+corresponding live menu-stack ordinal and registered menu name, then saves one
+final after-all-menus snapshot. Comparing adjacent files identifies the exact
+menu interval in which the symbols first appear. The UI singleton pointer cell
+comes from Address Library AE 1.6.1170 ID 400327 (RVA `0x20f6a00`) and remains
+behind the existing exact executable hash and ABI gates; no CommonLib runtime
+link was added. A new WARP regression verifies exact rectangular GPU readback,
+pixel packing and bounds rejection. Complete Debug and Release builds each pass
+all 40 CTest groups. Actual-game validation remains pending at this source
+checkpoint.
+
 ## 0.1.72 same-frame DLSS stage capture (2026-09-25)
 
 The user started installed 0.1.71, loaded the affected scene and reported that
@@ -30,8 +57,9 @@ hash. With Skyrim stopped, 0.1.71 was backed up below ignored
 `artifacts/local/mo2-install-backup-0.1.72-c162112-20260925`; only the DLL and
 manifest were replaced. Installed DLL SHA-256 is
 `c7fb2ad8109176d7d13db469948c9abda6c620b9f2244045443e499fb57803b4`.
-The NVIDIA runtime and loose user INI remained byte-identical. Actual-game
-three-stage capture is **NOT RUN** and requires one user-started save load.
+The NVIDIA runtime and loose user INI remained byte-identical. The actual-game
+three-stage capture **PASS** is recorded in the 0.1.73 section above; its final
+composition contains the reported symbols while both DLSS stages are clean.
 
 ## 0.1.71 native UI viewport-order repair (2026-09-25)
 

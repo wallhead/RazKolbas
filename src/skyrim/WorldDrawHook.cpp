@@ -22,9 +22,11 @@
 #include "rk/SdrDlssPresenter.hpp"
 #endif
 #include <spdlog/spdlog.h>
+#include <RE/Skyrim.h>
 #include <ShlObj.h>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -47,6 +49,7 @@ struct WorldState {
     std::atomic<bool> statusDlssDisabled{false};
     std::uintptr_t expectedRenderer{};
     std::uintptr_t jitterCamera{};
+    std::uintptr_t uiSingletonCell{};
     std::atomic_flag creationBound=ATOMIC_FLAG_INIT;
     std::atomic<std::uintptr_t> createdDevice{0},createdContext{0},createdSwap{0};
     enum class CopyStatus { NotAttempted, Pending, Complete, Failed };
@@ -77,6 +80,14 @@ struct WorldState {
     std::mutex ownedSrStageMutex;
     std::optional<OwnedSrStageCapture> ownedSrStages;
     bool ownedSrStageAttempted{};
+    struct MenuUiSequence {
+        std::uint64_t frame{};
+        unsigned nextOrdinal{};
+        std::vector<ProbeImage> images;
+        std::vector<std::string> names;
+    };
+    std::mutex menuUiSequenceMutex;
+    std::optional<MenuUiSequence> menuUiSequence;
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
         UINT width{},height{};
@@ -473,6 +484,122 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
         return Error{ErrorCode::Io,std::string("Cannot locate owned SR capture directory: ")+error.what()};
     }
 }
+std::string safeMenuLabel(std::string_view value) {
+    std::string result;
+    result.reserve(value.size());
+    for(const unsigned char c:value)
+        result.push_back(std::isalnum(c)||c=='-'||c=='_'?static_cast<char>(c):'_');
+    if(result.empty())result="unknown";
+    if(result.size()>64)result.resize(64);
+    return result;
+}
+std::pair<std::uintptr_t,std::string> menuAtOrdinal(
+    const WorldState* state,unsigned ordinal) {
+    RE::UI* ui{};
+    if(!state||!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui)))return {0,"unresolved"};
+    if(!ui||ordinal>=ui->menuStack.size())return {0,"unresolved"};
+    auto* menu=ui->menuStack[ordinal].get();
+    for(auto& [name,entry]:ui->menuMap)
+        if(entry.menu.get()==menu)return {
+            reinterpret_cast<std::uintptr_t>(menu),name.c_str()};
+    return {reinterpret_cast<std::uintptr_t>(menu),"unregistered"};
+}
+void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
+    std::scoped_lock lock(state->menuUiSequenceMutex);
+    if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
+    auto& sequence=*state->menuUiSequence;
+    if(sequence.images.size()>=63)return;
+    const auto ordinal=sequence.nextOrdinal++;
+    auto* domain=activeOwnedSceneDomain();
+    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+    const auto context=state->createdContext.load(std::memory_order_relaxed);
+    const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+    if(!domain||!device||!context||!swap)return;
+    const auto native=acquireNativeFlipTarget(reinterpret_cast<IDXGISwapChain*>(swap),
+        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+    if(const auto error=std::get_if<Error>(&native)) {
+        spdlog::warn("Owned UI menu-sequence frame {} ordinal {} unavailable: {}",
+            frame,ordinal,error->message);
+        return;
+    }
+    const auto display=domain->plan().display;
+    const UINT left=display.width/4,top=display.height/6;
+    const UINT width=display.width/2,height=display.height/2;
+    auto image=readbackRegion(reinterpret_cast<ID3D11DeviceContext*>(context),
+        std::get<NativeFlipTarget>(native).texture.Get(),left,top,width,height);
+    if(const auto error=std::get_if<Error>(&image)) {
+        spdlog::warn("Owned UI menu-sequence region {} unavailable: {}",
+            ordinal,error->message);
+        return;
+    }
+    const auto [menuPointer,menuName]=menuAtOrdinal(state,ordinal);
+    sequence.names.emplace_back("before-"+std::to_string(ordinal)+"-"+
+        safeMenuLabel(menuName)+".raw");
+    sequence.images.emplace_back(std::move(std::get<ProbeImage>(image)));
+    spdlog::info("Owned UI menu-sequence frame {} before ordinal {}: menu={} pointer=0x{:x} regionSHA256={}",
+        frame,ordinal,menuName,menuPointer,sha256(sequence.images.back().pixels));
+}
+void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
+    std::scoped_lock lock(state->menuUiSequenceMutex);
+    if(!state->menuUiSequence)return;
+    auto& sequence=*state->menuUiSequence;
+    const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    if(sequence.frame!=frame) {
+        spdlog::warn("Owned UI menu-sequence discarded: another world frame arrived before Present");
+        state->menuUiSequence.reset();
+        return;
+    }
+    auto* domain=activeOwnedSceneDomain();
+    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+    const auto context=state->createdContext.load(std::memory_order_relaxed);
+    if(!domain||!device||!context||!swap) {
+        state->menuUiSequence.reset();
+        return;
+    }
+    const auto native=acquireNativeFlipTarget(swap,
+        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+    if(const auto error=std::get_if<Error>(&native)) {
+        spdlog::warn("Owned UI menu-sequence final target unavailable: {}",error->message);
+        state->menuUiSequence.reset();
+        return;
+    }
+    const auto display=domain->plan().display;
+    auto finalImage=readbackRegion(reinterpret_cast<ID3D11DeviceContext*>(context),
+        std::get<NativeFlipTarget>(native).texture.Get(),display.width/4,
+        display.height/6,display.width/2,display.height/2);
+    if(const auto error=std::get_if<Error>(&finalImage)) {
+        spdlog::warn("Owned UI menu-sequence final region unavailable: {}",error->message);
+        state->menuUiSequence.reset();
+        return;
+    }
+    sequence.images.emplace_back(std::move(std::get<ProbeImage>(finalImage)));
+    sequence.names.emplace_back("after-all-menus.raw");
+    PWSTR documents=nullptr;
+    const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+        KF_FLAG_DEFAULT,nullptr,&documents);
+    struct FreeDocuments { PWSTR value;~FreeDocuments(){CoTaskMemFree(value);} } free{documents};
+    if(FAILED(found)||!documents) {
+        spdlog::warn("Owned UI menu-sequence Documents directory unavailable");
+        state->menuUiSequence.reset();
+        return;
+    }
+    const auto directory=std::filesystem::path(documents)/"My Games"/
+        "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+        ("owned-ui-sequence-"+std::to_string(GetCurrentProcessId())+"-"+
+        std::to_string(frame)+"-"+std::to_string(GetTickCount64()));
+    std::vector<std::string_view> names;
+    names.reserve(sequence.names.size());
+    for(const auto& name:sequence.names)names.emplace_back(name);
+    const auto saved=saveProbeBundle(directory,sequence.images,names,
+        "RazKolbas same-frame native UI centre region before each predicted menu-stack entry and after the complete stack");
+    if(const auto error=std::get_if<Error>(&saved))
+        spdlog::warn("Owned UI menu-sequence save unavailable: {}",error->message);
+    else
+        spdlog::info("Owned UI menu-sequence complete for frame {} with {} entry snapshots at {}",
+            frame,sequence.images.size()-1,directory.string());
+    state->menuUiSequence.reset();
+}
 enum class OwnedPublicationBoundary { PrePresent, MenuDisplay };
 bool processOwnedWorldFrame(WorldState* state,void* world,
     std::uint64_t sequence,OwnedPublicationBoundary boundary) noexcept {
@@ -659,6 +786,11 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         std::scoped_lock lock(state->ownedSrStageMutex);
                         state->ownedSrStages.emplace(WorldState::OwnedSrStageCapture{
                             sequence,std::move(std::get<std::vector<ProbeImage>>(stages))});
+                        {
+                            std::scoped_lock menuLock(state->menuUiSequenceMutex);
+                            state->menuUiSequence.emplace(WorldState::MenuUiSequence{
+                                sequence,0,{},{}});
+                        }
                         state->presentTargetProbeDue.store(true,std::memory_order_release);
                         spdlog::info("Owned SR three-stage capture frame {} recorded prepared input and raw DLSS output; awaiting final pre-Present composition",
                             sequence);
@@ -788,6 +920,13 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                 frame);}catch(...) {}
           }
         }
+    }
+    if(state) {
+        try {captureMenuUiEntry(state,frame);}
+        catch(const std::exception& error) {
+            try {spdlog::warn("Owned UI menu-sequence entry capture failed: {}",
+                error.what());}catch(...) {}
+        } catch(...) {}
     }
 #endif
 }
@@ -1438,13 +1577,18 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
     const bool ownedProbe=ownedRemaining!=0;
     bool ownedSrStageProbe=false;
+    bool menuUiSequenceProbe=false;
 #ifdef RK_WITH_NGX
     {
         std::scoped_lock lock(state->ownedSrStageMutex);
         ownedSrStageProbe=state->ownedSrStages.has_value();
     }
+    {
+        std::scoped_lock lock(state->menuUiSequenceMutex);
+        menuUiSequenceProbe=state->menuUiSequence.has_value();
+    }
 #endif
-    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe)return;
+    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&!menuUiSequenceProbe)return;
     if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -1532,6 +1676,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 state->ownedSrStages.reset();
             }
         }
+        if(menuUiSequenceProbe)completeMenuUiSequence(state,swap);
 #endif
         logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
             state->worldColourIdentity.load(std::memory_order_relaxed));
@@ -1699,6 +1844,9 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(const auto error=std::get_if<Error>(&menuPlanned))return *error;
     const auto& menuPlan=std::get<CallSitePlan>(menuPlanned);
     auto pending=std::make_unique<WorldState>();
+    // Address Library AE 1.6.1170 ID 400327. The executable hash gate above
+    // makes this UI singleton pointer-cell RVA version-specific.
+    pending->uiSingletonCell=base+0x20f6a00;
 #ifdef RK_WITH_NGX
     const auto provider=settings.get<Choice>("Upscaling.Provider").value;
     const auto quality=parseUpscaleQuality(

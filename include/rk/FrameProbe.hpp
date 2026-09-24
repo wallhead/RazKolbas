@@ -21,6 +21,10 @@ struct ProbeImage {
 // only tightly packed CPU bytes leave the function.
 Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> textures,std::size_t budget=64*1024*1024);
+// Copies and reads one exact rectangle without changing source bindings.
+Result<ProbeImage> readbackRegion(ID3D11DeviceContext* context,
+    ID3D11Texture2D* texture,UINT left,UINT top,UINT width,UINT height,
+    std::size_t budget=16*1024*1024);
 // Writes a bounded, already-read-back bundle to a new absolute directory.
 // Existing captures are never replaced; the manifest appears only when all
 // raw files have been written successfully.

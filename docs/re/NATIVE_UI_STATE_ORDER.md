@@ -44,6 +44,12 @@ attachments continue through the existing compatibility-fault path.
 Debug and Release complete builds each passed all 40 CTest groups after the
 repair. This proves the D3D11 state transition in isolation. The user then ran
 0.1.71 and reported that both symbols remained, so this defect is not their
-cause. Installed 0.1.72 captures the exact prepared colour input, raw DLSS
-output before sharpening/UI and final composition from one frame; its runtime
-capture is pending.
+cause.
+
+Installed 0.1.72 captured all three stages from frame 17461. The exact prepared
+1707x960 colour input and raw 2560x1440 DLSS output before sharpening/UI do not
+contain either symbol. Both symbols are present in the final 2560x1440
+pre-Present composition. Their first proven stage is therefore the late native
+UI composition, after DLSS and post-sharpening. Source 0.1.73 records the native
+centre region before each menu-stack `PostDisplay` and once after the complete
+stack so the next user-started run can identify the owning menu interval.

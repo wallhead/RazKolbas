@@ -83,6 +83,30 @@ TEST_CASE("Candidate capture packs odd-sized GPU textures without changing pixel
     inputs[0]=nullptr;REQUIRE(std::holds_alternative<rk::Error>(rk::readbackCandidates(context.Get(),inputs)));
     context->ClearState();
 }
+TEST_CASE("Frame probe captures an exact bounded texture region", "[frame_probe]") {
+    ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    D3D11_TEXTURE2D_DESC desc{};desc.Width=4;desc.Height=3;
+    desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    std::array<std::uint32_t,12> pixels{};
+    for(std::uint32_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u+i;
+    const D3D11_SUBRESOURCE_DATA initial{pixels.data(),4*4,0};
+    ComPtr<ID3D11Texture2D> texture;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,&initial,&texture)));
+    const auto captured=rk::readbackRegion(context.Get(),texture.Get(),1,1,2,2,16);
+    REQUIRE(std::holds_alternative<rk::ProbeImage>(captured));
+    const auto& image=std::get<rk::ProbeImage>(captured);
+    REQUIRE(image.descriptor.Width==2);
+    REQUIRE(image.descriptor.Height==2);
+    REQUIRE(image.rowBytes==8);
+    std::array<std::uint32_t,4> actual{};
+    std::memcpy(actual.data(),image.pixels.data(),image.pixels.size());
+    REQUIRE((actual==std::array<std::uint32_t,4>{pixels[5],pixels[6],pixels[9],pixels[10]}));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::readbackRegion(context.Get(),texture.Get(),3,2,2,2,16)));
+}
 TEST_CASE("Candidate capture preserves raw motion and typeless depth bytes", "[frame_probe]") {
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
     REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));

@@ -68,13 +68,45 @@ Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,
     }
     return result;
 }
+Result<ProbeImage> readbackRegion(ID3D11DeviceContext* context,
+    ID3D11Texture2D* texture,UINT left,UINT top,UINT width,UINT height,
+    std::size_t budget) {
+    using Microsoft::WRL::ComPtr;
+    if(!context||!texture||!width||!height||
+       context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::InvalidInput,"Region capture arguments are invalid"};
+    D3D11_TEXTURE2D_DESC source{};texture->GetDesc(&source);
+    if(left>source.Width||top>source.Height||width>source.Width-left||
+       height>source.Height-top||source.SampleDesc.Count!=1||
+       source.ArraySize!=1||source.MipLevels!=1)
+        return Error{ErrorCode::InvalidInput,"Region capture rectangle exceeds source"};
+    ComPtr<ID3D11Device> device,owner;
+    context->GetDevice(&device);texture->GetDevice(&owner);
+    ComPtr<IUnknown> deviceId,ownerId;
+    if(!device||!owner||FAILED(device.As(&deviceId))||FAILED(owner.As(&ownerId))||
+       deviceId.Get()!=ownerId.Get())
+        return Error{ErrorCode::Conflict,"Region capture texture belongs to another device"};
+    auto regionDesc=source;
+    regionDesc.Width=width;regionDesc.Height=height;
+    regionDesc.Usage=D3D11_USAGE_DEFAULT;regionDesc.CPUAccessFlags=0;
+    regionDesc.BindFlags=0;regionDesc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> region;
+    if(FAILED(device->CreateTexture2D(&regionDesc,nullptr,&region)))
+        return Error{ErrorCode::Unavailable,"Region capture texture allocation failed"};
+    const D3D11_BOX box{left,top,0,left+width,top+height,1};
+    context->CopySubresourceRegion(region.Get(),0,0,0,0,texture,0,&box);
+    const std::array<ID3D11Texture2D*,1> sourceRegion{region.Get()};
+    auto captured=readbackCandidates(context,sourceRegion,budget);
+    if(const auto error=std::get_if<Error>(&captured))return *error;
+    return std::move(std::get<std::vector<ProbeImage>>(captured).front());
+}
 Result<bool> saveProbeBundle(const std::filesystem::path& directory,
     std::span<const ProbeImage> images,std::span<const std::string_view> names,
     std::string_view description) {
     namespace fs=std::filesystem;
     if(directory.empty()||!directory.is_absolute()||description.empty()||
        description.find('\n')!=std::string_view::npos||images.empty()||
-       images.size()>3||images.size()!=names.size())
+       images.size()>64||images.size()!=names.size())
         return Error{ErrorCode::InvalidInput,"Probe bundle path or image count is invalid"};
     for(std::size_t i=0;i<images.size();++i) {
         const auto& image=images[i];
