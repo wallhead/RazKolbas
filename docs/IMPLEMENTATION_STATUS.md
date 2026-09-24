@@ -1,5 +1,46 @@
 # Implementation checkpoint
 
+## 0.1.70 startup depth retry and sharpening verification (2026-09-24)
+
+The user reported that the sharpening slider had no visible effect in the
+first 0.1.69 run. The slider did update and persist its requested value, but
+the renderer had produced no NGX frame to sharpen. RazKolbas exhausted its 24
+world-depth probes at `22:18:50`, while the save finished loading at
+`22:19:58`; every sampled startup frame contained only cleared far-plane
+depth. The one-shot readiness limit therefore disabled DLAA before gameplay.
+
+The user's next 0.1.69 launch loaded the save within the initial probe window.
+At `22:31:38` the twelfth sample passed with 93 distinct and 92 non-far depth
+samples. NGX evaluation completed, output was finite and nonuniform, and the
+continuous display path reached at least 7,800 submitted frames with zero
+reported skips. The user then reported that sharpening worked. The preserved
+requested configuration for that result is Native (DLAA), model preset Auto,
+sharpening enabled and sharpness `0.699999988079071`. This is direct runtime
+evidence for DLAA plus the post-sharpen path; it is not reduced-resolution
+DLSS SR evidence.
+
+Source 0.1.70 removes the terminal startup-scene failure. It continues depth
+probing after the initial 24 attempts at a lower readback rate, allowing a
+later save load to activate DLAA. It also logs successful or rejected live
+sharpening updates in the non-owned presenter path. Test-first validation
+covered the extended retry schedule. Debug and Release each pass all 40 CTest
+groups. Source commit `ee00286` is pushed.
+
+The verified MO2 archive is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.70-depth-retry-ee00286.zip`, SHA-256
+`23af8ec622cd20cbda41e164e2933a9c565eb997787a1da9dd9af6f40672d705`.
+Installed DLL SHA-256 is
+`e77f455fc7f1c0339ca58bc868b36e341bdeb0debef4f3c7031e131a68c20871`;
+the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+The user's latest INI was preserved at SHA-256
+`138ed26a1e8f42d855cd764d50667bf4110333e62f3b3ce84930f0fb0b5f929d`.
+The prior mod and loose INI are backed up in ignored
+`artifacts/local/mo2-install-backup-0.1.70-ee00286-20260924-223454`.
+Skyrim was closed before installation. The installed 0.1.70 build has not yet
+run; runtime startup-retry and new sharpening-log verification remain
+**NOT RUN**.
+
 ## 0.1.69 input-dispatch menu capture candidate (2026-09-24)
 
 The user-started 0.1.68 test **FAILED** camera suppression. Live inspection
