@@ -11,6 +11,8 @@ void STDMETHODCALLTYPE forwardOm(ID3D11DeviceContext* context,UINT count,
 }
 void STDMETHODCALLTYPE forwardVp(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) { context->RSSetViewports(count,views); }
+void STDMETHODCALLTYPE forwardScissor(ID3D11DeviceContext* context,UINT count,
+    const D3D11_RECT* rects) { context->RSSetScissorRects(count,rects); }
 void STDMETHODCALLTYPE forwardPs(ID3D11DeviceContext* context,UINT start,UINT count,
     ID3D11ShaderResourceView* const* views) {
     context->PSSetShaderResources(start,count,views);
@@ -57,7 +59,7 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(route.configure({render,display,1}));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
-        {&forwardOm,&forwardVp,&forwardPs},scene.texture(),nativeView.Get())));
+        {&forwardOm,&forwardVp,&forwardScissor,&forwardPs},scene.texture(),nativeView.Get())));
     REQUIRE(route.begin(1,1));
     auto* sceneView=scene.renderTarget();
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
@@ -94,6 +96,26 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(reorderedCount==1);
     REQUIRE(reorderedViewport.Width==display.width);
     REQUIRE(reorderedViewport.Height==display.height);
+    const D3D11_RECT reducedScissor{4,2,20,10};
+    redirect.onRSSetScissorRects(context.Get(),1,&reducedScissor);
+    UINT scissorCount=1;D3D11_RECT mappedScissor{};
+    context->RSGetScissorRects(&scissorCount,&mappedScissor);
+    REQUIRE(scissorCount==1);
+    REQUIRE(mappedScissor.left==8);
+    REQUIRE(mappedScissor.top==4);
+    REQUIRE(mappedScissor.right==40);
+    REQUIRE(mappedScissor.bottom==20);
+    REQUIRE(redirect.scaledScissorCalls()==1);
+    const D3D11_VIEWPORT nativeViewport{0,0,64,32,0,1};
+    redirect.onRSSetViewports(context.Get(),1,&nativeViewport);
+    redirect.onRSSetScissorRects(context.Get(),1,&reducedScissor);
+    scissorCount=1;mappedScissor={};
+    context->RSGetScissorRects(&scissorCount,&mappedScissor);
+    REQUIRE(mappedScissor.left==reducedScissor.left);
+    REQUIRE(mappedScissor.top==reducedScissor.top);
+    REQUIRE(mappedScissor.right==reducedScissor.right);
+    REQUIRE(mappedScissor.bottom==reducedScissor.bottom);
+    REQUIRE(redirect.scaledScissorCalls()==1);
 
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
@@ -196,7 +218,7 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(route.begin(7,1,GetCurrentThreadId()));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
-        {&forwardOm,&forwardVp,&forwardPs},scene.texture(),nativeView.Get())));
+        {&forwardOm,&forwardVp,&forwardScissor,&forwardPs},scene.texture(),nativeView.Get())));
     auto* sceneView=scene.renderTarget();
     const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
     std::array<ID3D11RenderTargetView*,2> reducedTargets{

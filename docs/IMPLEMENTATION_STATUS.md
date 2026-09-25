@@ -1,5 +1,39 @@
 # Implementation checkpoint
 
+## 0.1.74 native UI scissor-coordinate repair (2026-09-25)
+
+The user started installed 0.1.73 and confirmed the two malformed centre
+widgets were visible. The automatic menu sequence completed on frame 6661 at
+`owned-ui-sequence-21536-6661-51193187`; its manifest SHA-256 is
+`4fca162add3f2723c83550723787b6c2839b765172948a821de46a51df2e7ae1`.
+It resolved 17 live entries, including `TrueHUD`, two Better Third Person
+Selection menus and `HUD Menu`. Every snapshot taken before those entries is
+byte-identical. The after-all snapshot differs in only 15,116 centre-crop
+pixels inside local bounding box `(398,258)-(747,360)`, exactly covering the
+two reported fragments. This proves the movie calls queue their GPU output for
+a later common UI flush; it does not justify attributing the pixels to the
+first menu in stack order. The active TrueHUD configuration enables projected
+actor info bars, which makes TrueHUD the strongest content-owner candidate,
+but the capture alone does not prove it. Skyrim closed normally at the user's
+previously authorized post-investigation boundary.
+
+The state evidence exposes a shared routing error independent of the widget
+owner. `NativeUiRedirector` translated a reduced full viewport to the native
+target but did not intercept `RSSetScissorRects`. A Scaleform widget could
+therefore rasterize through the enlarged viewport while retaining reduced
+pixel-coordinate clipping rectangles. Source 0.1.74 adds the exact ENB
+2026-05-08 context slot 45 contract at RVA `0x5d100`, verified by the existing
+module hash, size, image, table and method-prologue gates. It scales scissors
+only while the native target is bound and the immediately effective viewport
+was translated from the reduced extent. An explicitly native viewport clears
+that state and leaves subsequent scissors byte-for-byte unchanged. The first
+remap and powers of two are logged for runtime proof. A WARP regression first
+failed to compile because the scissor callback was absent; it now verifies a
+32x16-to-64x32 viewport/scissor translation, native-scissor pass-through and
+the remap counter. Complete Debug and Release builds each pass all 40 CTest
+groups. Package, installation and actual-game removal of the fragments remain
+pending.
+
 ## 0.1.73 same-frame per-menu UI owner trace (2026-09-25)
 
 The user started installed 0.1.72 in the affected scene and confirmed that the

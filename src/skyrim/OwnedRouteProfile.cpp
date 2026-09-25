@@ -42,6 +42,13 @@ const OwnedRouteSite& enbContextViewportSite() noexcept {
         {0x4d,0x8b,0xd0,0x83,0xfa,0x10,0x77,0x65,0x89,0x91,0xb0,0x0a,0,0,0x4d,0x85}};
     return site;
 }
+const OwnedRouteSite& enbContextScissorSite() noexcept {
+    static constexpr OwnedRouteSite site{"enb20260508.context.scissor-owned-ui-v1",
+        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
+        4664320,0xaae000,0x1a49f8,0x5d100,45,
+        {0x4d,0x8b,0xd0,0x83,0xfa,0x10,0x77,0x55,0x89,0x91,0xb4,0x0a,0,0,0x4d,0x85}};
+    return site;
+}
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept {
     static constexpr OwnedRouteSite site{"enb20260508.context.ps-resources-owned-ui-v1",
         "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",

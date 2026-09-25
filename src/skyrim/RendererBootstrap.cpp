@@ -79,7 +79,7 @@ std::atomic<bool> ownedEverActive{false};
 std::atomic<DWORD> ownedFrameThread{0};
 struct UiHookLease {
     explicit UiHookLease(OwnedSceneDomain& domain) noexcept:redirect(domain) {}
-    PointerPatch omPatch,viewportPatch,psPatch;
+    PointerPatch omPatch,viewportPatch,scissorPatch,psPatch;
     std::array<PointerPatch,6> samplerPatches;
     using Sampler=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,
         ID3D11SamplerState* const*);
@@ -90,6 +90,7 @@ struct UiHookLease {
     NativeUiRedirector redirect;
     SamplerBiasCache samplerBias;
     std::size_t loggedSamplerReplacements{};
+    std::uint64_t loggedScissorRemaps{};
     std::atomic<std::uint64_t> samplerOwnershipChecks{};
     std::atomic<unsigned> lastSamplerOwnershipMask{~0u};
     std::atomic<bool> armed{false};
@@ -168,6 +169,22 @@ void STDMETHODCALLTYPE uiViewportProxy(ID3D11DeviceContext* context,UINT count,
     if(state->armed.load(std::memory_order_acquire))
         state->redirect.onRSSetViewports(context,count,views);
     else state->next.viewport(context,count,views);
+}
+void STDMETHODCALLTYPE uiScissorProxy(ID3D11DeviceContext* context,UINT count,
+    const D3D11_RECT* rects) noexcept {
+    std::scoped_lock lock(uiDispatchMutex);
+    auto* state=uiHook.load(std::memory_order_acquire);
+    if(!state)return;
+    if(state->armed.load(std::memory_order_acquire)) {
+        state->redirect.onRSSetScissorRects(context,count,rects);
+        const auto remaps=state->redirect.scaledScissorCalls();
+        if(remaps!=state->loggedScissorRemaps) {
+            state->loggedScissorRemaps=remaps;
+            if(remaps==1||(remaps&(remaps-1))==0)
+                try {spdlog::info("Owned native UI scissor remaps={}",remaps);}
+                catch(...) {}
+        }
+    } else state->next.scissor(context,count,rects);
 }
 void STDMETHODCALLTYPE uiPsProxy(ID3D11DeviceContext* context,UINT start,UINT count,
     ID3D11ShaderResourceView* const* views) noexcept {
@@ -974,10 +991,12 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         return Error{ErrorCode::InvalidInput,"Owned UI context is not prepared"};
     const auto& omSite=enbContextOmSite();
     const auto& viewportSite=enbContextViewportSite();
+    const auto& scissorSite=enbContextScissorSite();
     const auto& psSite=enbContextPsResourcesSite();
     const auto samplerSites=enbContextSamplerSites();
     if(patchDisabled(disabledPatchIds,omSite.id)||
        patchDisabled(disabledPatchIds,viewportSite.id)||
+       patchDisabled(disabledPatchIds,scissorSite.id)||
        patchDisabled(disabledPatchIds,psSite.id))return false;
     for(const auto& site:samplerSites)
         if(patchDisabled(disabledPatchIds,site.id))return false;
@@ -993,12 +1012,13 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
         if(tableAddress<base||tableAddress-base!=omSite.tableRva||
             omSite.tableRva!=viewportSite.tableRva||
+            omSite.tableRva!=scissorSite.tableRva||
             omSite.tableRva!=psSite.tableRva||samplerSites.size()!=6)
             return Error{ErrorCode::Unsupported,"UI context is not the verified ENB table"};
         for(const auto& site:samplerSites)if(site.tableRva!=omSite.tableRva)
             return Error{ErrorCode::Unsupported,"Sampler context is not the verified ENB table"};
         const auto mapped=snapshotModule(owner,omSite.imageSize);
-        for(const auto* site:{&omSite,&viewportSite,&psSite}) {
+        for(const auto* site:{&omSite,&viewportSite,&scissorSite,&psSite}) {
             const auto checked=validateOwnedRouteSite(mapped,base,id.hash,id.size,
                 static_cast<std::uint32_t>(tableAddress-base),*site);
             if(const auto error=std::get_if<Error>(&checked))return *error;
@@ -1012,6 +1032,7 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         if(validateEnbTargetProbeImage(mapped,id.hash))pending->enbProbeBase=base;
         pending->next={reinterpret_cast<UiContextNext::OM>(base+omSite.methodRva),
             reinterpret_cast<UiContextNext::VP>(base+viewportSite.methodRva),
+            reinterpret_cast<UiContextNext::SC>(base+scissorSite.methodRva),
             reinterpret_cast<UiContextNext::PS>(base+psSite.methodRva)};
         for(std::size_t i=0;i<samplerSites.size();++i)
             pending->nextSamplers[i]=reinterpret_cast<UiHookLease::Sampler>(
@@ -1041,15 +1062,30 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
                rollback&&rollback->code!=ErrorCode::Conflict)std::terminate();
             return *error;
         }
-        const auto ps=published->psPatch.apply(table+psSite.slot,
-            reinterpret_cast<void*>(published->next.ps),
-            reinterpret_cast<void*>(&uiPsProxy));
-        if(const auto error=std::get_if<Error>(&ps)) {
+        const auto scissor=published->scissorPatch.apply(table+scissorSite.slot,
+            reinterpret_cast<void*>(published->next.scissor),
+            reinterpret_cast<void*>(&uiScissorProxy));
+        if(const auto error=std::get_if<Error>(&scissor)) {
             const auto restoredViewport=published->viewportPatch.restore();
             const auto restoredOm=published->omPatch.restore();
             const auto* viewportError=std::get_if<Error>(&restoredViewport);
             const auto* omError=std::get_if<Error>(&restoredOm);
             if((viewportError&&viewportError->code!=ErrorCode::Conflict)||
+               (omError&&omError->code!=ErrorCode::Conflict))std::terminate();
+            return *error;
+        }
+        const auto ps=published->psPatch.apply(table+psSite.slot,
+            reinterpret_cast<void*>(published->next.ps),
+            reinterpret_cast<void*>(&uiPsProxy));
+        if(const auto error=std::get_if<Error>(&ps)) {
+            const auto restoredScissor=published->scissorPatch.restore();
+            const auto restoredViewport=published->viewportPatch.restore();
+            const auto restoredOm=published->omPatch.restore();
+            const auto* scissorError=std::get_if<Error>(&restoredScissor);
+            const auto* viewportError=std::get_if<Error>(&restoredViewport);
+            const auto* omError=std::get_if<Error>(&restoredOm);
+            if((scissorError&&scissorError->code!=ErrorCode::Conflict)||
+               (viewportError&&viewportError->code!=ErrorCode::Conflict)||
                (omError&&omError->code!=ErrorCode::Conflict))std::terminate();
             return *error;
         }
@@ -1070,14 +1106,15 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
                        problem&&problem->code!=ErrorCode::Conflict)std::terminate();
                 };
                 for(std::size_t j=i;j>0;--j)restore(published->samplerPatches[j-1]);
-                restore(published->psPatch);restore(published->viewportPatch);
+                restore(published->psPatch);restore(published->scissorPatch);
+                restore(published->viewportPatch);
                 restore(published->omPatch);
                 return *error;
             }
         }
         published->armed.store(true,std::memory_order_release);
-        try {spdlog::info("Installed verified ENB UI context slots {}, {} and {} plus six sampler stages; PS resource route is observation-only; mip bias={}",
-            omSite.id,viewportSite.id,psSite.id,mipBias);}catch(...) {}
+        try {spdlog::info("Installed verified ENB UI context slots {}, {}, {} and {} plus six sampler stages; PS resource route is observation-only; mip bias={}",
+            omSite.id,viewportSite.id,scissorSite.id,psSite.id,mipBias);}catch(...) {}
         return true;
     } catch(const std::exception& error) {
         return Error{ErrorCode::Unavailable,

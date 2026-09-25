@@ -53,3 +53,13 @@ pre-Present composition. Their first proven stage is therefore the late native
 UI composition, after DLSS and post-sharpening. Source 0.1.73 records the native
 centre region before each menu-stack `PostDisplay` and once after the complete
 stack so the next user-started run can identify the owning menu interval.
+
+The 0.1.73 run recorded 17 menu-stack entries on frame 6661. All 17
+before-entry centre crops have the same SHA-256, while the final crop adds only
+the two malformed widgets. The underlying Scaleform work therefore reaches the
+native target during a later shared flush, after the per-entry observation
+points. The transition still identifies the shared UI state boundary: a
+reduced full viewport had been enlarged for the native target, but subsequent
+per-widget `RSSetScissorRects` calls were not translated. Source 0.1.74 hooks
+the exact adjacent ENB context slot 45 and scales those rectangles only while
+that reduced-to-native viewport mapping is active.

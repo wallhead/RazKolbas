@@ -52,10 +52,13 @@ TEST_CASE("Only exact ENB creation consumers use the early scene contract", "[ow
 
 TEST_CASE("ENB context methods retain their current downstream ownership", "[owned_route_profile]") {
     const std::array sites{&rk::enbContextPsResourcesSite(),
-        &rk::enbContextOmSite(),&rk::enbContextViewportSite()};
+        &rk::enbContextOmSite(),&rk::enbContextViewportSite(),
+        &rk::enbContextScissorSite()};
     REQUIRE(sites[0]->slot==8);
     REQUIRE(sites[1]->slot==33);
     REQUIRE(sites[2]->slot==44);
+    REQUIRE(sites[3]->slot==45);
+    REQUIRE(sites[3]->methodRva==0x5d100);
     std::vector<std::uint8_t> image(sites[0]->imageSize);
     constexpr std::uintptr_t base=0x180000000;
     for(const auto* site:sites) {

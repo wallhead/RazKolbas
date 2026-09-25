@@ -20,6 +20,7 @@ const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
 const OwnedRouteSite& enbContextOmSite() noexcept;
 const OwnedRouteSite& enbContextViewportSite() noexcept;
+const OwnedRouteSite& enbContextScissorSite() noexcept;
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept;
 std::span<const OwnedRouteSite> enbContextSamplerSites() noexcept;
 // Mapped image bytes, not disk file layout. The caller separately verifies the

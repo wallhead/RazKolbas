@@ -11,10 +11,12 @@ struct UiContextNext {
     using OM=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,
         ID3D11RenderTargetView* const*,ID3D11DepthStencilView*);
     using VP=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,const D3D11_VIEWPORT*);
+    using SC=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,const D3D11_RECT*);
     using PS=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,
         ID3D11ShaderResourceView* const*);
     OM om{};
     VP viewport{};
+    SC scissor{};
     PS ps{};
 };
 struct UiCompatibilityFault {
@@ -82,6 +84,8 @@ public:
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
     void onRSSetViewports(ID3D11DeviceContext* context,UINT count,
         const D3D11_VIEWPORT* views) noexcept;
+    void onRSSetScissorRects(ID3D11DeviceContext* context,UINT count,
+        const D3D11_RECT* rects) noexcept;
     // Trace the exact singleton original-depth read used by the verified ENB
     // context. During NativeUi, only that resource is replaced by its
     // display-sized sampled-depth companion.
@@ -89,6 +93,7 @@ public:
         ID3D11ShaderResourceView* const* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
     UiCompatibilityFault compatibilityFaultInfo() const noexcept { return faultInfo_; }
+    std::uint64_t scaledScissorCalls() const noexcept { return scaledScissorCalls_; }
     void releaseAfterRetirement(bool unbindNative=false) noexcept;
 private:
     struct AuxiliaryCompanion {
@@ -116,6 +121,8 @@ private:
     std::uint32_t completedObservations_{};
     std::uint32_t validRouteObservations_{};
     bool observationContractFault_{};
+    bool scaleScissors_{};
+    std::uint64_t scaledScissorCalls_{};
     bool observedMrtDepth_{},observedSingleDepth_{};
     std::array<AuxiliaryCompanion,4> auxiliaries_{};
     Microsoft::WRL::ComPtr<IUnknown> depthSourceId_;
