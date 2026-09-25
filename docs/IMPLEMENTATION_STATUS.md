@@ -22,6 +22,23 @@ color target with a null DSV immediately before deferred Scaleform submission.
 Source 0.1.75 binds that prepared native DSV for the `NativeUi` phase while
 keeping the earlier processing bind color-only. The new WARP assertion failed
 against 0.1.74 because the bound DSV was null and passes after the correction.
+Complete Debug and Release builds each pass all 40 CTest groups.
+
+Source commit `c3fad61` is pushed. The independently extracted and verified
+package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.75-ui-stencil-c3fad61.zip`, SHA-256
+`429a876e024f8725503ba540924695653f15a97007c7bf4dacb2e466cf360a5e`.
+Every payload matches its manifest and the NVIDIA runtime signature is valid.
+With Skyrim stopped, the previous mod was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.75-c3fad61-20260925`, then the complete
+stage was copied into the existing MO2 mod while preserving `meta.ini`.
+Installed DLL SHA-256 is
+`8a84995909ba3d5f367c297bc23a6a43c05c9576abdc47578d2b7172d4ca16ff`;
+the restored INI and signed NVIDIA runtime retain their expected hashes
+`2053bdc20ddf21d7c4a6bf351dfcd1cd4705d3557d34cdfb69db296122cd4ff1`
+and `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All effective installed payloads match manifest SHA-256
+`e32ec5243b2b0c50e4ae3031e460640e465c1571bcc0ba7a50ee5c15e3adcbac`.
 Actual-game removal of the two symbols is **NOT RUN** pending one user start.
 
 ## 0.1.74 native UI scissor-coordinate repair (2026-09-25)
