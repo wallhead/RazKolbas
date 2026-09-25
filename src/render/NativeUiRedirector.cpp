@@ -162,8 +162,10 @@ HRESULT NativeUiRedirector::replaceNativeTarget(ID3D11RenderTargetView* nativeRt
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     return S_OK;
 }
-void NativeUiRedirector::bindNativeTarget() noexcept {
-    auto* view=nativeRtv_.Get();next_.om(context_.Get(),1,&view,nullptr);
+void NativeUiRedirector::bindNativeTarget(bool bindUiDepth) noexcept {
+    auto* view=nativeRtv_.Get();
+    auto* depth=bindUiDepth&&companionsReady()?nativeDepthView_.Get():nullptr;
+    next_.om(context_.Get(),1,&view,depth);
     const auto display=route_.plan().display;
     const D3D11_VIEWPORT viewport{0,0,static_cast<float>(display.width),
         static_cast<float>(display.height),0,1};
@@ -178,7 +180,7 @@ HRESULT NativeUiRedirector::bindNativeForProcessing(std::uint64_t frame) noexcep
     if(!context_||!nativeRtv_||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::Processing||route_.frame()!=frame||
        GetCurrentThreadId()!=owner)return E_UNEXPECTED;
-    bindNativeTarget();
+    bindNativeTarget(false);
     return S_OK;
 }
 HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
@@ -195,7 +197,11 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
             (hasStencil(desc.Format)?D3D11_CLEAR_STENCIL:0u);
         context_->ClearDepthStencilView(nativeDepthView_.Get(),flags,1.0f,0);
     }
-    bindNativeTarget();
+    // Scaleform records display commands in each IMenu::PostDisplay call and
+    // submits them later from GRenderer::EndFrame. Its vector masks require a
+    // stencil attachment at that deferred boundary, so leave the prepared
+    // display-sized depth/stencil view bound with the native colour target.
+    bindNativeTarget(true);
     return S_OK;
 }
 bool NativeUiRedirector::beginObservation(std::uint64_t frame) noexcept {

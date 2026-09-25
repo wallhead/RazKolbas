@@ -103,7 +103,7 @@ private:
     };
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
-    void bindNativeTarget() noexcept;
+    void bindNativeTarget(bool bindUiDepth) noexcept;
     bool observationMatchesRoute() const noexcept;
     void rememberObservedCompanions(UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth,

@@ -287,6 +287,17 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(redirect.companionsReady());
     REQUIRE(route.startProcessing(7,1));
     REQUIRE(SUCCEEDED(redirect.commitPublishedUi(7)));
+    // Scaleform defers its masked widget draws until GRenderer::EndFrame.
+    // The native UI commit must therefore leave the matching display-sized
+    // stencil attachment bound even before a menu explicitly rebinds the
+    // reduced scene target.
+    bound.Reset();boundDepth.Reset();
+    context->OMGetRenderTargets(1,bound.GetAddressOf(),boundDepth.GetAddressOf());
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(native.Get()).Get());
+    REQUIRE(boundDepth!=nullptr);
+    REQUIRE(viewExtent(boundDepth.Get()).width==display.width);
+    REQUIRE(viewExtent(boundDepth.Get()).height==display.height);
     redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
     std::array<ComPtr<ID3D11RenderTargetView>,2> nativeTargets;

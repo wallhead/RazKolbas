@@ -1,5 +1,29 @@
 # Implementation checkpoint
 
+## 0.1.75 deferred Scaleform stencil repair (2026-09-25)
+
+The user-started 0.1.74 run activated the owned 1707x960-to-2560x1440 route,
+began real DLSS submissions and logged native UI scissor remaps through at
+least 512 calls. The user still saw both centre symbols. This is a runtime
+**FAIL** for the scissor-only hypothesis.
+
+Ghidra 12.1.3 and Capstone 5.0.6 then located the common deferred Scaleform
+flush. After the 17-entry `IMenu::PostDisplay` loop, Skyrim RVA `0xfa51ea`
+calls Address Library ID 82733 at RVA `0xfc3300`; that wrapper invokes virtual
+slot `+0x28`, `GRenderer::EndFrame`. Exact-hash TrueHUD analysis found its
+actor-info-bar projection and display-info update at RVA `0x4fe80`. The active
+Oathvein ActionScript masks the bar geometry while its text is unmasked. Full
+addresses, bytes, binary identities and confidence limits are recorded in
+[`SCALEFORM_END_FRAME_1170.md`](re/SCALEFORM_END_FRAME_1170.md).
+
+That evidence exposed a local state bug: RazKolbas created and cleared a
+display-sized D24S8 companion, but `commitPublishedUi()` rebound the native
+color target with a null DSV immediately before deferred Scaleform submission.
+Source 0.1.75 binds that prepared native DSV for the `NativeUi` phase while
+keeping the earlier processing bind color-only. The new WARP assertion failed
+against 0.1.74 because the bound DSV was null and passes after the correction.
+Actual-game removal of the two symbols is **NOT RUN** pending one user start.
+
 ## 0.1.74 native UI scissor-coordinate repair (2026-09-25)
 
 The user started installed 0.1.73 and confirmed the two malformed centre
@@ -46,8 +70,10 @@ The latest loose INI written by the user's prior session was preserved at
 `2053bdc20ddf21d7c4a6bf351dfcd1cd4705d3557d34cdfb69db296122cd4ff1`;
 the signed NVIDIA runtime remains
 `c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
-All effective installed payloads match the new manifest. The actual-game
-scissor-remap log and visual result are **NOT RUN** pending one user start.
+All effective installed payloads match the new manifest. The actual-game run
+logged scissor remaps through at least 512 calls, but the user still saw both
+symbols. The visual test therefore **FAILED** and led to the deferred
+Scaleform/stencil investigation above.
 
 ## 0.1.73 same-frame per-menu UI owner trace (2026-09-25)
 
