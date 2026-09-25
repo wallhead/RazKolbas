@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## 0.1.76 stable native UI publication boundary (2026-09-25)
+
+The user started installed 0.1.75 and confirmed that the two isolated centre
+symbols are gone. This is an actual-game **PASS** for the deferred Scaleform
+stencil repair. The user then reported that the health, stamina and magicka
+fills periodically become black while the bar frames remain visible.
+
+The same run's log identifies a synchronized boundary oscillation. After
+native UI routing activated at frame 13322, isolated 10x10 depth samples fell
+just below the 16-value admission threshold at frames 13532, 13833, 14374,
+15065 and later. Each single rejection immediately moved publication from the
+menu boundary (`mode=2`) back to the late pre-Present fallback (`mode=3`) for
+several seconds, then two good samples moved it forward again. This repeatedly
+changed UI composition order and matches the reported periodic global fill
+flash; Present itself continued succeeding.
+
+Source 0.1.76 latches the verified menu publication boundary after its first
+valid admission. A transiently weak source sample can still select spatial
+scene fallback, but publication remains before native UI, so it cannot move
+the UI between two composition orders. The 0.1.74 scissor-coordinate mutation
+is also retired: its actual-game run proved hundreds of remaps did not fix the
+symbols, and application-owned scissor rectangles now pass through unchanged.
+The native D24S8 binding that removed the symbols remains intact. Regression
+tests cover both the boundary latch and scissor pass-through. Actual-game
+verification of stable resource-bar fills is **NOT RUN**.
+
 ## 0.1.75 deferred Scaleform stencil repair (2026-09-25)
 
 The user-started 0.1.74 run activated the owned 1707x960-to-2560x1440 route,

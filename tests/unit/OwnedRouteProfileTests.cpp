@@ -5,6 +5,14 @@
 #include <vector>
 #include <d3d11.h>
 
+TEST_CASE("Native UI publication boundary remains stable after admission",
+    "[owned_route_profile]") {
+    REQUIRE_FALSE(rk::shouldUseMenuPublication(false,false,true));
+    REQUIRE(rk::shouldUseMenuPublication(false,true,true));
+    REQUIRE(rk::shouldUseMenuPublication(true,false,true));
+    REQUIRE_FALSE(rk::shouldUseMenuPublication(true,true,false));
+}
+
 TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[owned_route_profile]") {
     const auto& factory=rk::reshade673FactoryCreateSite();
     const auto& buffer=rk::reshade673SwapGetBufferSite();

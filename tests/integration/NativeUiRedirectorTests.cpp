@@ -96,16 +96,18 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(reorderedCount==1);
     REQUIRE(reorderedViewport.Width==display.width);
     REQUIRE(reorderedViewport.Height==display.height);
+    // The 0.1.74 reduced-to-native scissor hypothesis failed in Skyrim.
+    // Forward application-owned rectangles unchanged even when a cached
+    // reduced viewport was translated for the native target.
     const D3D11_RECT reducedScissor{4,2,20,10};
     redirect.onRSSetScissorRects(context.Get(),1,&reducedScissor);
     UINT scissorCount=1;D3D11_RECT mappedScissor{};
     context->RSGetScissorRects(&scissorCount,&mappedScissor);
     REQUIRE(scissorCount==1);
-    REQUIRE(mappedScissor.left==8);
-    REQUIRE(mappedScissor.top==4);
-    REQUIRE(mappedScissor.right==40);
-    REQUIRE(mappedScissor.bottom==20);
-    REQUIRE(redirect.scaledScissorCalls()==1);
+    REQUIRE(mappedScissor.left==reducedScissor.left);
+    REQUIRE(mappedScissor.top==reducedScissor.top);
+    REQUIRE(mappedScissor.right==reducedScissor.right);
+    REQUIRE(mappedScissor.bottom==reducedScissor.bottom);
     const D3D11_VIEWPORT nativeViewport{0,0,64,32,0,1};
     redirect.onRSSetViewports(context.Get(),1,&nativeViewport);
     redirect.onRSSetScissorRects(context.Get(),1,&reducedScissor);
@@ -115,7 +117,6 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
     REQUIRE(mappedScissor.top==reducedScissor.top);
     REQUIRE(mappedScissor.right==reducedScissor.right);
     REQUIRE(mappedScissor.bottom==reducedScissor.bottom);
-    REQUIRE(redirect.scaledScissorCalls()==1);
 
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);

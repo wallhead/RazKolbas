@@ -8,6 +8,13 @@
 #include <dxgi.h>
 
 namespace rk {
+// Once native UI publication has been admitted, keep that boundary stable.
+// A transient source rejection may select spatial fallback for the scene, but
+// must not move publication after UI and change composition order.
+constexpr bool shouldUseMenuPublication(bool routeActivated,bool sourceReady,
+    bool routeAvailable) noexcept {
+    return routeAvailable&&(routeActivated||sourceReady);
+}
 struct OwnedRouteSite {
     std::string_view id,moduleSha256;
     std::size_t fileSize{};

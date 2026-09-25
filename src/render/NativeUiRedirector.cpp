@@ -1,5 +1,4 @@
 #include "rk/NativeUiRedirector.hpp"
-#include <algorithm>
 
 namespace rk {
 namespace {
@@ -108,15 +107,6 @@ bool hasStencil(DXGI_FORMAT format) noexcept {
     return format==DXGI_FORMAT_D24_UNORM_S8_UINT||
         format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 }
-LONG scaleLower(LONG value,std::uint32_t render,std::uint32_t display) noexcept {
-    const auto bounded=std::clamp<std::int64_t>(value,0,render);
-    return static_cast<LONG>(bounded*display/render);
-}
-LONG scaleUpper(LONG value,std::uint32_t render,std::uint32_t display) noexcept {
-    const auto bounded=std::clamp<std::int64_t>(value,0,render);
-    const auto product=bounded*display;
-    return static_cast<LONG>(product/render+(product%render!=0));
-}
 }
 HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderThread,
     UiContextNext next,ID3D11Texture2D* reducedScene,
@@ -173,7 +163,6 @@ void NativeUiRedirector::bindNativeTarget(bool bindUiDepth) noexcept {
     const D3D11_RECT scissor{0,0,static_cast<LONG>(display.width),
         static_cast<LONG>(display.height)};
     next_.scissor(context_.Get(),1,&scissor);
-    scaleScissors_=false;
 }
 HRESULT NativeUiRedirector::bindNativeForProcessing(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
@@ -420,11 +409,8 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
                         viewport.TopLeftX,viewport.TopLeftY,true)) {
                         viewport.Width=width;viewport.Height=height;
                         next_.viewport(context,1,&viewport);
-                        scaleScissors_=true;
-                    } else {
-                        scaleScissors_=false;
                     }
-                } else scaleScissors_=false;
+                }
                 return;
             }
             if(!compatibilityFault_) {
@@ -461,32 +447,13 @@ void NativeUiRedirector::onRSSetViewports(ID3D11DeviceContext* context,
         if(route_.remapFullUiViewport(width,height,views[0].TopLeftX,
             views[0].TopLeftY,true)) {
             auto mapped=views[0];mapped.Width=width;mapped.Height=height;
-            next_.viewport(context,1,&mapped);scaleScissors_=true;return;
+            next_.viewport(context,1,&mapped);return;
         }
-        scaleScissors_=false;
-    } else if(eligible(context)&&nativeBound()) {
-        scaleScissors_=false;
     }
     next_.viewport(context,count,views);
 }
 void NativeUiRedirector::onRSSetScissorRects(ID3D11DeviceContext* context,
     UINT count,const D3D11_RECT* rects) noexcept {
-    if(eligible(context)&&scaleScissors_&&nativeBound()&&rects&&count&&
-       count<=D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE) {
-        std::array<D3D11_RECT,
-            D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> mapped{};
-        const auto render=route_.plan().render;
-        const auto display=route_.plan().display;
-        for(UINT i=0;i<count;++i) {
-            mapped[i].left=scaleLower(rects[i].left,render.width,display.width);
-            mapped[i].top=scaleLower(rects[i].top,render.height,display.height);
-            mapped[i].right=scaleUpper(rects[i].right,render.width,display.width);
-            mapped[i].bottom=scaleUpper(rects[i].bottom,render.height,display.height);
-        }
-        next_.scissor(context,count,mapped.data());
-        ++scaledScissorCalls_;
-        return;
-    }
     next_.scissor(context,count,rects);
 }
 void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
@@ -518,8 +485,6 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=false;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
-    scaleScissors_=false;
-    scaledScissorCalls_=0;
     validRouteObservations_=0;observationContractFault_=false;
     observedMrtDepth_=observedSingleDepth_=false;
     for(auto& auxiliary:auxiliaries_)auxiliary={};

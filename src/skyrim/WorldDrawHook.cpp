@@ -10,6 +10,7 @@
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
 #include "rk/MenuDisplay.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
@@ -896,8 +897,9 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                             frame,std::get<Error>(sample).message);
                 } catch(...) {}
             }
-            if(frame>12&&state->menuSceneGate.ready()&&
-               ui->latePassRoutingAvailable()) {
+            if(frame>12&&shouldUseMenuPublication(
+                   state->nativeUiRouteActivated,state->menuSceneGate.ready(),
+                   ui->latePassRoutingAvailable())) {
                 if(processOwnedWorldFrame(state,
                     reinterpret_cast<void*>(state->expectedRenderer),frame,
                     OwnedPublicationBoundary::MenuDisplay)&&

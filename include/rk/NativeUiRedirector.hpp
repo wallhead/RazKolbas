@@ -93,7 +93,6 @@ public:
         ID3D11ShaderResourceView* const* views) noexcept;
     bool compatibilityFault() const noexcept { return compatibilityFault_; }
     UiCompatibilityFault compatibilityFaultInfo() const noexcept { return faultInfo_; }
-    std::uint64_t scaledScissorCalls() const noexcept { return scaledScissorCalls_; }
     void releaseAfterRetirement(bool unbindNative=false) noexcept;
 private:
     struct AuxiliaryCompanion {
@@ -121,8 +120,6 @@ private:
     std::uint32_t completedObservations_{};
     std::uint32_t validRouteObservations_{};
     bool observationContractFault_{};
-    bool scaleScissors_{};
-    std::uint64_t scaledScissorCalls_{};
     bool observedMrtDepth_{},observedSingleDepth_{};
     std::array<AuxiliaryCompanion,4> auxiliaries_{};
     Microsoft::WRL::ComPtr<IUnknown> depthSourceId_;

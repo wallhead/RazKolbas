@@ -90,7 +90,6 @@ struct UiHookLease {
     NativeUiRedirector redirect;
     SamplerBiasCache samplerBias;
     std::size_t loggedSamplerReplacements{};
-    std::uint64_t loggedScissorRemaps{};
     std::atomic<std::uint64_t> samplerOwnershipChecks{};
     std::atomic<unsigned> lastSamplerOwnershipMask{~0u};
     std::atomic<bool> armed{false};
@@ -175,16 +174,9 @@ void STDMETHODCALLTYPE uiScissorProxy(ID3D11DeviceContext* context,UINT count,
     std::scoped_lock lock(uiDispatchMutex);
     auto* state=uiHook.load(std::memory_order_acquire);
     if(!state)return;
-    if(state->armed.load(std::memory_order_acquire)) {
+    if(state->armed.load(std::memory_order_acquire))
         state->redirect.onRSSetScissorRects(context,count,rects);
-        const auto remaps=state->redirect.scaledScissorCalls();
-        if(remaps!=state->loggedScissorRemaps) {
-            state->loggedScissorRemaps=remaps;
-            if(remaps==1||(remaps&(remaps-1))==0)
-                try {spdlog::info("Owned native UI scissor remaps={}",remaps);}
-                catch(...) {}
-        }
-    } else state->next.scissor(context,count,rects);
+    else state->next.scissor(context,count,rects);
 }
 void STDMETHODCALLTYPE uiPsProxy(ID3D11DeviceContext* context,UINT start,UINT count,
     ID3D11ShaderResourceView* const* views) noexcept {
