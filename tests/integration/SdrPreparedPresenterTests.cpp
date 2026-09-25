@@ -391,10 +391,13 @@ TEST_CASE("Native DLAA render runs pre-SR processing before evaluation",
         return true;
     }};
     const auto configured=presenter.configurePreSrProcessor(
-        [&](ID3D11Device*,ID3D11DeviceContext*,rk::PreparedSrInputs&,
+        [&](ID3D11Device*,ID3D11DeviceContext*,rk::PreparedSrInputs& frame,
             const rk::SrFrameMetadata&,rk::NgxJitter,bool reset) {
             order.push_back("nr");
             REQUIRE(reset);
+            D3D11_TEXTURE2D_DESC depth{};
+            frame.depth()->GetDesc(&depth);
+            REQUIRE(depth.Format==DXGI_FORMAT_R32_FLOAT);
             return false; // NR failure must leave the original DLAA input usable.
         });
     REQUIRE(std::holds_alternative<bool>(configured));

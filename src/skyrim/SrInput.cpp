@@ -23,48 +23,47 @@ PreparedSrInputs::PreparedSrInputs(ComPtr<ID3D11Texture2D> color,
     width_(width),height_(height),
     outputWidth_(outputWidth),outputHeight_(outputHeight),sourceRegion_(sourceRegion) {}
 
-Result<bool> PreparedSrInputs::refreshOwnedScene(ID3D11DeviceContext* context,
+Result<bool> PreparedSrInputs::refreshConvertedDepth(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
-        return Error{ErrorCode::InvalidInput,"Owned SR refresh needs an immediate context and three textures"};
+        return Error{ErrorCode::InvalidInput,"Converted-depth SR refresh needs an immediate context and three textures"};
     if(!color_||!motion_||!depth_||!output_||!depthCropShader_||!depthSnapshot_||
        !depthView_||!depthTarget_||!cropConstants_||sourceRegion_.left||
-       sourceRegion_.top||sourceRegion_.width!=width_||sourceRegion_.height!=height_||
-       (width_==outputWidth_&&height_==outputHeight_))
-        return Error{ErrorCode::Conflict,"Prepared SR slot is not an owned reduced scene"};
+       sourceRegion_.top||sourceRegion_.width!=width_||sourceRegion_.height!=height_)
+        return Error{ErrorCode::Conflict,"Prepared SR slot has no reusable depth conversion"};
     ComPtr<ID3D11Device> device,slotOwner;
     context->GetDevice(&device);color_->GetDevice(&slotOwner);
     ComPtr<IUnknown> deviceIdentity,slotIdentity;
     if(!device||!slotOwner||FAILED(device.As(&deviceIdentity))||
        FAILED(slotOwner.As(&slotIdentity))||deviceIdentity.Get()!=slotIdentity.Get())
-        return Error{ErrorCode::Conflict,"Owned SR refresh device differs"};
+        return Error{ErrorCode::Conflict,"Converted-depth SR refresh device differs"};
     const std::array expected{DXGI_FORMAT_R8G8B8A8_UNORM,
         DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R24G8_TYPELESS};
     std::array<D3D11_TEXTURE2D_DESC,3> descriptions{};
     for(std::size_t i=0;i<sources.size();++i) {
-        if(!sources[i])return Error{ErrorCode::InvalidInput,"Owned SR refresh source is null"};
+        if(!sources[i])return Error{ErrorCode::InvalidInput,"Converted-depth SR refresh source is null"};
         ComPtr<ID3D11Device> owner;
         ComPtr<IUnknown> ownerIdentity;
         sources[i]->GetDevice(&owner);
         if(!owner||FAILED(owner.As(&ownerIdentity))||ownerIdentity.Get()!=deviceIdentity.Get())
-            return Error{ErrorCode::Conflict,"Owned SR refresh source device differs"};
+            return Error{ErrorCode::Conflict,"Converted-depth SR refresh source device differs"};
         sources[i]->GetDesc(&descriptions[i]);
         const auto& d=descriptions[i];
         if(d.Format!=expected[i]||d.MipLevels!=1||d.ArraySize!=1||
            d.SampleDesc.Count!=1||d.Usage!=D3D11_USAGE_DEFAULT)
-            return Error{ErrorCode::Unsupported,"Owned SR refresh source format or geometry differs"};
+            return Error{ErrorCode::Unsupported,"Converted-depth SR refresh source format or geometry differs"};
     }
     if(descriptions[0].Width!=width_||descriptions[0].Height!=height_||
        descriptions[1].Width!=descriptions[2].Width||
        descriptions[1].Height!=descriptions[2].Height||
        !((descriptions[1].Width==width_&&descriptions[1].Height==height_)||
          (descriptions[1].Width==outputWidth_&&descriptions[1].Height==outputHeight_)))
-        return Error{ErrorCode::Conflict,"Owned SR refresh source extents differ"};
+        return Error{ErrorCode::Conflict,"Converted-depth SR refresh source extents differ"};
     D3D11_TEXTURE2D_DESC snapshot{};
     depthSnapshot_->GetDesc(&snapshot);
     if(snapshot.Width!=descriptions[2].Width||snapshot.Height!=descriptions[2].Height||
        snapshot.Format!=descriptions[2].Format)
-        return Error{ErrorCode::Conflict,"Owned SR refresh depth snapshot extent differs"};
+        return Error{ErrorCode::Conflict,"Converted-depth SR refresh depth snapshot extent differs"};
     auto isolated=D3D11StateScope::begin(context);
     if(const auto error=std::get_if<Error>(&isolated))return *error;
     auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));

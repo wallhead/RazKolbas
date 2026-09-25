@@ -444,7 +444,7 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluateOwnedScene(
     auto& slot=preparedSlots_[nextPreparedSlot_++%preparedSlots_.size()];
     if(slot.inFlight)return std::optional<SrEvaluationToken>{};
     if(slot.frame) {
-        const auto refreshed=slot.frame->refreshOwnedScene(context,sources);
+        const auto refreshed=slot.frame->refreshConvertedDepth(context,sources);
         if(const auto error=std::get_if<Error>(&refreshed))return *error;
     } else {
         auto prepared=prepareSdrSrInputsFromOwnedScene(context,sources,
@@ -669,13 +669,20 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     }
     if(!slot.frame) {
         const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
-        auto prepared=reduced?prepareSdrSrInputsForDisplay(context,sources,
-            back.Width,back.Height):prepareSdrSrInputs(context,sources);
+        auto prepared=preSrProcessor_
+            ?prepareSdrSrInputsFromRegion(context,sources,
+                input.Width,input.Height,back.Width,back.Height)
+            :(reduced?prepareSdrSrInputsForDisplay(context,sources,
+                back.Width,back.Height):prepareSdrSrInputs(context,sources));
         if(const auto error=std::get_if<Error>(&prepared))return *error;
         slot.frame.emplace(std::move(std::get<PreparedSrInputs>(prepared)));
         const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
         if(FAILED(device->CreateQuery(&query,&slot.completion)))
             return Error{ErrorCode::Unavailable,"SDR DLSS completion query unavailable"};
+    } else if(preSrProcessor_) {
+        const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
+        const auto refreshed=slot.frame->refreshConvertedDepth(context,sources);
+        if(const auto error=std::get_if<Error>(&refreshed))return *error;
     } else {
         context->CopyResource(slot.frame->color(),scene);
         context->CopyResource(slot.frame->motion(),motion);

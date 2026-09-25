@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## 0.1.82 native NR depth-contract correction candidate (2026-09-25)
+
+The installed 0.1.81 NativeAA run proved that the new stage ordering was active,
+but NR did not evaluate. After the populated-scene gate admitted the frame, the
+log reported `Neural Rendering disabled after frame 1: NR pre-SR resource
+contract differs`; DLAA then continued successfully for more than 73,000
+submissions. Source inspection isolated the mismatch: the native preparation
+path retained Skyrim's `R24G8_TYPELESS` depth (DXGI format 44), while the NR
+bridge intentionally accepts normalized `R32_FLOAT` depth (format 41). This was
+not a provider-init, unsigned-runtime or DLAA-routing failure.
+
+Source 0.1.82 routes any presenter with a pre-SR processor through the existing
+R24-to-R32 depth shader, including full-size NativeAA. Reused frame slots now
+refresh that converted depth instead of attempting an invalid `CopyResource`
+between R24 and R32. The unchanged path without a pre-SR processor retains its
+prior direct copies. Contract failures now log all actual formats and extents.
+
+The NativeAA regression first failed with `44 == 41`, then passed after the
+correction. Fresh Debug tests pass 157 cases / 4,640 assertions, and the Release
+build passes all 40 CTest groups. Debug and Release 30-frame RTX 4080 SUPER NR
+bridges still pass the live Style/Intensity change at frame 10 with input
+SHA-256 `a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`
+and output SHA-256
+`ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`.
+The 0.1.82 DLL is not installed and its Skyrim result is **NOT RUN** while the
+0.1.81 game process remains active.
+
 ## 0.1.81 DLAA NR, live controls and temporal handoff candidate (2026-09-25)
 
 The first installed 0.1.80 Skyrim runs separated three real issues. In DLSS

@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -457,7 +458,16 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
            motionDesc.Width!=frame.width()||motionDesc.Height!=frame.height()||
            depthDesc.Width!=frame.width()||depthDesc.Height!=frame.height()) {
             impl_->disabled=true;
-            return Error{ErrorCode::Unsupported,"NR pre-SR resource contract differs"};
+            return Error{ErrorCode::Unsupported,
+                "NR pre-SR resource contract differs: color="+
+                std::to_string(static_cast<unsigned>(colorDesc.Format))+" "+
+                std::to_string(colorDesc.Width)+"x"+std::to_string(colorDesc.Height)+
+                "; motion="+std::to_string(static_cast<unsigned>(motionDesc.Format))+" "+
+                std::to_string(motionDesc.Width)+"x"+std::to_string(motionDesc.Height)+
+                "; depth="+std::to_string(static_cast<unsigned>(depthDesc.Format))+" "+
+                std::to_string(depthDesc.Width)+"x"+std::to_string(depthDesc.Height)+
+                "; expected="+std::to_string(frame.width())+"x"+
+                std::to_string(frame.height())};
         }
         if(!impl_->feature||impl_->width!=frame.width()||impl_->height!=frame.height()) {
             const auto rebuilt=impl_->rebuild(frame.width(),frame.height());

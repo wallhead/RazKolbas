@@ -219,6 +219,39 @@ TEST_CASE("SDR scene preparation accepts an RTV-only backbuffer and preserves it
     REQUIRE(std::holds_alternative<rk::Error>(rk::prepareSdrSrInputs(context.Get(),invalid)));
 }
 
+TEST_CASE("Full-size SDR preparation normalizes and refreshes depth for neural preprocessing",
+    "[sr_input][nr][dlaa]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,
+        D3D11_SDK_VERSION,&device,nullptr,&context)));
+    constexpr UINT width=8,height=6;
+    const std::array formats{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R24G8_TYPELESS};
+    const std::array<UINT,3> binds{D3D11_BIND_RENDER_TARGET,
+        D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE,
+        D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE};
+    std::array<ComPtr<ID3D11Texture2D>,3> sources;
+    for(std::size_t i=0;i<sources.size();++i) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width=width;desc.Height=height;desc.MipLevels=desc.ArraySize=1;
+        desc.SampleDesc.Count=1;desc.Format=formats[i];desc.BindFlags=binds[i];
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&sources[i])));
+    }
+    const std::array<ID3D11Texture2D*,3> raw{
+        sources[0].Get(),sources[1].Get(),sources[2].Get()};
+    auto prepared=rk::prepareSdrSrInputsFromRegion(context.Get(),raw,
+        width,height,width,height);
+    REQUIRE(std::holds_alternative<rk::PreparedSrInputs>(prepared));
+    auto& frame=std::get<rk::PreparedSrInputs>(prepared);
+    D3D11_TEXTURE2D_DESC depth{};
+    frame.depth()->GetDesc(&depth);
+    REQUIRE(depth.Format==DXGI_FORMAT_R32_FLOAT);
+    const auto refreshed=frame.refreshConvertedDepth(context.Get(),raw);
+    REQUIRE(std::holds_alternative<bool>(refreshed));
+    REQUIRE(std::get<bool>(refreshed));
+}
+
 TEST_CASE("Reduced SR input retains its render extent and allocates a display-sized output", "[sr_input]") {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;

@@ -40,10 +40,10 @@ public:
     UINT outputWidth() const noexcept { return outputWidth_; }
     UINT outputHeight() const noexcept { return outputHeight_; }
     SrSourceRegion sourceRegion() const noexcept { return sourceRegion_; }
-    // Refreshes a slot allocated by prepareSdrSrInputsFromOwnedScene without
-    // creating any new D3D11 resources. The three source identities may vary,
-    // but their device, formats and extents must remain compatible.
-    Result<bool> refreshOwnedScene(ID3D11DeviceContext* context,
+    // Refreshes a slot whose R24G8 source depth was normalized to R32_FLOAT.
+    // The three source identities may vary, but their device, formats and
+    // extents must remain compatible with the prepared slot.
+    Result<bool> refreshConvertedDepth(ID3D11DeviceContext* context,
         std::span<ID3D11Texture2D* const> sources);
 private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> color_,motion_,depth_,output_;
