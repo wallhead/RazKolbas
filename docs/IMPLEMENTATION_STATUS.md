@@ -24,6 +24,17 @@ bridges still pass the live Style/Intensity change at frame 10 with input
 SHA-256 `a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`
 and output SHA-256
 `ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`.
+Source commit `071a4b4` is pushed. The independently extracted and hash-verified
+MO2 package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.82-native-nr-depth-071a4b4.zip`,
+SHA-256 `3a0c936a55c796b09adbcab02855ab79ce8ae640c6b675427eb7ec083108b781`.
+It contains exactly the manifest and its five
+payloads, with no PDB, archive, reference host, IDA database, capture or game
+data. The package preserves the effective MO2 INI from the virtual Data view,
+SHA-256 `44953a84bd15183632d8336ea19a8d460825aae3b956e654f20ce2f2aa272d18`,
+including NativeAA, enabled NR and the user's current Intensity `0.69`. Release
+DLL SHA-256 is
+`5acb36c82ebd290baffbdc0df81fe9b2cf50a15b6d0108a9bb83aaa335992b95`.
 The 0.1.82 DLL is not installed and its Skyrim result is **NOT RUN** while the
 0.1.81 game process remains active.
 
