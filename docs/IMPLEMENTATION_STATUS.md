@@ -35,8 +35,19 @@ SHA-256 `44953a84bd15183632d8336ea19a8d460825aae3b956e654f20ce2f2aa272d18`,
 including NativeAA, enabled NR and the user's current Intensity `0.69`. Release
 DLL SHA-256 is
 `5acb36c82ebd290baffbdc0df81fe9b2cf50a15b6d0108a9bb83aaa335992b95`.
-The 0.1.82 DLL is not installed and its Skyrim result is **NOT RUN** while the
-0.1.81 game process remains active.
+After Skyrim exited, the complete prior mod and effective virtual-Data INI were
+backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.82-071a4b4-20260925`. The old manifest's
+DLL, runtimes and license matched; its physical mod INI was absent because the
+menu had persisted the current file through MO2's virtual Data path. The
+effective file was present and was used as the package source. The verified
+0.1.82 payload is now installed at `D:/TESV_EX/MO2/mods/RazKolbas`: all five
+manifest entries match, effective and packaged INIs both match SHA-256
+`44953a...72d18`, and `meta.ini` is unchanged. Installed manifest SHA-256 is
+`d319251d0f57a2d1c08a90f35ccc501fa42261b61562932a69be804ac764f86a`.
+Skyrim remained absent throughout installation and verification. Actual 0.1.82
+NativeAA NR submissions and image quality are **NOT RUN** pending the next
+user-started game session.
 
 ## 0.1.81 DLAA NR, live controls and temporal handoff candidate (2026-09-25)
 
