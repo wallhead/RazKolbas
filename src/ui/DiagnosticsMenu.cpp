@@ -38,6 +38,7 @@ struct MenuState {
     Settings requestedSettings;
     std::filesystem::path iniPath;
     std::optional<SharpeningUpdate> pendingSharpening;
+    std::optional<Settings> pendingNrRuntime;
     std::string saveMessage;
     bool controlsConfigured{},settingsDirty{};
     MenuInputCapture inputCapture;
@@ -238,48 +239,59 @@ void drawNeuralRenderingTab(MenuState& state) {
         {"Shipping","Shipping (preset 1)"}};
     static constexpr MenuChoice resolves[]{
         {"Auto","Auto"},{"Residual","Residual"},{"Ratio","Ratio / OkLab"}};
-    auto save=[&] {
+    auto queueRuntime=[&] { state.pendingNrRuntime=state.requestedSettings; };
+    auto save=[&](bool live=false) {
+        if(live)queueRuntime();
         state.settingsDirty=true;
         persistSettings(state);
     };
     auto sliderFloat=[&](const char* label,const char* key,float minimum,
-        float maximum,const char* format="%.2f") {
+        float maximum,bool live,const char* format="%.2f") {
         float value=static_cast<float>(state.requestedSettings.get<double>(key));
         if(!ImGui::SliderFloat(label,&value,minimum,maximum,format))return;
         state.requestedSettings.values[key]=static_cast<double>(value);
+        if(live)queueRuntime();
         state.settingsDirty=true;
         if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
     };
 
     ImGui::TextWrapped("Pipeline: HUD-free scene -> Neural Rendering -> DLSS SR -> optional frame generation -> native UI");
     ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
-        "NR runtime: experimental exact-build direct path; restart required after changes.");
+        "NR runtime: experimental exact-build direct path.");
+    ImGui::TextDisabled("Evaluation controls apply live and reset NR history. Network preset requires restart.");
     ImGui::Separator();
     bool enabled=state.requestedSettings.get<bool>("NeuralRendering.Enabled");
     if(ImGui::Checkbox("Enable Neural Rendering",&enabled)) {
-        state.requestedSettings.values["NeuralRendering.Enabled"]=enabled;save();
+        state.requestedSettings.values["NeuralRendering.Enabled"]=enabled;save(true);
     }
-    ImGui::TextDisabled("Position: Before DLSS Super Resolution (fixed)");
+    ImGui::TextDisabled("Position: Before DLSS Super Resolution / DLAA (fixed)");
     ImGui::SetNextItemWidth(220.0f);
     if(choiceControl("Network Preset","NeuralRendering.Preset",presets,state))save();
+    const auto& activePreset=state.activeSettings.get<Choice>("NeuralRendering.Preset").value;
+    const auto& requestedPreset=state.requestedSettings.get<Choice>(
+        "NeuralRendering.Preset").value;
+    if(requestedPreset!=activePreset)
+        ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
+            "Network preset saved - restart Skyrim to apply");
     int style=static_cast<int>(state.requestedSettings.get<std::int64_t>(
         "NeuralRendering.Style"));
     ImGui::SetNextItemWidth(220.0f);
     if(ImGui::SliderInt("Style",&style,0,7)) {
         state.requestedSettings.values["NeuralRendering.Style"]=
             static_cast<std::int64_t>(style);state.settingsDirty=true;
+        queueRuntime();
         if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
     }
-    sliderFloat("Intensity","NeuralRendering.Intensity",0.0f,2.0f);
-    sliderFloat("Local Tone","NeuralRendering.LocalToneStrength",0.0f,2.0f);
-    sliderFloat("Local Structure","NeuralRendering.LocalStructureStrength",0.0f,2.0f);
+    sliderFloat("Intensity","NeuralRendering.Intensity",0.0f,2.0f,true);
+    sliderFloat("Local Tone","NeuralRendering.LocalToneStrength",0.0f,2.0f,true);
+    sliderFloat("Local Structure","NeuralRendering.LocalStructureStrength",0.0f,2.0f,true);
 
     auto skinText=state.requestedSettings.get<Text>(
         "NeuralRendering.SkinStructureStrength").value;
     bool autoSkin=skinText=="Auto"||skinText=="-1";
     if(ImGui::Checkbox("Auto Skin Mask Strength",&autoSkin)) {
         state.requestedSettings.values["NeuralRendering.SkinStructureStrength"]=
-            Text{autoSkin?"Auto":"1.000000"};save();
+            Text{autoSkin?"Auto":"1.000000"};save(true);
     }
     if(!autoSkin) {
         float skin=std::strtof(skinText.c_str(),nullptr);
@@ -287,49 +299,43 @@ void drawNeuralRenderingTab(MenuState& state) {
         if(ImGui::SliderFloat("Skin Structure",&skin,0.0f,2.0f,"%.2f")) {
             state.requestedSettings.values["NeuralRendering.SkinStructureStrength"]=
                 Text{std::to_string(skin)};state.settingsDirty=true;
+            queueRuntime();
             if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
         }
     }
     bool autoMask=state.requestedSettings.get<bool>("NeuralRendering.UseAutoMask");
     if(ImGui::Checkbox("Generate Skin Mask Automatically",&autoMask)) {
-        state.requestedSettings.values["NeuralRendering.UseAutoMask"]=autoMask;save();
+        state.requestedSettings.values["NeuralRendering.UseAutoMask"]=autoMask;save(true);
     }
     bool uiCorrection=state.requestedSettings.get<bool>(
         "NeuralRendering.NativeUICorrection");
     if(ImGui::Checkbox("Model UI Correction",&uiCorrection)) {
-        state.requestedSettings.values["NeuralRendering.NativeUICorrection"]=uiCorrection;save();
+        state.requestedSettings.values["NeuralRendering.NativeUICorrection"]=uiCorrection;save(true);
     }
-    int passes=static_cast<int>(state.requestedSettings.get<std::int64_t>(
-        "NeuralRendering.PassCount"));
-    ImGui::SetNextItemWidth(220.0f);
-    if(ImGui::SliderInt("Passes",&passes,1,3)) {
-        state.requestedSettings.values["NeuralRendering.PassCount"]=
-            static_cast<std::int64_t>(passes);state.settingsDirty=true;
-        if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
-    }
+    ImGui::TextDisabled("Passes: 1 (multi-pass is not validated in this build)");
+    ImGui::BeginDisabled();
     bool hdr=state.requestedSettings.get<bool>("NeuralRendering.InputColorIsHDR");
-    if(ImGui::Checkbox("NR Input Is HDR",&hdr)) {
-        state.requestedSettings.values["NeuralRendering.InputColorIsHDR"]=hdr;save();
-    }
+    ImGui::Checkbox("NR Input Is HDR",&hdr);
+    ImGui::EndDisabled();
     if(ImGui::IsItemHovered())
-        ImGui::SetTooltip("Describes the colour texture supplied to NR.\nIt does not follow the Windows HDR switch.");
+        ImGui::SetTooltip("The current pre-SR NR input is SDR RGBA8.");
 
     ImGui::SeparatorText("Advanced resolve");
     double scale=state.requestedSettings.get<double>(
         "NeuralRendering.InputResolutionScale");
     bool fullResolution=scale==0.0||scale>=1.0;
-    if(ImGui::Checkbox("Full Resolution NR Input",&fullResolution)) {
-        state.requestedSettings.values["NeuralRendering.InputResolutionScale"]=
-            fullResolution?0.0:0.5;save();
-    }
-    if(!fullResolution)
-        sliderFloat("NR Input Scale","NeuralRendering.InputResolutionScale",0.25f,0.99f);
+    ImGui::BeginDisabled();
+    ImGui::Checkbox("Full Resolution NR Input",&fullResolution);
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("Reduced NR input and custom resolve controls are not active in the direct path.");
+    ImGui::BeginDisabled();
     ImGui::SetNextItemWidth(220.0f);
     if(choiceControl("Resolve Method","NeuralRendering.Resolve",resolves,state))save();
-    sliderFloat("Transfer Strength","NeuralRendering.TransferStrength",0.0f,2.0f);
-    sliderFloat("Colour Strength","NeuralRendering.ColourStrength",0.0f,2.0f);
-    sliderFloat("Maximum Ratio","NeuralRendering.MaxRatio",1.0f,16.0f);
-    sliderFloat("White Point","NeuralRendering.WhitePoint",0.01f,16.0f);
+    sliderFloat("Transfer Strength","NeuralRendering.TransferStrength",0.0f,2.0f,false);
+    sliderFloat("Colour Strength","NeuralRendering.ColourStrength",0.0f,2.0f,false);
+    sliderFloat("Maximum Ratio","NeuralRendering.MaxRatio",1.0f,16.0f,false);
+    sliderFloat("White Point","NeuralRendering.WhitePoint",0.01f,16.0f,false);
+    ImGui::EndDisabled();
 }
 void drawDiagnosticsTab(const DiagnosticsSnapshot& status,
     UINT width,UINT height,const char* mode) {
@@ -425,6 +431,14 @@ std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept {
     std::scoped_lock guard(state.mutex);
     auto update=state.pendingSharpening;
     state.pendingSharpening.reset();
+    return update;
+}
+
+std::optional<Settings> consumeDiagnosticsNrRuntimeUpdate() {
+    auto& state=menu();
+    std::scoped_lock guard(state.mutex);
+    auto update=std::move(state.pendingNrRuntime);
+    state.pendingNrRuntime.reset();
     return update;
 }
 

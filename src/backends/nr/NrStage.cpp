@@ -9,9 +9,11 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <string_view>
 #include <vector>
 
@@ -23,6 +25,43 @@ constexpr std::string_view nrHash=
     "91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7";
 std::atomic<ID3D12Device*> allocationDevice{};
 std::atomic<HMODULE> callerIdentityModule{};
+
+struct NrRuntimeSettings {
+    bool enabled{};
+    unsigned style{};
+    float intensity{1.0f},tone{1.0f},structure{1.0f},skin{-1.0f};
+    bool autoMask{},uiCorrection{};
+    bool operator==(const NrRuntimeSettings&) const noexcept=default;
+};
+
+Result<NrRuntimeSettings> runtimeSettings(const Settings& settings) {
+    NrRuntimeSettings result;
+    result.enabled=settings.get<bool>("NeuralRendering.Enabled");
+    const auto style=settings.get<std::int64_t>("NeuralRendering.Style");
+    result.style=static_cast<unsigned>(style);
+    result.intensity=static_cast<float>(settings.get<double>("NeuralRendering.Intensity"));
+    result.tone=static_cast<float>(settings.get<double>("NeuralRendering.LocalToneStrength"));
+    result.structure=static_cast<float>(
+        settings.get<double>("NeuralRendering.LocalStructureStrength"));
+    const auto& skin=settings.get<Text>("NeuralRendering.SkinStructureStrength").value;
+    if(skin=="Auto"||skin=="-1")result.skin=result.structure;
+    else {
+        char* end{};
+        result.skin=std::strtof(skin.c_str(),&end);
+        if(!end||end==skin.c_str()||*end!='\0')
+            return Error{ErrorCode::InvalidInput,"NR skin strength is invalid"};
+    }
+    result.autoMask=settings.get<bool>("NeuralRendering.UseAutoMask");
+    result.uiCorrection=settings.get<bool>("NeuralRendering.NativeUICorrection");
+    if(style<0||style>7||!std::isfinite(result.intensity)||
+       !std::isfinite(result.tone)||!std::isfinite(result.structure)||
+       !std::isfinite(result.skin)||result.intensity<0.0f||result.intensity>2.0f||
+       result.tone<0.0f||result.tone>2.0f||result.structure<0.0f||
+       result.structure>2.0f||result.skin>2.0f||
+       (result.skin<0.0f&&result.skin!=-1.0f))
+        return Error{ErrorCode::InvalidInput,"NR live setting is outside its supported range"};
+    return result;
+}
 
 void __cdecl allocateNrResource(const D3D12_RESOURCE_DESC* desc,
     D3D12_RESOURCE_STATES state,const D3D12_HEAP_PROPERTIES* heap,
@@ -127,11 +166,13 @@ struct NrStage::Impl {
         ComPtr<ID3D12Resource> d12;
     } color,motion,depth,output;
 
-    bool requested{},initialized{},runtimeInitialized{},disabled{};
+    bool configured{},initialized{},runtimeInitialized{},disabled{};
     bool retirementUncertain{};
-    unsigned preset{},style{},passes{1};
-    float intensity{1},tone{1},structure{1},skin{1};
-    bool autoMask{},uiCorrection{};
+    unsigned preset{},passes{1};
+    mutable std::mutex runtimeMutex;
+    NrRuntimeSettings runtime;
+    std::uint64_t runtimeGeneration{};
+    bool runtimeResetPending{};
     UINT width{},height{};
     std::uint64_t fenceValue{},submitted{};
     HMODULE nr{},core{};
@@ -334,33 +375,70 @@ NrStage::~NrStage(){
         impl_.release();
 }
 Result<bool> NrStage::configure(const Settings& settings) {
-    if(impl_->initialized)return Error{ErrorCode::Conflict,"Cannot reconfigure active NR stage"};
-    impl_->requested=settings.get<bool>("NeuralRendering.Enabled");
-    if(settings.get<Choice>("NeuralRendering.Backend").value=="Streamline")
+    if(impl_->configured||impl_->initialized)
+        return Error{ErrorCode::Conflict,"Cannot reconfigure NR stage"};
+    const auto decoded=runtimeSettings(settings);
+    if(const auto error=std::get_if<Error>(&decoded))return *error;
+    const auto runtime=std::get<NrRuntimeSettings>(decoded);
+    if(runtime.enabled&&
+       settings.get<Choice>("NeuralRendering.Backend").value=="Streamline")
         return Error{ErrorCode::Unsupported,"Streamline NR backend is not implemented"};
     impl_->preset=settings.get<Choice>("NeuralRendering.Preset").value=="Shipping"?1u:0u;
-    impl_->style=static_cast<unsigned>(settings.get<std::int64_t>("NeuralRendering.Style"));
     impl_->passes=static_cast<unsigned>(settings.get<std::int64_t>("NeuralRendering.PassCount"));
-    impl_->intensity=static_cast<float>(settings.get<double>("NeuralRendering.Intensity"));
-    impl_->tone=static_cast<float>(settings.get<double>("NeuralRendering.LocalToneStrength"));
-    impl_->structure=static_cast<float>(settings.get<double>("NeuralRendering.LocalStructureStrength"));
-    const auto skin=settings.get<Text>("NeuralRendering.SkinStructureStrength").value;
-    impl_->skin=skin=="Auto"?impl_->structure:std::strtof(skin.c_str(),nullptr);
-    impl_->autoMask=settings.get<bool>("NeuralRendering.UseAutoMask");
-    impl_->uiCorrection=settings.get<bool>("NeuralRendering.NativeUICorrection");
     const auto scale=settings.get<double>("NeuralRendering.InputResolutionScale");
-    if(impl_->requested&&scale!=0.0&&scale<1.0)
+    if(runtime.enabled&&scale!=0.0&&scale<1.0)
         return Error{ErrorCode::Unsupported,"Reduced NR input scale is not integrated yet"};
-    if(impl_->requested&&settings.get<bool>("NeuralRendering.InputColorIsHDR"))
+    if(runtime.enabled&&settings.get<bool>("NeuralRendering.InputColorIsHDR"))
         return Error{ErrorCode::Unsupported,"Current pre-SR NR input is SDR RGBA8"};
-    if(impl_->requested&&impl_->passes!=1)
+    if(runtime.enabled&&impl_->passes!=1)
         return Error{ErrorCode::Unsupported,"Multi-pass NR is not validated yet"};
+    {
+        std::scoped_lock lock(impl_->runtimeMutex);
+        impl_->runtime=runtime;
+        ++impl_->runtimeGeneration;
+        impl_->runtimeResetPending=runtime.enabled;
+        impl_->configured=true;
+    }
+    return true;
+}
+Result<bool> NrStage::updateRuntime(const Settings& settings) {
+    if(!impl_->configured)
+        return Error{ErrorCode::Conflict,"NR stage was not configured at startup"};
+    const auto decoded=runtimeSettings(settings);
+    if(const auto error=std::get_if<Error>(&decoded))return *error;
+    const auto next=std::get<NrRuntimeSettings>(decoded);
+    if(next.enabled&&settings.get<Choice>("NeuralRendering.Backend").value=="Streamline")
+        return Error{ErrorCode::Unsupported,"Streamline NR backend is not implemented"};
+    const auto scale=settings.get<double>("NeuralRendering.InputResolutionScale");
+    if(next.enabled&&scale!=0.0&&scale<1.0)
+        return Error{ErrorCode::Unsupported,"Reduced NR input scale is not integrated yet"};
+    if(next.enabled&&settings.get<bool>("NeuralRendering.InputColorIsHDR"))
+        return Error{ErrorCode::Unsupported,"Current pre-SR NR input is SDR RGBA8"};
+    if(next.enabled&&settings.get<std::int64_t>("NeuralRendering.PassCount")!=1)
+        return Error{ErrorCode::Unsupported,"Multi-pass NR is not validated yet"};
+    if(next.enabled&&impl_->disabled)
+        return Error{ErrorCode::Conflict,"NR was disabled after a runtime failure; restart is required"};
+    std::scoped_lock lock(impl_->runtimeMutex);
+    if(next==impl_->runtime)return false;
+    impl_->runtime=next;
+    ++impl_->runtimeGeneration;
+    impl_->runtimeResetPending=next.enabled;
     return true;
 }
 Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
     PreparedSrInputs& frame,bool reset) {
     try {
-        if(!impl_->requested||impl_->disabled)return false;
+        NrRuntimeSettings runtime;
+        std::uint64_t runtimeGeneration{};
+        bool runtimeReset{};
+        {
+            std::scoped_lock lock(impl_->runtimeMutex);
+            runtime=impl_->runtime;
+            runtimeGeneration=impl_->runtimeGeneration;
+            runtimeReset=impl_->runtimeResetPending;
+        }
+        if(!runtime.enabled||impl_->disabled)return false;
+        reset=reset||runtimeReset;
         if(!device||!context||!frame.color()||!frame.motion()||!frame.depth())
             return Error{ErrorCode::InvalidInput,"NR stage input is incomplete"};
         if(!impl_->initialized) {
@@ -391,8 +469,15 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
         context->CopyResource(impl_->motion.d11.Get(),frame.motion());
         context->CopyResource(impl_->depth.d11.Get(),frame.depth());
         const auto inputReady=++impl_->fenceValue;
-        if(FAILED(impl_->context11->Signal(impl_->fence11.Get(),inputReady))||
-           FAILED(impl_->queue->Wait(impl_->fence12.Get(),inputReady))) {
+        if(FAILED(impl_->context11->Signal(impl_->fence11.Get(),inputReady))) {
+            impl_->disabled=true;
+            return Error{ErrorCode::DeviceRemoved,"NR input signal failed"};
+        }
+        // The followed D3D11->D3D12 NR transport explicitly flushes after
+        // Signal. Without it, the queue wait may observe guide/color work a
+        // frame late under load, producing temporal trails.
+        impl_->context11->Flush();
+        if(FAILED(impl_->queue->Wait(impl_->fence12.Get(),inputReady))) {
             impl_->disabled=true;
             return Error{ErrorCode::DeviceRemoved,"NR input handoff failed"};
         }
@@ -427,11 +512,13 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
         p->Set("DLSSNR.ScalingRatio",1.0f);p->Set("DLSSNR.Scale",1.0f);
         p->Set("DLSSNR.Upscaling",0);p->Set("DLSSNR.Enabled",1);
         p->Set("DLSSNR.Reset",reset?1:0);p->Set("DLSSNR.DepthInverted",0);
-        p->Set("DLSSNR.Intensity",impl_->intensity);p->Set("DLSSNR.LocalToneStrength",impl_->tone);
-        p->Set("DLSSNR.LocalStructureStrength",impl_->structure);
-        p->Set("DLSSNR.SkinStructureStrength",impl_->skin);
-        p->Set("DLSSNR.UseAutoMask",impl_->autoMask?1:0);p->Set("DLSSNR.Style",impl_->style);
-        p->Set("DLSSNR.UICorrection",impl_->uiCorrection?1:0);
+        p->Set("DLSSNR.Intensity",runtime.intensity);
+        p->Set("DLSSNR.LocalToneStrength",runtime.tone);
+        p->Set("DLSSNR.LocalStructureStrength",runtime.structure);
+        p->Set("DLSSNR.SkinStructureStrength",runtime.skin);
+        p->Set("DLSSNR.UseAutoMask",runtime.autoMask?1:0);
+        p->Set("DLSSNR.Style",runtime.style);
+        p->Set("DLSSNR.UICorrection",runtime.uiCorrection?1:0);
         p->Set("DLSS.Indicator.Invert.X.Axis",0);p->Set("DLSS.Indicator.Invert.Y.Axis",0);
         const auto evaluateResult=impl_->evaluate(impl_->commands.Get(),impl_->feature,p,nullptr);
         impl_->barrier(impl_->color.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -456,6 +543,11 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
             return Error{ErrorCode::DeviceRemoved,"NR output handoff failed"};
         }
         context->CopyResource(frame.color(),impl_->output.d11.Get());
+        {
+            std::scoped_lock lock(impl_->runtimeMutex);
+            if(impl_->runtimeGeneration==runtimeGeneration)
+                impl_->runtimeResetPending=false;
+        }
         ++impl_->submitted;return true;
     } catch(const std::exception& error) {
         impl_->disabled=true;
@@ -515,6 +607,10 @@ Result<bool> NrStage::stop() {
     }
     return failed?Result<bool>{first}:Result<bool>{true};
 }
-bool NrStage::enabled() const noexcept{return impl_&&impl_->requested&&!impl_->disabled;}
+bool NrStage::enabled() const noexcept {
+    if(!impl_||impl_->disabled)return false;
+    std::scoped_lock lock(impl_->runtimeMutex);
+    return impl_->runtime.enabled;
+}
 std::uint64_t NrStage::submittedFrames() const noexcept{return impl_?impl_->submitted:0;}
 }

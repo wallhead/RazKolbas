@@ -16,6 +16,10 @@ public:
     NrStage(const NrStage&)=delete;
     NrStage& operator=(const NrStage&)=delete;
     Result<bool> configure(const Settings& settings);
+    // Applies evaluation-only controls to an active or not-yet-started stage.
+    // Feature-creation controls remain restart-bound. A changed live setting
+    // resets temporal NR history on the next submitted frame.
+    Result<bool> updateRuntime(const Settings& settings);
     Result<bool> process(ID3D11Device* device,ID3D11DeviceContext* context,
         PreparedSrInputs& frame,bool reset);
     Result<bool> stop();

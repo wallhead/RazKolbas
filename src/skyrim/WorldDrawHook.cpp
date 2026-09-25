@@ -610,6 +610,34 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
             frame,sequence.images.size()-1,directory.string());
     state->menuUiSequence.reset();
 }
+void applyPendingNrRuntimeSettings(WorldState* state) noexcept {
+    try {
+        const auto update=consumeDiagnosticsNrRuntimeUpdate();
+        if(!update)return;
+        const auto applied=state->nrStage.updateRuntime(*update);
+        if(const auto error=std::get_if<Error>(&applied)) {
+            spdlog::warn("Live Neural Rendering update rejected: {}",error->message);
+            return;
+        }
+        if(!std::get<bool>(applied))return;
+        state->nrFailureLogged=false;
+        const auto skin=update->get<Text>("NeuralRendering.SkinStructureStrength").value;
+        spdlog::info("Live Neural Rendering controls applied with history reset: enabled={}; style={}; intensity={}; tone={}; structure={}; skin={}; autoMask={}; uiCorrection={}",
+            update->get<bool>("NeuralRendering.Enabled"),
+            update->get<std::int64_t>("NeuralRendering.Style"),
+            update->get<double>("NeuralRendering.Intensity"),
+            update->get<double>("NeuralRendering.LocalToneStrength"),
+            update->get<double>("NeuralRendering.LocalStructureStrength"),skin,
+            update->get<bool>("NeuralRendering.UseAutoMask"),
+            update->get<bool>("NeuralRendering.NativeUICorrection"));
+    } catch(const std::exception& error) {
+        try { spdlog::warn("Live Neural Rendering update failed open: {}",error.what()); }
+        catch(...) {}
+    } catch(...) {
+        try { spdlog::warn("Live Neural Rendering update failed open"); }
+        catch(...) {}
+    }
+}
 enum class OwnedPublicationBoundary { PrePresent, MenuDisplay };
 bool processOwnedWorldFrame(WorldState* state,void* world,
     std::uint64_t sequence,OwnedPublicationBoundary boundary) noexcept {
@@ -991,6 +1019,7 @@ void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     state->forwarder.dispatch(world,flags);
     state->displayedMode.store(DisplayMode::Native,std::memory_order_release);
 #ifdef RK_WITH_NGX
+    applyPendingNrRuntimeSettings(state);
     if(!activeOwnedSceneDomain())if(const auto update=consumeDiagnosticsSharpeningUpdate()) {
         const auto configuredSr=state->srPresenter.configureSharpness(
             update->enabled,update->sharpness);
@@ -1944,7 +1973,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     const auto nrConfigured=pending->nrStage.configure(settings);
     if(const auto error=std::get_if<Error>(&nrConfigured))
         spdlog::warn("Neural Rendering request retained but inactive: {}",error->message);
-    else if(pending->nrStage.enabled()) {
+    else {
         auto* stage=&pending->nrStage;
         auto* failureLogged=&pending->nrFailureLogged;
         const auto processor=[stage,failureLogged](ID3D11Device* device,
@@ -1954,7 +1983,7 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
             if(const auto processError=std::get_if<Error>(&processed)) {
                 if(!*failureLogged) {
                     *failureLogged=true;
-                    spdlog::warn("Neural Rendering disabled after frame {}: {}; original colour continues to DLSS SR",
+                    spdlog::warn("Neural Rendering disabled after frame {}: {}; original colour continues to DLSS/DLAA",
                         metadata.frameId,processError->message);
                 }
                 return false;
@@ -1970,7 +1999,10 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         };
         if(const auto configured=pending->srPresenter.configurePreSrProcessor(processor);
            const auto configureError=std::get_if<Error>(&configured))return *configureError;
-        spdlog::info("Neural Rendering armed before DLSS SR; exact community runtime hash required");
+        if(const auto configured=pending->sdrPresenter.configurePreSrProcessor(processor);
+           const auto configureError=std::get_if<Error>(&configured))return *configureError;
+        spdlog::info("Neural Rendering preprocessor armed before DLSS SR and DLAA: enabled={}; exact community runtime hash required",
+            pending->nrStage.enabled());
     }
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;

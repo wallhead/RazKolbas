@@ -645,9 +645,18 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     if(const auto valid=validateSources(device,scene,motion,depth,input.Width,input.Height);
        const auto error=std::get_if<Error>(&valid))return *error;
     if(!initialized_) {
-        const auto ready=initialize(device,context,input.Width,input.Height,
-            back.Width,back.Height,reduced);
-        if(const auto error=std::get_if<Error>(&ready))return *error;
+        if(preparedEvaluator_) {
+            // The injected evaluator is also the test seam for the native
+            // DLAA route. It models the same pre-SR/evaluate/publication order
+            // without starting an NGX session.
+            device_=device;width_=input.Width;height_=input.Height;
+            displayWidth_=back.Width;displayHeight_=back.Height;
+            reduced_=reduced;initialized_=true;
+        } else {
+            const auto ready=initialize(device,context,input.Width,input.Height,
+                back.Width,back.Height,reduced);
+            if(const auto error=std::get_if<Error>(&ready))return *error;
+        }
     }
     auto& slot=slots_[nextSlot_++%slots_.size()];
     if(slot.inFlight) {
@@ -675,21 +684,33 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     auto isolated=D3D11StateScope::begin(context);
     if(const auto error=std::get_if<Error>(&isolated))return *error;
     auto scope=std::move(std::get<std::unique_ptr<D3D11StateScope>>(isolated));
-    NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
-    eval.Feature.pInColor=slot.frame->color();
-    eval.Feature.pInOutput=slot.frame->output();
-    eval.Feature.InSharpness=0.0f;
-    eval.pInDepth=slot.frame->depth();
-    eval.pInMotionVectors=slot.frame->motion();
-    eval.InRenderSubrectDimensions={width_,height_};
-    eval.InReset=(submittedFrames_==0||resetPending_)?1:0;
-    eval.InJitterOffsetX=jitter.x;
-    eval.InJitterOffsetY=jitter.y;
-    eval.InMVScaleX=static_cast<float>(width_);
-    eval.InMVScaleY=static_cast<float>(height_);
-    eval.InPreExposure=eval.InExposureScale=1.0f;
-    if(!success(NGX_D3D11_EVALUATE_DLSS_EXT(context,feature_,parameters_,&eval)))
-        return Error{ErrorCode::Unavailable,"NVIDIA SDR DLSS evaluation failed"};
+    const bool reset=submittedFrames_==0||resetPending_;
+    const SrFrameMetadata metadata{submittedFrames_+1,1,reset,
+        SrSourcePhase::PrePresent};
+    if(preSrProcessor_)
+        (void)preSrProcessor_(device,context,*slot.frame,metadata,jitter,reset);
+    if(preparedEvaluator_) {
+        const auto evaluated=preparedEvaluator_(context,*slot.frame,metadata,jitter,
+            0.0f,reset);
+        if(const auto error=std::get_if<Error>(&evaluated))return *error;
+        if(!std::get<bool>(evaluated))return false;
+    } else {
+        NVSDK_NGX_D3D11_DLSS_Eval_Params eval{};
+        eval.Feature.pInColor=slot.frame->color();
+        eval.Feature.pInOutput=slot.frame->output();
+        eval.Feature.InSharpness=0.0f;
+        eval.pInDepth=slot.frame->depth();
+        eval.pInMotionVectors=slot.frame->motion();
+        eval.InRenderSubrectDimensions={width_,height_};
+        eval.InReset=reset?1:0;
+        eval.InJitterOffsetX=jitter.x;
+        eval.InJitterOffsetY=jitter.y;
+        eval.InMVScaleX=static_cast<float>(width_);
+        eval.InMVScaleY=static_cast<float>(height_);
+        eval.InPreExposure=eval.InExposureScale=1.0f;
+        if(!success(NGX_D3D11_EVALUATE_DLSS_EXT(context,feature_,parameters_,&eval)))
+            return Error{ErrorCode::Unavailable,"NVIDIA SDR DLSS evaluation failed"};
+    }
     scope.reset();
     const auto copied=sharpness_>0.0f?
         postSharpen_.apply(context,backbuffer,slot.frame->output(),sharpness_):

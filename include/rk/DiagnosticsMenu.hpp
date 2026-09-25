@@ -34,6 +34,9 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale
     std::uintptr_t controlMapSingletonRva,
     std::uintptr_t ignoreKeyboardMouseOffset) noexcept;
 std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
+// Returns the most recent menu snapshot containing live NR evaluation controls.
+// Creation-time fields in the snapshot remain restart-bound.
+std::optional<Settings> consumeDiagnosticsNrRuntimeUpdate();
 bool diagnosticsMenuCapturingInput() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

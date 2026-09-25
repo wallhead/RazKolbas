@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(RazKolbas VERSION 0.1.80 LANGUAGES C CXX)
+project(RazKolbas VERSION 0.1.81 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -115,9 +115,10 @@ if(BUILD_TESTING)
   add_executable(rk_tests tests/unit/HostTests.cpp tests/unit/ConfigTests.cpp tests/unit/PolicyTests.cpp)
   if(RK_NGX_SDK_ROOT)
     target_sources(rk_tests PRIVATE tests/integration/SdrPreparedPresenterTests.cpp
-      src/backends/dlss/SdrDlssPresenter.cpp)
+      tests/unit/NrStageSettingsTests.cpp
+      src/backends/dlss/SdrDlssPresenter.cpp src/backends/nr/NrStage.cpp)
     target_include_directories(rk_tests SYSTEM PRIVATE "${RK_NGX_SDK_ROOT}/include")
-    target_link_libraries(rk_tests PRIVATE debug "${ngx_debug_library}"
+    target_link_libraries(rk_tests PRIVATE d3d12 dxgi debug "${ngx_debug_library}"
       optimized "${ngx_library}")
     add_test(NAME integration.sdr_prepared_presenter COMMAND rk_tests "[sdr_prepared_presenter]")
   endif()

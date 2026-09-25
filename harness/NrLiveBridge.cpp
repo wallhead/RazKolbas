@@ -106,6 +106,12 @@ int wmain(int argc,wchar_t** argv) {
         if(!value(stage.configure(settings)))stop("CONFIGURE_FALSE");
         constexpr unsigned frames=30;
         for(unsigned i=0;i<frames;++i) {
+            if(i==10) {
+                settings.values["NeuralRendering.Style"]=std::int64_t{1};
+                settings.values["NeuralRendering.Intensity"]=0.75;
+                if(!value(stage.updateRuntime(settings)))stop("LIVE_UPDATE_FALSE");
+                if(value(stage.updateRuntime(settings)))stop("LIVE_UPDATE_NOT_IDEMPOTENT");
+            }
             context->UpdateSubresource(frame.color(),0,nullptr,colors.data(),width*4,0);
             if(!value(stage.process(device.Get(),context.Get(),frame,i==0)))
                 stop("PROCESS_FALSE");

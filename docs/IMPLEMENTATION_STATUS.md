@@ -1,5 +1,51 @@
 # Implementation checkpoint
 
+## 0.1.81 DLAA NR, live controls and temporal handoff candidate (2026-09-25)
+
+The first installed 0.1.80 Skyrim runs separated three real issues. In DLSS
+Quality mode, the log recorded NR submissions and the user reported that the
+effect appeared active, but with heavy ghosting. In NativeAA mode the user
+reported no NR effect; the same session submitted more than 18,600 DLAA frames
+without any NR submission. Code inspection confirmed that the NR preprocessor
+was attached only to the reduced DLSS SR presenter. The End-menu NR controls
+saved the INI but did not publish any live update to the active stage.
+
+Source 0.1.81 attaches the same fail-open NR preprocessor to both the reduced
+DLSS SR presenter and the native DLAA presenter. A WARP regression proves the
+native path calls NR before DLAA and still evaluates DLAA when NR returns
+false. The evaluation controls Enabled, Style, Intensity, Local Tone, Local
+Structure, Auto Skin/Skin Structure, Auto Mask and UI Correction now publish a
+thread-safe runtime snapshot. Each changed snapshot forces one NR history
+reset. Network preset remains feature-creation scoped and is labelled as
+restart-required; unsupported multi-pass, HDR-input, reduced-NR-input and
+custom-resolve controls are disabled in the menu rather than appearing live.
+
+Static RE of the followed reference interop path exposed a concrete temporal
+ordering difference: D3D11 Signal is followed by Flush before the D3D12 queue
+Wait. RazKolbas previously omitted that Flush. The bridge now uses the same
+Signal -> Flush -> queue Wait order so the D3D12 NR evaluation cannot consume
+batched color, motion or depth copies a frame late. This is a root-cause-based
+ghosting correction; its visual effect still requires the next Skyrim run.
+The recovered reference continues to support positive render-dimension motion
+scales and non-inverted depth for this Skyrim route, so those values were not
+changed speculatively.
+
+The live-update path rejects unsupported enable combinations, cannot report a
+successful update after startup configuration failed, drains pending controls
+even if the owned route is suspended, and catches all update failures inside
+the noexcept renderer hook. Independent subagent review found the corrected
+DLAA ordering and Signal/Flush/Wait sequence sound and found no remaining
+blocker in these paths.
+
+Fresh Debug tests pass 156 cases / 4,631 assertions. Fresh Release builds pass
+all 40 CTest groups. The Debug and Release 30-frame RTX 4080 SUPER bridges both
+pass while applying Style and Intensity at frame 10; input SHA-256 is
+`a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`
+and final output SHA-256 is
+`ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`.
+The 0.1.81 game runtime is **NOT RUN**. At this checkpoint the installed MO2
+mod remains 0.1.80 until packaging and hash-verified replacement are complete.
+
 ## 0.1.80 fast-FP16 NR-before-SR candidate (2026-09-25)
 
 The supplied openNR report, the signed NVIDIA 310.8.0 original and the new

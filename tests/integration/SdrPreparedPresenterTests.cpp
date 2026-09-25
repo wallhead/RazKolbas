@@ -375,3 +375,41 @@ TEST_CASE("Pre-SR processing runs before SR and fails open",
     }
     FAIL("Pre-SR ordering fixture did not retire");
 }
+
+TEST_CASE("Native DLAA render runs pre-SR processing before evaluation",
+    "[sdr_prepared_presenter][nr][dlaa]") {
+    Scene scene;
+    std::vector<std::string> order;
+    rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext* context,
+        const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata& metadata,
+        rk::NgxJitter,float,bool reset)->rk::Result<bool> {
+        order.push_back("sr");
+        REQUIRE(metadata.frameId==1);
+        REQUIRE(metadata.generation==1);
+        REQUIRE(reset);
+        context->CopyResource(frame.output(),frame.color());
+        return true;
+    }};
+    const auto configured=presenter.configurePreSrProcessor(
+        [&](ID3D11Device*,ID3D11DeviceContext*,rk::PreparedSrInputs&,
+            const rk::SrFrameMetadata&,rk::NgxJitter,bool reset) {
+            order.push_back("nr");
+            REQUIRE(reset);
+            return false; // NR failure must leave the original DLAA input usable.
+        });
+    REQUIRE(std::holds_alternative<bool>(configured));
+    scene.context->OMSetRenderTargets(1,scene.displayView.GetAddressOf(),nullptr);
+    const auto rendered=presenter.render(scene.device.Get(),scene.context.Get(),
+        scene.display.Get(),scene.source[1].Get(),scene.source[2].Get(),{0,0});
+    REQUIRE(std::holds_alternative<bool>(rendered));
+    REQUIRE(std::get<bool>(rendered));
+    REQUIRE(order==std::vector<std::string>{"nr","sr"});
+    scene.context->Flush();
+    for(unsigned i=0;i<500;++i) {
+        const auto stopped=presenter.stop(scene.context.Get());
+        REQUIRE_FALSE(std::holds_alternative<rk::Error>(stopped));
+        if(std::get<bool>(stopped))return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    FAIL("Native DLAA pre-SR fixture did not retire");
+}
