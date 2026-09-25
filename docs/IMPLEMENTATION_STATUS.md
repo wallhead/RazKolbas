@@ -20,6 +20,29 @@ Release build passed all 40 CTest groups. Actual V5.4 End-menu rendering is
 The new ReShade owned-scene and ENB UI routes are **NOT RUN/NOT IMPLEMENTED**;
 DLSS SR and NR are not claimed active in V5.4 by this candidate.
 
+The 0.1.83 package was staged from Release using the latest V5.4 MO2 INI,
+without altering either pinned NVIDIA runtime, and independently verified
+against all five manifest payload hashes. ZIP
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.83-v54-menu-4671d05.zip`
+has SHA-256 `392bbca8257fcb7b7e0dd9f3f362fa8cd2077f2fce74df435756f1de66ffb137`.
+The installed DLL SHA-256 is
+`950aa6e348b2b2e040c57e43426339aa23e35fbd50df81f52c1f26fe89c6e973`;
+the preserved current INI SHA-256 is
+`01ac5740d2b2708c525ff85edb766ab1754169147e91065e406d14238589ef44`.
+The previous DLL, manifest, metadata and INI were backed up in ignored
+`artifacts/local/v54-menu-0.1.83-4671d05-backup`. The staged manifest labels
+this build `EXPERIMENTAL_V54_MENU_ONLY`.
+
+MO2 had overwritten the earlier direct profile edit while its UI was open:
+one intermediate disk snapshot contained `-RazKolbas` and `+DLSS5`.
+After MO2 was closed, its saved state returned to `+RazKolbas` and `-DLSS5`.
+MO2 was reopened and the profile remained in that state with SHA-256
+`d95bf38b11bca10840639b3e154b5bd22ec46bc43f2529e34a8da1a76fbb6482`.
+All installed manifest payloads verify. Skyrim was not started by the assistant;
+the V5.4 0.1.83 game test remains **NOT RUN**. The next action is a
+user-started V5.4 Skyrim run, followed by log confirmation of the new ENB
+creation/Present hooks and visual confirmation of the End menu.
+
 ## V5.4 MO2 deployment of 0.1.82 (2026-09-25)
 
 The verified 0.1.82 package was copied to
