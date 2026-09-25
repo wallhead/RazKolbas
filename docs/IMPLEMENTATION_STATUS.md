@@ -27,6 +27,22 @@ first admission, same-generation retention and generation-change invalidation.
 Complete Debug and Release builds and all 40 CTest groups pass. Actual-game fill
 stability remains **NOT RUN** for 0.1.78.
 
+Source commit `7e9c6cc` is pushed. The independently extracted and verified
+package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.78-provider-latch-7e9c6cc.zip`,
+SHA-256
+`6a676160bfa11f7cec3c77e16c1570e87ab4400b41d3ff1d3801d832e5447331`.
+It contains exactly the four manifest-listed payloads plus the manifest, every
+payload hash matches, and the NVIDIA runtime signature is valid. After the
+evidence run closed normally, the complete verified 0.1.77 mod was backed up
+under ignored
+`artifacts/local/mo2-install-backup-0.1.78-7e9c6cc-20260925`. Only the plugin
+DLL and manifest were replaced in the existing MO2 mod. Installed DLL SHA-256
+is `d9f86fd3139a501420b94d045cc6c8d4aa47432e4e658bd320aa48363af33317`;
+installed manifest SHA-256 is
+`e4c651a747635528130e16554733e0a177af2878e5d78301af0b67c8767b8dd1`.
+The user INI, signed NVIDIA runtime and `meta.ini` remain byte-identical.
+
 ## 0.1.77 deferred Scaleform flush rebind (2026-09-25)
 
 The user started installed 0.1.76 and reported that the health, stamina and
