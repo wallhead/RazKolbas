@@ -15,6 +15,14 @@ constexpr bool shouldUseMenuPublication(bool routeActivated,bool sourceReady,
     bool routeAvailable) noexcept {
     return routeAvailable&&(routeActivated||sourceReady);
 }
+// A sparse readback admits the first provider frame. Once NGX has successfully
+// published for this exact owned-scene generation, later diagnostic samples do
+// not demote individual frames to a different presentation path. A resource
+// generation change still requires fresh colour/depth admission.
+constexpr bool shouldSubmitOwnedProvider(bool sourceReady,
+    std::uint64_t admittedGeneration,std::uint64_t currentGeneration) noexcept {
+    return sourceReady||(currentGeneration&&admittedGeneration==currentGeneration);
+}
 struct OwnedRouteSite {
     std::string_view id,moduleSha256;
     std::size_t fileSize{};

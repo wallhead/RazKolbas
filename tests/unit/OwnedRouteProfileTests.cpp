@@ -13,6 +13,15 @@ TEST_CASE("Native UI publication boundary remains stable after admission",
     REQUIRE_FALSE(rk::shouldUseMenuPublication(true,true,false));
 }
 
+TEST_CASE("Successful menu provider admission remains stable within its scene generation",
+    "[owned_route_profile]") {
+    REQUIRE_FALSE(rk::shouldSubmitOwnedProvider(false,0,17));
+    REQUIRE(rk::shouldSubmitOwnedProvider(true,0,17));
+    REQUIRE(rk::shouldSubmitOwnedProvider(false,17,17));
+    REQUIRE_FALSE(rk::shouldSubmitOwnedProvider(false,17,18));
+    REQUIRE_FALSE(rk::shouldSubmitOwnedProvider(false,0,0));
+}
+
 TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[owned_route_profile]") {
     const auto& factory=rk::reshade673FactoryCreateSite();
     const auto& buffer=rk::reshade673SwapGetBufferSite();

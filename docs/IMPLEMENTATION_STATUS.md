@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## 0.1.78 generation-scoped provider admission (2026-09-25)
+
+The user-started 0.1.77 run still showed periodic black health, stamina and
+magicka fills. This is an actual-game **FAIL** for the deferred-flush DSV
+rebind hypothesis. The hook was active and successfully reasserted the native
+MRT/DSV set for thousands of Scaleform flushes without a compatibility fault,
+while Present continued succeeding. That rules out a missing depth attachment
+at the common `GRenderer::EndFrame` wrapper.
+
+The same run exposed a separate synchronized state transition. After native UI
+routing and real DLSS were established, the 10x10 diagnostic scene/depth probe
+continued to clear admission on a single low-diversity sample. This repeatedly
+alternated menu-boundary frames between real DLSS (`mode=2`) and spatial
+fallback (`mode=3`), requesting an NGX history reset on every fallback. The
+probe is deliberately sparse and is suitable for initial/loading-screen
+admission, but it is not a per-frame validity contract after successful NGX
+publication.
+
+Source 0.1.78 latches successful menu-boundary provider admission for the exact
+owned-scene resource generation. Later weak diagnostic samples remain logged
+but cannot demote frames in that generation. A generation change still requires
+fresh colour/depth admission, and real provider failures continue through the
+existing fallback and reset path. The regression covers initial rejection,
+first admission, same-generation retention and generation-change invalidation.
+Complete Debug and Release builds and all 40 CTest groups pass. Actual-game fill
+stability remains **NOT RUN** for 0.1.78.
+
 ## 0.1.77 deferred Scaleform flush rebind (2026-09-25)
 
 The user started installed 0.1.76 and reported that the health, stamina and
@@ -38,7 +65,9 @@ payload was installed while preserving `meta.ini`. Installed DLL SHA-256 is
 `577d46e1a95b002752f5e9a5f9d010f669664e5f637169a48afbcf49e6ec016c`;
 all payloads match installed manifest SHA-256
 `79879cb290e7cf11457d452314521b98d2033eb50ba73466b43beec88d19dffd`.
-Actual-game fill stability remains **NOT RUN**.
+The subsequent user-started run reported the same fill flicker, so visual
+stability **FAILED**. The log nevertheless confirms continuous successful
+deferred-flush rebinds and no Present or route compatibility failure.
 
 ## 0.1.76 stable native UI publication boundary (2026-09-25)
 

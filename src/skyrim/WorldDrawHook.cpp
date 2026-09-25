@@ -119,6 +119,7 @@ struct WorldState {
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
     bool nativeUiRouteActivated{};
+    std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     bool deferredUiFlushWarningLogged{};
     bool nativePresenterStoppedForSr{};
@@ -700,7 +701,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         const auto presented=presentSdrSrFrame(context,scene,display,
             [&]()->Result<bool> {
                 const auto sourceReady=boundary==OwnedPublicationBoundary::MenuDisplay?
-                    state->menuSceneGate.ready():state->ownedSceneGate.ready();
+                    shouldSubmitOwnedProvider(state->menuSceneGate.ready(),
+                        state->menuProviderAdmissionGeneration,
+                        domain->plan().generation):
+                    state->ownedSceneGate.ready();
                 if(!sourceReady)
                     return Error{ErrorCode::Unavailable,"World colour and depth have not passed the owned NGX admission gate"};
                 if(state->ownedSpatialBaseline)
@@ -816,6 +820,12 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             spdlog::warn("Owned world DLSS frame {} unavailable: {}",
                 sequence,outcome.providerFailure()->message);
         if(outcome.mode()==SdrSrFrameMode::Provider) {
+            if(boundary==OwnedPublicationBoundary::MenuDisplay&&
+               state->menuProviderAdmissionGeneration!=domain->plan().generation) {
+                state->menuProviderAdmissionGeneration=domain->plan().generation;
+                spdlog::info("Owned menu provider admission latched for generation {} at frame {}; later sparse probe rejection will not select spatial fallback",
+                    domain->plan().generation,sequence);
+            }
             state->displayedMode.store(DisplayMode::DlssSr,std::memory_order_release);
             state->statusDlssFrames.store(state->srPresenter.submittedFrames(),
                 std::memory_order_relaxed);

@@ -3,8 +3,10 @@
 Checkpoint: installed 0.1.75 removes the two centre fragments, proving the
 deferred `GRenderer::EndFrame` stencil repair. Installed 0.1.76 keeps the
 publication boundary latched but does not stop periodic resource-fill
-flicker, disproving boundary oscillation as the cause. Source 0.1.77 now
-reasserts the full-size DSV at the exact common Scaleform flush.
+flicker. Installed 0.1.77 successfully reasserts the full-size DSV at the exact
+common Scaleform flush, but the fills still flicker. Source 0.1.78 prevents the
+sparse admission probe from alternating an established generation between DLSS
+and spatial fallback.
 This file describes remaining work, not completed features.
 The detailed run record is in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 and the render-size evidence is in
@@ -12,7 +14,7 @@ and the render-size evidence is in
 
 | Priority | Problem and measured state | Next proof or implementation step |
 |---|---|---|
-| P0 | Installed 0.1.75 removes the two isolated actor-level fragments. Resource fills then periodically turn black while the frames remain. Installed 0.1.76 keeps the menu publication boundary stable but the flicker persists. RE confirms the reference keeps late OM routing through actual submission; RazKolbas previously relied on its earlier DSV binding surviving until deferred `EndFrame`. | Install 0.1.77 and verify the log records successful deferred-flush rebinds. Observe health, stamina and magicka fills in the same scene while confirming the former centre fragments stay absent and ENB remains correct. |
+| P0 | Installed 0.1.75 removes the two isolated actor-level fragments. Resource fills then periodically turn black while the frames remain. Installed 0.1.76 keeps the menu publication boundary stable, and installed 0.1.77 continuously rebinds the native DSV at the verified Scaleform flush; neither stops the flicker. The 0.1.77 log also shows real DLSS and spatial fallback alternating when sparse depth admission changes. | Test 0.1.78 in the same scene. Its generation-scoped provider latch must keep `mode=2` and provider submissions continuous after first success. If fills still flicker during a continuous provider interval, capture the top-left bar region across consecutive frames and trace the specific Scaleform draw state instead of changing another global attachment. |
 | P0 | Long-run presentation ownership across ENB, ReShade, SKSE, SSE Display Tweaks, scene transitions and resize remains only partially verified. The current owned route chains the observed owners and preserved ENB appearance in the latest user report. | Exercise save load, interior/exterior transition and resize with the native UI route active; record any route downgrade, Present failure or visual-order change. |
 | P1 | NVIDIA NGX accepted cropped R32_FLOAT depth in a synthetic 1280x720-to-2560x1440 30-frame replay, including a post-evaluation injected fallback with clean retirement. Actual Skyrim motion-vector units, jitter, stable reduced source pixels and same-frame game handoff remain unverified. | Inspect the new 0.1.32 source-acceptance and `Reduced DLSS SR displayed` logs, then check visual quality and UI before treating this branch as working in game. |
 | P1 | The 0.1.68 user-started test proved the corrected `ControlMap +0x129` byte changes, but camera movement still reached gameplay. Runtime 0.1.69 successfully chained the verified input-dispatch CALL through the existing OpenAnimationReplacer owner. The user exercised the menu and sharpening controls, but camera suppression, focus-loss restoration and downstream-mod behavior were not explicitly reported as passed. | Verify no camera movement while dragging, normal controls after closing, focus-loss restoration and the next-launch quality/model transition. |
@@ -22,6 +24,6 @@ and the render-size evidence is in
 | P2 | FSR and XeSS SR/FG providers, capability selection and full configuration behavior remain incomplete. The current working display path is experimental NVIDIA SDR DLAA. | Continue the plan's provider-specific integration after the shared world/source/presentation contract is proven. |
 
 The owner no longer wants manual DRS console commands. Do not request another
-command-driven game run. The next evidence is one normal user-started 0.1.77
-save-load run at the same scene; deferred-flush rebind logging is automatic. The
-assistant must not start or close Skyrim without the user's instruction.
+command-driven game run. The next evidence is one normal user-started 0.1.78
+save-load run at the same scene; provider-latch and publication logging is
+automatic. The assistant must not start Skyrim.
