@@ -82,6 +82,34 @@ TEST_CASE("DLSS menu choices accept only implemented quality and current model p
     REQUIRE(rk::classifyChange(rk::defaultSettings(),live)==
         rk::ChangeCategory::Recreate);
 }
+TEST_CASE("Neural rendering settings match the before-SR community runtime contract", "[config][nr]") {
+    const auto parsed=rk::parseIni(
+        "[NeuralRendering]\n"
+        "Position=BeforeSR\n"
+        "Preset=Shipping\n"
+        "Style=7\n"
+        "PassCount=3\n"
+        "InputResolutionScale=0\n"
+        "InputColorIsHDR=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& settings=std::get<rk::Settings>(parsed);
+    REQUIRE(settings.get<rk::Choice>("NeuralRendering.Position").value=="BeforeSR");
+    REQUIRE(settings.get<rk::Choice>("NeuralRendering.Preset").value=="Shipping");
+    REQUIRE(settings.get<std::int64_t>("NeuralRendering.Style")==7);
+    REQUIRE(settings.get<std::int64_t>("NeuralRendering.PassCount")==3);
+    REQUIRE(settings.get<double>("NeuralRendering.InputResolutionScale")==0.0);
+    REQUIRE(settings.get<bool>("NeuralRendering.InputColorIsHDR"));
+
+    for(const auto* invalid:{
+        "[NeuralRendering]\nPosition=AfterSR\n",
+        "[NeuralRendering]\nPreset=Unused2\n",
+        "[NeuralRendering]\nStyle=8\n",
+        "[NeuralRendering]\nPassCount=4\n",
+        "[NeuralRendering]\nInputResolutionScale=0.1\n"})
+        REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni(invalid)));
+    REQUIRE(std::holds_alternative<rk::Settings>(
+        rk::parseIni("[NeuralRendering]\nInputResolutionScale=0.25\n")));
+}
 TEST_CASE("Failed replacement preserves last-good state; restart remains pending", "[config]") {
     rk::SettingsTransaction transaction;
     auto before = transaction.snapshot();

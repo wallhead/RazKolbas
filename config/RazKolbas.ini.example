@@ -55,9 +55,11 @@ UIComposition = Auto
 Enabled = false
 ; Auto selects only an implemented, validated NR provider contract.
 Backend = Auto
-; BeforeSR / AfterSR: AfterSR requires matching output-resolution guide buffers.
+; NR is applied to the HUD-free scene before DLSS SR and future FG.
 Position = BeforeSR
+; Auto/Default use preset 0. Shipping uses the only shipped weight-table preset 1.
 Preset = Auto
+; Runtime style index; names are not recovered. Valid range 0-7.
 Style = 0
 Intensity = 1.0
 LocalToneStrength = 1.0
@@ -65,9 +67,13 @@ LocalStructureStrength = 1.0
 ; Auto inherits local structure where the actual backend supports it.
 SkinStructureStrength = Auto
 UseAutoMask = false
+; The recovered direct backend clamps requested independent histories to 1-3.
+; The first live RazKolbas implementation currently accepts only one pass.
 PassCount = 1
-; 1.0 means full NR input size; reduced scales are experimental, not SR quality.
-InputResolutionScale = 1.0
+; 0 or 1 means full NR input size. Reduced values are clamped to 0.25-1.0.
+InputResolutionScale = 0.0
+; Describes the actual NR input colour domain; it is independent of Windows HDR.
+InputColorIsHDR = false
 ; Model-native UI correction differs from host-side HUD composition.
 NativeUICorrection = false
 ; Auto / Residual / Ratio; expose only independently implemented resolve modes.

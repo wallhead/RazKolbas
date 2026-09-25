@@ -342,3 +342,36 @@ TEST_CASE("Prepared history resets after failure gap and source phase change",
     }
     FAIL("History-reset fixture did not retire");
 }
+
+TEST_CASE("Pre-SR processing runs before SR and fails open",
+    "[sdr_prepared_presenter][nr]") {
+    Scene scene;
+    std::vector<std::string> order;
+    rk::SdrDlssPresenter presenter{[&](ID3D11DeviceContext*,
+        const rk::PreparedSrInputs&,const rk::SrFrameMetadata&,
+        rk::NgxJitter,float,bool)->rk::Result<bool> {
+        order.push_back("sr");
+        return true;
+    }};
+    const auto configured=presenter.configurePreSrProcessor(
+        [&](ID3D11Device*,ID3D11DeviceContext*,rk::PreparedSrInputs&,
+            const rk::SrFrameMetadata&,rk::NgxJitter,bool) {
+            order.push_back("nr");
+            return false;
+        });
+    REQUIRE(std::holds_alternative<bool>(configured));
+    REQUIRE(std::get<bool>(configured));
+    const auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
+        scene.cropped(),{200,12,true,rk::SrSourcePhase::PrePresent},{0,0});
+    REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
+    REQUIRE(std::get<std::optional<rk::SrEvaluationToken>>(evaluated).has_value());
+    REQUIRE(order==std::vector<std::string>{"nr","sr"});
+    scene.context->Flush();
+    for(unsigned i=0;i<500;++i) {
+        const auto stopped=presenter.stop(scene.context.Get());
+        REQUIRE_FALSE(std::holds_alternative<rk::Error>(stopped));
+        if(std::get<bool>(stopped))return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    FAIL("Pre-SR ordering fixture did not retire");
+}

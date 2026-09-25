@@ -46,7 +46,7 @@ Result<bool> validateSettings(const Settings& settings) {
                 if (item.value.size() > 256 || item.value.find_first_of("\r\n\0", 0, 3) != std::string::npos) return false;
                 if (field.key == "NeuralRendering.SkinStructureStrength" && item.value != "Auto") {
                     double numeric{};
-                    return number(item.value, numeric) && std::isfinite(numeric) && numeric >= 0 && numeric <= 2;
+                    return number(item.value, numeric) && std::isfinite(numeric) && numeric >= -1 && numeric <= 2;
                 }
                 if (field.key == "Patching.DisabledPatchIds" && !validDisabledPatchIds(item.value)) return false;
                 return true;
@@ -56,6 +56,8 @@ Result<bool> validateSettings(const Settings& settings) {
     }
     const auto scale = settings.get<double>("Upscaling.ManualRenderScale");
     if (scale != 0 && scale < 0.125) return invalid("Upscaling.ManualRenderScale");
+    const auto nrScale = settings.get<double>("NeuralRendering.InputResolutionScale");
+    if (nrScale != 0 && nrScale < 0.25) return invalid("NeuralRendering.InputResolutionScale");
     if (settings.get<bool>("Adapter.AllowCrossAdapter")) return Error{ErrorCode::Unsupported, "Cross-adapter processing is not implemented"};
     return true;
 }

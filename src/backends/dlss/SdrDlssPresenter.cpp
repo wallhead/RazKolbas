@@ -195,6 +195,13 @@ Result<bool> SdrDlssPresenter::configureSharpness(bool enabled,float sharpness) 
     sharpness_=enabled?sharpness:0.0f;
     return true;
 }
+Result<bool> SdrDlssPresenter::configurePreSrProcessor(
+    PreSrProcessor processor) noexcept {
+    if(ngxStartAttempted_||initialized_||preparedGeneration_)
+        return Error{ErrorCode::Conflict,"Cannot change pre-SR processing during an active feature"};
+    preSrProcessor_=std::move(processor);
+    return true;
+}
 
 Result<bool> SdrDlssPresenter::beginSession(ID3D11Device* device,
     ID3D11DeviceContext* context,bool reduced) {
@@ -492,6 +499,8 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
                     displayWidth_=slot.frame->outputWidth();
                     displayHeight_=slot.frame->outputHeight();reduced_=true;
                 }
+                if(preSrProcessor_)
+                    preSrProcessor_(device,context,*slot.frame,metadata,jitter,reset);
                 // The injected evaluator models the NGX call contract. The
                 // configured value belongs to the independent publication pass.
                 evaluated=preparedEvaluator_(context,*slot.frame,metadata,jitter,
@@ -501,8 +510,11 @@ Result<std::optional<SrEvaluationToken>> SdrDlssPresenter::evaluatePreparedSlot(
                     slot.frame->width(),slot.frame->height(),
                     slot.frame->outputWidth(),slot.frame->outputHeight(),true);
                 else evaluated=true;
-                if(std::holds_alternative<bool>(evaluated)&&std::get<bool>(evaluated))
+                if(std::holds_alternative<bool>(evaluated)&&std::get<bool>(evaluated)) {
+                    if(preSrProcessor_)
+                        preSrProcessor_(device,context,*slot.frame,metadata,jitter,reset);
                     evaluated=submitPreparedNgx(context,*slot.frame,jitter,reset);
+                }
             }
             context->End(slot.completion.Get());
             completionIssued=true;

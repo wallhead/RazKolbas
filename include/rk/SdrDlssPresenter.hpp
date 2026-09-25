@@ -40,11 +40,14 @@ class SdrDlssPresenter final {
 public:
     using PreparedEvaluator=std::function<Result<bool>(ID3D11DeviceContext*,
         const PreparedSrInputs&,const SrFrameMetadata&,NgxJitter,float,bool)>;
+    using PreSrProcessor=std::function<bool(ID3D11Device*,ID3D11DeviceContext*,
+        PreparedSrInputs&,const SrFrameMetadata&,NgxJitter,bool)>;
     explicit SdrDlssPresenter(PreparedEvaluator evaluator={}):
         preparedEvaluator_(std::move(evaluator)) {}
     Result<bool> configureQuality(UpscaleQuality quality) noexcept;
     Result<bool> configureModelPreset(std::string_view preset) noexcept;
     Result<bool> configureSharpness(bool enabled,float sharpness) noexcept;
+    Result<bool> configurePreSrProcessor(PreSrProcessor processor) noexcept;
     // Query from the same NGX capability session that later creates/evaluates
     // the feature. Intended for the early factory boundary before a reduced
     // scene buffer is exposed to ENB/Skyrim.
@@ -119,6 +122,7 @@ private:
     std::vector<RetiredPrepared> retiredPrepared_;
     std::vector<PreparedSrInputs> unfencedPrepared_;
     PreparedEvaluator preparedEvaluator_;
+    PreSrProcessor preSrProcessor_;
     std::uint64_t preparedGeneration_{},lastPreparedAttemptFrameId_{};
     std::uint64_t lastSuccessfulEvaluationFrameId_{};
     std::uint64_t lastSuccessfulPublicationFrameId_{};

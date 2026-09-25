@@ -21,6 +21,7 @@
 #include "rk/NativeUiRedirector.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
+#include "rk/NrStage.hpp"
 #include "rk/SdrDlssPresenter.hpp"
 #endif
 #include <spdlog/spdlog.h>
@@ -101,6 +102,8 @@ struct WorldState {
     bool probeFailed{};
     SdrDlssPresenter sdrPresenter;
     SdrDlssPresenter srPresenter;
+    NrStage nrStage;
+    bool nrFailureLogged{};
     std::array<std::optional<SdrSrFrameResult>,3> srFallbacks;
     std::vector<SdrSrFrameResult> ownedFallbacks;
     bool srRequested{};
@@ -1938,6 +1941,37 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Upscaling.Sharpening"),
         pending->srSharpness.load(std::memory_order_relaxed));
        const auto error=std::get_if<Error>(&configured))return *error;
+    const auto nrConfigured=pending->nrStage.configure(settings);
+    if(const auto error=std::get_if<Error>(&nrConfigured))
+        spdlog::warn("Neural Rendering request retained but inactive: {}",error->message);
+    else if(pending->nrStage.enabled()) {
+        auto* stage=&pending->nrStage;
+        auto* failureLogged=&pending->nrFailureLogged;
+        const auto processor=[stage,failureLogged](ID3D11Device* device,
+            ID3D11DeviceContext* context,PreparedSrInputs& frame,
+            const SrFrameMetadata& metadata,NgxJitter,bool reset) {
+            const auto processed=stage->process(device,context,frame,reset);
+            if(const auto processError=std::get_if<Error>(&processed)) {
+                if(!*failureLogged) {
+                    *failureLogged=true;
+                    spdlog::warn("Neural Rendering disabled after frame {}: {}; original colour continues to DLSS SR",
+                        metadata.frameId,processError->message);
+                }
+                return false;
+            }
+            if(std::get<bool>(processed)) {
+                const auto count=stage->submittedFrames();
+                if(count<=3||count%600==0)
+                    spdlog::info("Neural Rendering pre-SR submission {} completed for frame {}",
+                        count,metadata.frameId);
+                return true;
+            }
+            return false;
+        };
+        if(const auto configured=pending->srPresenter.configurePreSrProcessor(processor);
+           const auto configureError=std::get_if<Error>(&configured))return *configureError;
+        spdlog::info("Neural Rendering armed before DLSS SR; exact community runtime hash required");
+    }
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;
     pending->earlyQuality=*quality;

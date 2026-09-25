@@ -1,6 +1,60 @@
 # Native NR bootstrap experiment — 2026-09-19
 
-**T08 remains open.** Initialization, direct feature `0x12` creation, fenced submission, feature release and shutdown have executed. Evaluation and NR image output have not. This is a creation-only compatibility result, not a complete NR hardware-support claim.
+## 2026-09-25 superseding fast-FP16 evaluation and live-bridge result
+
+T08 has advanced beyond creation-only evidence. The exact fast-FP16 runtime
+SHA-256 `91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7`
+(165,840,496 bytes, file version 310.8.0.0) produced nontrivial output in both
+FP16 and RGBA8 direct D3D12 evaluations on the RTX 4080 SUPER. The five-case
+Release probe passed the expected unshimmed failure, injected exception,
+missing-release detection, FP16 evaluation and RGBA8 evaluation. The FP16
+checksum was `0x5e4afd4b7baacf77`; the RGBA8 checksum was
+`0x771e0aa638263439`. Feature release, parameter destruction, shutdown and IAT
+restoration completed on both positive runs.
+
+The production-shaped standalone bridge then processed 30 consecutive frames:
+
+```text
+D3D11 source copies
+  -> shared textures and shared fence
+  -> same-adapter D3D12 feature 0x12 evaluation
+  -> D3D11 copyback before DLSS SR
+```
+
+It reported input SHA-256
+`a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`,
+output SHA-256
+`ae64138f7bc63cf7c75afbfab92e5937fd82bedcdfcf23646ece3b59c518a8d7`,
+30 submissions and `NR_LIVE_BRIDGE=PASS`. The bridge log and per-case probe
+logs are preserved below ignored `artifacts/local/`.
+
+The supplied openNR integration report was checked against pinned openNR
+commit `62587ae0f581be8e8bc3bb01619f6e3b8efd1983`. The signed NVIDIA original
+SHA-256 `e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e`
+is the exact offline build input for openNR's current `compat-fp16` profile.
+That profile's deterministic output is `e67dee209320cdafe0e93e45675d7aa34323a53acc57a72b2e40a181581c989a`.
+The selected `91ea...` runtime is a separately supplied optimized derivative,
+not the output reproduced by the pinned profile. Its Authenticode status is
+`HashMismatch`, with the NVIDIA signer certificate retained; RazKolbas accepts
+it only by exact size, version and SHA-256. The signed original is provenance
+and reconstruction input, not a side-by-side runtime dependency.
+
+An exact D3D11-direct experiment was also performed because the openNR report
+recommends it as the simpler path. With the same caller-identity shim and
+runtime, `NVSDK_NGX_D3D11_Init_Ext` returned `0xBAD00001`
+(`FeatureNotSupported`) before feature creation. The initial Skyrim candidate
+therefore uses the independently passing D3D12 interop route.
+
+The source candidate inserts NR immediately before the existing DLSS SR
+evaluation and continues the original colour into SR if NR fails. It restores
+all D3D12 resource states and proves queue retirement before reuse or release.
+It currently supports one full-resolution SDR RGBA8 pass only. Skyrim runtime
+is **NOT RUN**: the live motion-vector sign/scale and depth convention remain
+unverified, and the first implementation waits synchronously for NR completion
+each frame. These are the next runtime and performance gates.
+
+The remainder of this document records the earlier `8270...` creation-only
+experiment and is retained as historical evidence.
 
 ## Verified inputs
 

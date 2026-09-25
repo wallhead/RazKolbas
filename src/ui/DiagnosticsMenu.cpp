@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <limits>
 #include <mutex>
@@ -230,6 +231,106 @@ void drawUpscalingTab(MenuState& state,const DiagnosticsSnapshot& status,
     ImGui::Spacing();
     drawControls(state,status);
 }
+void drawNeuralRenderingTab(MenuState& state) {
+    if(!state.controlsConfigured)return;
+    static constexpr MenuChoice presets[]{
+        {"Auto","Auto (preset 0)"},{"Default","Default (preset 0)"},
+        {"Shipping","Shipping (preset 1)"}};
+    static constexpr MenuChoice resolves[]{
+        {"Auto","Auto"},{"Residual","Residual"},{"Ratio","Ratio / OkLab"}};
+    auto save=[&] {
+        state.settingsDirty=true;
+        persistSettings(state);
+    };
+    auto sliderFloat=[&](const char* label,const char* key,float minimum,
+        float maximum,const char* format="%.2f") {
+        float value=static_cast<float>(state.requestedSettings.get<double>(key));
+        if(!ImGui::SliderFloat(label,&value,minimum,maximum,format))return;
+        state.requestedSettings.values[key]=static_cast<double>(value);
+        state.settingsDirty=true;
+        if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
+    };
+
+    ImGui::TextWrapped("Pipeline: HUD-free scene -> Neural Rendering -> DLSS SR -> optional frame generation -> native UI");
+    ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
+        "NR runtime: experimental exact-build direct path; restart required after changes.");
+    ImGui::Separator();
+    bool enabled=state.requestedSettings.get<bool>("NeuralRendering.Enabled");
+    if(ImGui::Checkbox("Enable Neural Rendering",&enabled)) {
+        state.requestedSettings.values["NeuralRendering.Enabled"]=enabled;save();
+    }
+    ImGui::TextDisabled("Position: Before DLSS Super Resolution (fixed)");
+    ImGui::SetNextItemWidth(220.0f);
+    if(choiceControl("Network Preset","NeuralRendering.Preset",presets,state))save();
+    int style=static_cast<int>(state.requestedSettings.get<std::int64_t>(
+        "NeuralRendering.Style"));
+    ImGui::SetNextItemWidth(220.0f);
+    if(ImGui::SliderInt("Style",&style,0,7)) {
+        state.requestedSettings.values["NeuralRendering.Style"]=
+            static_cast<std::int64_t>(style);state.settingsDirty=true;
+        if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
+    }
+    sliderFloat("Intensity","NeuralRendering.Intensity",0.0f,2.0f);
+    sliderFloat("Local Tone","NeuralRendering.LocalToneStrength",0.0f,2.0f);
+    sliderFloat("Local Structure","NeuralRendering.LocalStructureStrength",0.0f,2.0f);
+
+    auto skinText=state.requestedSettings.get<Text>(
+        "NeuralRendering.SkinStructureStrength").value;
+    bool autoSkin=skinText=="Auto"||skinText=="-1";
+    if(ImGui::Checkbox("Auto Skin Mask Strength",&autoSkin)) {
+        state.requestedSettings.values["NeuralRendering.SkinStructureStrength"]=
+            Text{autoSkin?"Auto":"1.000000"};save();
+    }
+    if(!autoSkin) {
+        float skin=std::strtof(skinText.c_str(),nullptr);
+        ImGui::SetNextItemWidth(220.0f);
+        if(ImGui::SliderFloat("Skin Structure",&skin,0.0f,2.0f,"%.2f")) {
+            state.requestedSettings.values["NeuralRendering.SkinStructureStrength"]=
+                Text{std::to_string(skin)};state.settingsDirty=true;
+            if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
+        }
+    }
+    bool autoMask=state.requestedSettings.get<bool>("NeuralRendering.UseAutoMask");
+    if(ImGui::Checkbox("Generate Skin Mask Automatically",&autoMask)) {
+        state.requestedSettings.values["NeuralRendering.UseAutoMask"]=autoMask;save();
+    }
+    bool uiCorrection=state.requestedSettings.get<bool>(
+        "NeuralRendering.NativeUICorrection");
+    if(ImGui::Checkbox("Model UI Correction",&uiCorrection)) {
+        state.requestedSettings.values["NeuralRendering.NativeUICorrection"]=uiCorrection;save();
+    }
+    int passes=static_cast<int>(state.requestedSettings.get<std::int64_t>(
+        "NeuralRendering.PassCount"));
+    ImGui::SetNextItemWidth(220.0f);
+    if(ImGui::SliderInt("Passes",&passes,1,3)) {
+        state.requestedSettings.values["NeuralRendering.PassCount"]=
+            static_cast<std::int64_t>(passes);state.settingsDirty=true;
+        if(ImGui::IsItemDeactivatedAfterEdit())persistSettings(state);
+    }
+    bool hdr=state.requestedSettings.get<bool>("NeuralRendering.InputColorIsHDR");
+    if(ImGui::Checkbox("NR Input Is HDR",&hdr)) {
+        state.requestedSettings.values["NeuralRendering.InputColorIsHDR"]=hdr;save();
+    }
+    if(ImGui::IsItemHovered())
+        ImGui::SetTooltip("Describes the colour texture supplied to NR.\nIt does not follow the Windows HDR switch.");
+
+    ImGui::SeparatorText("Advanced resolve");
+    double scale=state.requestedSettings.get<double>(
+        "NeuralRendering.InputResolutionScale");
+    bool fullResolution=scale==0.0||scale>=1.0;
+    if(ImGui::Checkbox("Full Resolution NR Input",&fullResolution)) {
+        state.requestedSettings.values["NeuralRendering.InputResolutionScale"]=
+            fullResolution?0.0:0.5;save();
+    }
+    if(!fullResolution)
+        sliderFloat("NR Input Scale","NeuralRendering.InputResolutionScale",0.25f,0.99f);
+    ImGui::SetNextItemWidth(220.0f);
+    if(choiceControl("Resolve Method","NeuralRendering.Resolve",resolves,state))save();
+    sliderFloat("Transfer Strength","NeuralRendering.TransferStrength",0.0f,2.0f);
+    sliderFloat("Colour Strength","NeuralRendering.ColourStrength",0.0f,2.0f);
+    sliderFloat("Maximum Ratio","NeuralRendering.MaxRatio",1.0f,16.0f);
+    sliderFloat("White Point","NeuralRendering.WhitePoint",0.01f,16.0f);
+}
 void drawDiagnosticsTab(const DiagnosticsSnapshot& status,
     UINT width,UINT height,const char* mode) {
     ImGui::Text("Effective frame: %s",mode);
@@ -270,6 +371,10 @@ void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
         if(ImGui::BeginTabBar("RazKolbas Tabs")) {
             if(ImGui::BeginTabItem("Upscaling")) {
                 drawUpscalingTab(state,status,width,height,mode);
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Neural Rendering")) {
+                drawNeuralRenderingTab(state);
                 ImGui::EndTabItem();
             }
             if(ImGui::BeginTabItem("Diagnostics")) {

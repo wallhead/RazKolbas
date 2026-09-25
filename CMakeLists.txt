@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(RazKolbas VERSION 0.1.79 LANGUAGES C CXX)
+project(RazKolbas VERSION 0.1.80 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -80,6 +80,13 @@ if(WIN32)
     target_compile_definitions(RazKolbasSdrLivePresentation PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(RazKolbasSdrLivePresentation PRIVATE rk_core d3d11 dxgi
       debug "${ngx_debug_library}" optimized "${ngx_library}")
+    add_executable(RazKolbasNrLiveBridge harness/NrLiveBridge.cpp
+      src/backends/nr/NrStage.cpp)
+    target_include_directories(RazKolbasNrLiveBridge SYSTEM PRIVATE
+      "${RK_NGX_SDK_ROOT}/include")
+    target_compile_definitions(RazKolbasNrLiveBridge PRIVATE
+      WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(RazKolbasNrLiveBridge PRIVATE rk_core d3d11 d3d12 dxgi)
   endif()
   add_executable(RazKolbasNrBootstrapProbe harness/NrBootstrapProbe.cpp harness/NrFeatureExperiment.cpp)
   target_link_libraries(RazKolbasNrBootstrapProbe PRIVATE rk_core d3d12 dxgi)
@@ -96,10 +103,10 @@ if(WIN32)
   target_link_libraries(RazKolbas PRIVATE rk_core rk_imgui spdlog::spdlog shell32 ole32 user32)
   if(RK_NGX_SDK_ROOT)
     target_sources(RazKolbas PRIVATE src/backends/dlss/OffscreenDlssProbe.cpp
-      src/backends/dlss/SdrDlssPresenter.cpp)
+      src/backends/dlss/SdrDlssPresenter.cpp src/backends/nr/NrStage.cpp)
     target_include_directories(RazKolbas SYSTEM PRIVATE "${RK_NGX_SDK_ROOT}/include")
     target_compile_definitions(RazKolbas PRIVATE RK_WITH_NGX=1)
-    target_link_libraries(RazKolbas PRIVATE debug "${ngx_debug_library}" optimized "${ngx_library}")
+    target_link_libraries(RazKolbas PRIVATE d3d12 dxgi debug "${ngx_debug_library}" optimized "${ngx_library}")
   endif()
   target_compile_options(RazKolbas PRIVATE /W4 /permissive- /wd4201 /Zi)
   target_link_options(RazKolbas PRIVATE /DEBUG)

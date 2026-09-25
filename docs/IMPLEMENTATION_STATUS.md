@@ -1,5 +1,52 @@
 # Implementation checkpoint
 
+## 0.1.80 fast-FP16 NR-before-SR candidate (2026-09-25)
+
+The supplied openNR report, the signed NVIDIA 310.8.0 original and the new
+fast-FP16 runtime were checked against each other. The signed original is
+SHA-256 `e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e`
+and is the exact input required by openNR commit
+`62587ae0f581be8e8bc3bb01619f6e3b8efd1983`. Pinned openNR produces
+`e67dee...` for its current compatibility profile. The selected fast-FP16 DLL
+is instead the separately supplied SHA-256
+`91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7`.
+It has the same size, version, imports and exports as the earlier community
+runtime, while its changed bytes are confined to embedded device-code data.
+Its retained NVIDIA certificate reports `HashMismatch`, so the package gate
+uses exact size, version and SHA-256. The signed original is not installed.
+
+The five-case Release probe passed on the RTX 4080 SUPER: expected unshimmed
+failure, injected post-init exception, missing-release detection, FP16
+evaluation and RGBA8 evaluation. Both positive formats produced nontrivial
+pixels and completed feature release, parameter destruction, shutdown and
+caller-shim restoration. A production-shaped D3D11-to-D3D12 bridge then
+processed 30 consecutive RGBA8 frames through feature `0x12` and copied the
+result back to D3D11. Input SHA-256 was
+`a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`;
+output SHA-256 was
+`ae64138f7bc63cf7c75afbfab92e5937fd82bedcdfcf23646ece3b59c518a8d7`.
+The simpler D3D11-direct route recommended by the report was tested first but
+`NVSDK_NGX_D3D11_Init_Ext` returned `0xBAD00001` before feature creation.
+
+Source 0.1.80 now owns an exact-build D3D12 NR stage immediately before the
+existing DLSS SR submission. It transfers the prepared D3D11 colour, motion
+and depth through same-adapter shared resources and a shared fence, evaluates
+NR, copies the result back to the SR colour input, and restores resource states
+before retirement. Any initialization, evaluation or retirement error disables
+NR and sends the unchanged colour to SR. Configuration and the End menu expose
+the recovered AIO controls, while the first live candidate deliberately
+accepts only one full-resolution SDR RGBA8 pass. NR requires the pinned signed
+SR runtime in the same package because it currently runs within the reduced
+DLSS SR route.
+
+Fresh Debug and Release builds each pass all 40 CTest groups. The Release
+five-case GPU probe and 30-frame live bridge pass. Actual Skyrim startup,
+save-load stability, image quality, temporal guide semantics and performance
+are **NOT RUN**. Motion-vector sign/scale and depth inversion are carried from
+the existing SR contract but remain unverified for live NR. The current bridge
+also waits synchronously for D3D12 completion each frame; it is a functional
+candidate, not the final asynchronous performance design.
+
 ## 0.1.79 writable native UI depth views (2026-09-25)
 
 The user-started 0.1.78 run held real DLSS continuously after provider

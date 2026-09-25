@@ -68,7 +68,7 @@ int wmain(int argc, wchar_t** argv) {
         // User-supplied community-patched build: its retained NVIDIA signature
         // has HashMismatch. Acceptance here is the exact reviewed file identity,
         // not a claim of NVIDIA signing or an OS-wide signature-policy override.
-        if (hash != "8270b350cd82de5ce89806872cdd6b6a9249b80836b91bbeb3573470744cc206") {
+        if (hash != "91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7") {
             std::cerr << "HASH_MISMATCH " << hash << '\n'; return 2;
         }
         ComPtr<IDXGIFactory6> factory;
