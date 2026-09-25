@@ -72,6 +72,14 @@ TEST_CASE("Swap profile selection includes only the observed exact ENB outer tab
     const auto parsed=rk::parseIni("[Patching]\nDisabledPatchIds=enb20260508.swapchain-observe-v1, reshade673.swapchain-observe-v1\n");
     REQUIRE(std::holds_alternative<rk::Settings>(parsed));
     REQUIRE_FALSE(rk::patchDisabled(rk::swapObserverPatchId,rk::enbSwapObserverPatchId));
+    const auto* enb505=rk::findSwapProfile("35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3",0x18f858);
+    REQUIRE(enb505!=nullptr);
+    REQUIRE(enb505->id==rk::enb505SwapObserverPatchId);
+    REQUIRE(enb505->methods[0].rva==0x6d420);
+    REQUIRE(enb505->methods[1].rva==0x6c540);
+    REQUIRE(enb505->methods[2].rva==0x6c600);
+    REQUIRE(rk::findSwapProfile(enb505->hash,0x18f860)==nullptr);
+    REQUIRE(rk::validDisabledPatchIds(std::string(rk::enb505SwapObserverPatchId)));
 }
 TEST_CASE("Swap table validation rejects unknown shifted or modified owners before writes", "[swap_observer]") {
     constexpr std::uintptr_t base=0x180000000;

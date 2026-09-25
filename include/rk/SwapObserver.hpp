@@ -4,6 +4,7 @@
 namespace rk {
 inline constexpr std::string_view swapObserverPatchId="reshade673.swapchain-observe-v1";
 inline constexpr std::string_view enbSwapObserverPatchId="enb20260508.swapchain-observe-v1";
+inline constexpr std::string_view enb505SwapObserverPatchId="enb0505.swapchain-observe-v1";
 bool validDisabledPatchIds(std::string_view ids);
 bool patchDisabled(std::string_view ids,std::string_view id);
 bool resizeNeedsOwnerThread(DWORD ownerThread,DWORD currentThread) noexcept;
@@ -39,6 +40,7 @@ struct SwapTableProfile {
 };
 const SwapTableProfile& reshade673SwapProfile();
 const SwapTableProfile& enbSwapProfile();
+const SwapTableProfile& enb505SwapProfile();
 const SwapTableProfile* findSwapProfile(std::string_view hash,std::uintptr_t tableRva);
 Result<bool> validateSwapTable(std::span<const std::uint8_t> image,std::uintptr_t base,
     std::string_view hash,std::size_t fileSize,std::uint32_t tableRva,const SwapTableProfile& profile);

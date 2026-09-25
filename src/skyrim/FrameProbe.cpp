@@ -5,7 +5,8 @@
 #include <fstream>
 namespace rk {
 bool frameProbeBoundary(std::string_view profile,SwapCall call) noexcept {
-    return profile==enbSwapObserverPatchId&&call==SwapCall::Present;
+    return (profile==enbSwapObserverPatchId||profile==enb505SwapObserverPatchId)&&
+        call==SwapCall::Present;
 }
 Result<std::array<std::uintptr_t,3>> rendererCandidatePointers(std::span<const std::uint8_t> bytes,
     std::uint32_t thread,std::uintptr_t device,std::uintptr_t context,std::uintptr_t swap) {

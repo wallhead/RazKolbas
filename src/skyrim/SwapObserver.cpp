@@ -44,7 +44,8 @@ bool validDisabledPatchIds(std::string_view ids) {
     unsigned seen=0;
     while(true) {
         const auto comma=ids.find(',');const auto id=trimId(ids.substr(0,comma));
-        const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:id==enbSwapObserverPatchId?4U:0U;
+        const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:
+            id==enbSwapObserverPatchId?4U:id==enb505SwapObserverPatchId?8U:0U;
         if(!bit||(seen&bit))return false;
         seen|=bit;
         if(comma==ids.npos)return true;
@@ -90,8 +91,17 @@ const SwapTableProfile& enbSwapProfile() {
         {},{}
     }},3,enbSwapObserverPatchId};return profile;
 }
+const SwapTableProfile& enb505SwapProfile() {
+    static constexpr SwapTableProfile profile{
+        "35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3",4553216,0xa92000,0x18f858,{{
+        {2,0x6d420,{0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x8b,0xd9,0xf0,0x83,0x41,0x20,0xff,0x48,0x8b}},
+        {8,0x6c540,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57,0x48,0x83,0xec,0x20,0x41}},
+        {13,0x6c600,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x6c,0x24,0x10,0x48,0x89,0x74,0x24,0x18,0x57}},
+        {},{}
+    }},3,enb505SwapObserverPatchId};return profile;
+}
 const SwapTableProfile* findSwapProfile(std::string_view hash,std::uintptr_t tableRva) {
-    for(const auto* profile:{&enbSwapProfile(),&reshade673SwapProfile()})
+    for(const auto* profile:{&enbSwapProfile(),&enb505SwapProfile(),&reshade673SwapProfile()})
         if(profile->hash==hash&&profile->tableRva==tableRva)return profile;
     return nullptr;
 }

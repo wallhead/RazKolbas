@@ -103,6 +103,11 @@ TEST_CASE("Only exact observed D3D11 owners are accepted", "[hook_profiles]") {
     REQUIRE(enb!=nullptr); REQUIRE(enb->exportRva==0x5e410);
     const auto system=rk::creationOwnerProfile("722871e4ac32972617483197709fe0d924ced5ed894b18fd13e0813d0b25950f");
     REQUIRE(system!=nullptr); REQUIRE(system->exportRva==0x429f0);
+    const auto enb505=rk::creationOwnerProfile("35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3");
+    REQUIRE(enb505!=nullptr);
+    REQUIRE(enb505->fileSize==4553216);
+    REQUIRE(enb505->imageSize==0xa92000);
+    REQUIRE(enb505->exportRva==0x5e4b0);
 }
 TEST_CASE("Local Skyrim executable reproduces the compiled import profile without executing game code", "[.local_game_profile]") {
     wchar_t path[32768]{};
@@ -140,11 +145,16 @@ TEST_CASE("Local ENB or ReShade reproduces the swap-chain profile without execut
     if(!count||count>=32768)SKIP("Set RAZKOLBAS_SWAP_OWNER_TEST_FILE for the opt-in local audit");
     std::ifstream stream(std::filesystem::path(path),std::ios::binary);REQUIRE(stream.good());
     std::vector<std::uint8_t> file((std::istreambuf_iterator<char>(stream)),{});
-    const auto& expected=rk::sha256(file)==rk::enbSwapProfile().hash?rk::enbSwapProfile():rk::reshade673SwapProfile();
-    REQUIRE(file.size()==expected.fileSize);REQUIRE(rk::sha256(file)==expected.hash);
+    const auto hash=rk::sha256(file);
+    const auto* expected=rk::findSwapProfile(hash,
+        hash==rk::enbSwapProfile().hash?rk::enbSwapProfile().tableRva:
+        hash==rk::enb505SwapProfile().hash?rk::enb505SwapProfile().tableRva:
+        rk::reshade673SwapProfile().tableRva);
+    REQUIRE(expected!=nullptr);
+    REQUIRE(file.size()==expected->fileSize);REQUIRE(hash==expected->hash);
     IMAGE_DOS_HEADER dos{};std::memcpy(&dos,file.data(),sizeof(dos));
     IMAGE_NT_HEADERS64 nt{};std::memcpy(&nt,file.data()+dos.e_lfanew,sizeof(nt));
-    std::vector<std::uint8_t> mapped(expected.imageSize);
+    std::vector<std::uint8_t> mapped(expected->imageSize);
     REQUIRE(nt.OptionalHeader.SizeOfHeaders<=file.size());REQUIRE(nt.OptionalHeader.SizeOfHeaders<=mapped.size());
     std::memcpy(mapped.data(),file.data(),nt.OptionalHeader.SizeOfHeaders);
     for(std::size_t i=0;i<nt.FileHeader.NumberOfSections;++i) {
@@ -153,5 +163,5 @@ TEST_CASE("Local ENB or ReShade reproduces the swap-chain profile without execut
         REQUIRE(s.VirtualAddress<=mapped.size());REQUIRE(s.SizeOfRawData<=mapped.size()-s.VirtualAddress);
         std::memcpy(mapped.data()+s.VirtualAddress,file.data()+s.PointerToRawData,s.SizeOfRawData);
     }
-    REQUIRE(std::get<bool>(rk::validateSwapTable(mapped,nt.OptionalHeader.ImageBase,expected.hash,file.size(),expected.tableRva,expected)));
+    REQUIRE(std::get<bool>(rk::validateSwapTable(mapped,nt.OptionalHeader.ImageBase,expected->hash,file.size(),expected->tableRva,*expected)));
 }

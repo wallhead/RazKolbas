@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## 0.1.83 V5.4 End-menu compatibility candidate (2026-09-25)
+
+The first user-started V5.4 launch loaded 0.1.82, but the log recorded
+`Unverified D3D11 owner; existing hook left untouched` and `renderer observation
+disabled`. The selected profile had `+RazKolbas` and the installed INI retained
+`Interface.Enabled=true` and `ToggleMenuKey=End`. The V5.4 root ENB DLL is
+version 0.505 with SHA-256 `35ff1543...be7bae3`, whereas 0.1.82 accepted only
+the earlier exact ENB owner. The different V5.4 ReShade 6.8 DLL is SHA-256
+`b2945c29...02d08da`. See `docs/re/V54_GRAPHICS_PROFILE.md`.
+
+Source 0.1.83 adds the exact V5.4 ENB creation export and outer swap table
+profile, and admits its verified Present boundary for the diagnostics menu.
+It retains the old profile and rejects every other owner. The new ENB DLL
+passed the opt-in offline mapped-image swap-table audit (31 assertions),
+the targeted Debug tests passed 255 assertions across 15 cases, and the
+Release build passed all 40 CTest groups. Actual V5.4 End-menu rendering is
+**NOT RUN** until the updated DLL is installed and Skyrim is user-started.
+The new ReShade owned-scene and ENB UI routes are **NOT RUN/NOT IMPLEMENTED**;
+DLSS SR and NR are not claimed active in V5.4 by this candidate.
+
 ## V5.4 MO2 deployment of 0.1.82 (2026-09-25)
 
 The verified 0.1.82 package was copied to

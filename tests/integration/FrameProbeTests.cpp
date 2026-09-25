@@ -40,6 +40,7 @@ TEST_CASE("Prepared input capture writes verified raw bytes and refuses a repeat
 }
 TEST_CASE("Frame probe is limited to the verified ENB base Present boundary", "[frame_probe]") {
     REQUIRE(rk::frameProbeBoundary("enb20260508.swapchain-observe-v1",rk::SwapCall::Present));
+    REQUIRE(rk::frameProbeBoundary("enb0505.swapchain-observe-v1",rk::SwapCall::Present));
     REQUIRE_FALSE(rk::frameProbeBoundary("reshade673.swapchain-observe-v1",rk::SwapCall::Present));
     REQUIRE_FALSE(rk::frameProbeBoundary("enb20260508.swapchain-observe-v1",rk::SwapCall::Present1));
     REQUIRE_FALSE(rk::frameProbeBoundary("unknown",rk::SwapCall::Present));
