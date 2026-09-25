@@ -43,6 +43,10 @@ struct UiFrameObservation {
     UINT firstSampledDepthSlot{~0u};
     std::array<UiObservationEvent,64> events{};
 };
+struct UiDepthViewContract {
+    DXGI_FORMAT sourceFormat{DXGI_FORMAT_UNKNOWN};
+    UINT sourceFlags{},writableFlags{},sampledClearFlags{};
+};
 // Scoped translations for a single verified immediate-context chain. The
 // installer must save the current downstream methods; this class never jumps
 // around ENB/ReShade or installs a vtable hook on its own.
@@ -74,6 +78,7 @@ public:
     // kept outside the context callbacks.
     HRESULT prepareObservedCompanions() noexcept;
     bool companionsReady() const noexcept;
+    std::optional<UiDepthViewContract> depthViewContract() const noexcept;
     bool latePassRoutingAvailable() const noexcept {
         return !latePassRoutingDisabled_&&companionsReady();
     }

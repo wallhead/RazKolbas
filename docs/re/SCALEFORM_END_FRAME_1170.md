@@ -110,3 +110,28 @@ current native MRT set with the existing full-size DSV immediately before the
 verified `GRenderer::EndFrame` wrapper. It does not clear depth/stencil again,
 does not change the MRT count or auxiliary identities, and always forwards the
 original wrapper once. Actual-game fill stability remains **NOT RUN**.
+
+## 0.1.78 black-fill isolation and writable-view correction
+
+Installed 0.1.78 kept real DLSS active continuously, so the earlier alternating
+fill symptom became stable black fills. Its full-frame capture shows no HUD in
+the prepared input or raw DLSS output. The final native composition adds the
+bar frames and text but no coloured fills, with alpha 255 at every pixel in all
+three stages. This places the failure after DLSS and post-sharpening.
+
+The preserved capture sequence provides a tighter regression boundary. Final
+captures from 0.1.72, 0.1.73 and 0.1.74 contain coloured fills. The first
+0.1.75 capture and all later captures contain black fills. Binding the new
+display-sized DSV is the only functional production change at that transition.
+
+Both native depth creation helpers copied the observed source DSV descriptor,
+including its `Flags`, then treated the copied views as writable: the main UI
+view is cleared every frame and the sampled-depth clear view initializes its
+separate resource. A source view carrying `D3D11_DSV_READ_ONLY_DEPTH` or
+`D3D11_DSV_READ_ONLY_STENCIL` therefore made the owned clear/write contract
+internally inconsistent. Source 0.1.79 sets `Flags=0` on both owned views while
+preserving format and dimension. A WARP regression reproduces a source view
+with both read-only flags and verifies both owned views are writable. The next
+actual-game run logs all three flag values and determines whether this is the
+runtime cause; if the source flags were already zero, the follow-up is a
+bounded Draw/DrawIndexed state trace at the exact EndFrame boundary.

@@ -67,6 +67,9 @@ HRESULT createNativeDepth(ID3D11Device* device,ID3D11DepthStencilView* source,
     textureDesc.Usage=D3D11_USAGE_DEFAULT;textureDesc.CPUAccessFlags=0;
     textureDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
     textureDesc.MiscFlags=0;
+    // The owned late-UI attachment is cleared and written independently of
+    // the observed source view. Do not inherit READ_ONLY_DEPTH/STENCIL.
+    viewDesc.Flags=0;
     ComPtr<ID3D11Texture2D> texture;
     auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
     if(FAILED(hr))return hr;
@@ -96,6 +99,9 @@ HRESULT createNativeSampledDepth(ID3D11Device* device,
     textureDesc.Usage=D3D11_USAGE_DEFAULT;textureDesc.CPUAccessFlags=0;
     textureDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
     textureDesc.MiscFlags=0;
+    // This view exists only to initialize the separate sampled depth texture;
+    // it must remain writable even when the observed source DSV is read-only.
+    depthDesc.Flags=0;
     ComPtr<ID3D11Texture2D> texture;
     auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
     if(FAILED(hr))return hr;
@@ -332,6 +338,15 @@ bool NativeUiRedirector::companionsReady() const noexcept {
         if(item.sourceId)++auxiliaryCount;
     }
     return auxiliaryCount==2;
+}
+std::optional<UiDepthViewContract> NativeUiRedirector::depthViewContract() const noexcept {
+    if(!depthSourceView_||!nativeDepthView_||!nativeSampledDepthClearView_)
+        return std::nullopt;
+    D3D11_DEPTH_STENCIL_VIEW_DESC source{},writable{},sampled{};
+    depthSourceView_->GetDesc(&source);
+    nativeDepthView_->GetDesc(&writable);
+    nativeSampledDepthClearView_->GetDesc(&sampled);
+    return UiDepthViewContract{source.Format,source.Flags,writable.Flags,sampled.Flags};
 }
 ID3D11RenderTargetView* NativeUiRedirector::auxiliaryReplacement(
     IUnknown* sourceId) const noexcept {

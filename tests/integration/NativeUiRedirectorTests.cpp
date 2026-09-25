@@ -194,6 +194,10 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     D3D11_DEPTH_STENCIL_VIEW_DESC depthViewDesc{};
     depthViewDesc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
     depthViewDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+    // The observed source view may be read-only. Owned full-size views have
+    // independent writable/clear roles and must not inherit those flags.
+    depthViewDesc.Flags=D3D11_DSV_READ_ONLY_DEPTH|
+        D3D11_DSV_READ_ONLY_STENCIL;
     ComPtr<ID3D11DepthStencilView> depthView;
     REQUIRE(SUCCEEDED(device->CreateDepthStencilView(depth.Get(),&depthViewDesc,&depthView)));
     D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc{};
@@ -286,6 +290,13 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
         reinterpret_cast<std::uintptr_t>(identity(secondAuxiliary.Get()).Get()));
     REQUIRE(SUCCEEDED(redirect.prepareObservedCompanions()));
     REQUIRE(redirect.companionsReady());
+    const auto depthContract=redirect.depthViewContract();
+    REQUIRE(depthContract.has_value());
+    REQUIRE(depthContract->sourceFormat==DXGI_FORMAT_D24_UNORM_S8_UINT);
+    REQUIRE(depthContract->sourceFlags==
+        (D3D11_DSV_READ_ONLY_DEPTH|D3D11_DSV_READ_ONLY_STENCIL));
+    REQUIRE(depthContract->writableFlags==0);
+    REQUIRE(depthContract->sampledClearFlags==0);
     REQUIRE(route.startProcessing(7,1));
     REQUIRE(SUCCEEDED(redirect.commitPublishedUi(7)));
     // Scaleform defers its masked widget draws until GRenderer::EndFrame.
@@ -299,6 +310,9 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(boundDepth!=nullptr);
     REQUIRE(viewExtent(boundDepth.Get()).width==display.width);
     REQUIRE(viewExtent(boundDepth.Get()).height==display.height);
+    D3D11_DEPTH_STENCIL_VIEW_DESC boundDepthDesc{};
+    boundDepth->GetDesc(&boundDepthDesc);
+    REQUIRE(boundDepthDesc.Flags==0);
     redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
     redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
     std::array<ComPtr<ID3D11RenderTargetView>,2> nativeTargets;

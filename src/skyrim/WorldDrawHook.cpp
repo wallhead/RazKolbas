@@ -122,6 +122,7 @@ struct WorldState {
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     bool deferredUiFlushWarningLogged{};
+    bool uiDepthViewContractLogged{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
     std::uint64_t srActiveGeneration{};
@@ -1576,9 +1577,16 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 if(FAILED(prepared)) {
                     try {spdlog::warn("Owned native UI companion preparation frame {} failed: HRESULT=0x{:08x}",
                         frame,static_cast<std::uint32_t>(prepared));} catch(...) {}
-                } else if(ui->companionsReady()&&frame<=2) {
-                    try {spdlog::info("Owned native UI companions ready at frame {}: reduced MRT/depth roles learned and display-sized counterparts allocated",
-                        frame);}catch(...) {}
+                } else if(ui->companionsReady()&&!state->uiDepthViewContractLogged) {
+                    state->uiDepthViewContractLogged=true;
+                    const auto contract=ui->depthViewContract();
+                    try {
+                        if(contract)spdlog::info("Owned native UI companions ready at frame {}: reduced MRT/depth roles learned and display-sized counterparts allocated; depthFormat={}; sourceDsvFlags=0x{:x}; writableDsvFlags=0x{:x}; sampledClearDsvFlags=0x{:x}",
+                            frame,static_cast<unsigned>(contract->sourceFormat),
+                            contract->sourceFlags,contract->writableFlags,
+                            contract->sampledClearFlags);
+                        else spdlog::warn("Owned native UI depth-view contract unavailable at frame {} after companion preparation",frame);
+                    }catch(...) {}
                 }
             }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),

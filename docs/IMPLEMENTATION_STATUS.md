@@ -1,5 +1,42 @@
 # Implementation checkpoint
 
+## 0.1.79 writable native UI depth views (2026-09-25)
+
+The user-started 0.1.78 run held real DLSS continuously after provider
+admission. Its log reached more than 70,000 provider submissions with
+`mode=2`, zero fallbacks and continuous successful deferred Scaleform DSV
+rebinds. The resource-bar fills no longer alternated: health, stamina and
+magicka remained black while their frames and text remained visible. This is
+an actual-game **PASS** for the generation-scoped provider latch and an
+actual-game **FAIL** for fill rendering.
+
+The preserved full-frame stage capture proves that the prepared reduced input
+and raw DLSS output contain only the world image. The final native composition
+adds the HUD frames and text but omits the coloured fills. Every pixel in the
+prepared, raw DLSS and final images has alpha 255, disproving output-alpha and
+post-sharpen hypotheses. The run log is preserved below ignored
+`artifacts/local/runtime-0.1.78-black-bars-20260925-113034/RazKolbas.log`,
+SHA-256
+`ac8d3c9ec798f76652a7bce58a689d3326389deacac75a8009656da2acbfb6cf`.
+Skyrim accepted a normal close request after evidence collection.
+
+An independent capture-history review found the decisive transition: the
+0.1.72 through 0.1.74 final captures have coloured resource fills, while the
+first 0.1.75 capture and every later capture have black fills. The sole
+production change at that transition was binding the display-sized DSV.
+Inspection then found that both owned DSV creation paths copied the observed
+source view descriptor verbatim, including any `READ_ONLY_DEPTH` and
+`READ_ONLY_STENCIL` flags, even though one owned view is cleared and written
+every frame and the other is used to clear the separate sampled-depth texture.
+
+Source 0.1.79 explicitly creates those owned writable/clear DSVs with
+`Flags=0`. A WARP regression supplies a source D24S8 view with both read-only
+flags. It first reproduced inherited flags `3`, then verifies source flags stay
+observable while the display-sized writable and sampled-clear views both have
+flags zero and the bound native UI DSV is writable. The next run also logs the
+actual source and owned flags once. Complete Debug and Release builds and all
+40 CTest groups pass. Actual-game fill restoration remains **NOT RUN**.
+
 ## 0.1.78 generation-scoped provider admission (2026-09-25)
 
 The user-started 0.1.77 run still showed periodic black health, stamina and
