@@ -23,8 +23,22 @@ the UI between two composition orders. The 0.1.74 scissor-coordinate mutation
 is also retired: its actual-game run proved hundreds of remaps did not fix the
 symbols, and application-owned scissor rectangles now pass through unchanged.
 The native D24S8 binding that removed the symbols remains intact. Regression
-tests cover both the boundary latch and scissor pass-through. Actual-game
-verification of stable resource-bar fills is **NOT RUN**.
+tests cover both the boundary latch and scissor pass-through. Complete Debug
+and Release builds each pass all 40 CTest groups.
+
+Source commit `76bdef4` is pushed. The independently extracted and verified
+package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.76-ui-boundary-76bdef4.zip`, SHA-256
+`70e3ac9c7be4853c8a116ee5c9d270667f8286b6dafccab192eb9736ed54e4d8`.
+Every payload matches its manifest and the NVIDIA runtime signature is valid.
+After evidence collection, Skyrim accepted a normal window-close request under
+the user's standing authorization. The previous mod was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.76-76bdef4-20260925` and the verified
+stage was installed while preserving `meta.ini`. Installed DLL SHA-256 is
+`baf52150cb8681683982c6b0f17ad41a74841b266290c176f2ca36b66620d5ac`;
+all payloads match manifest SHA-256
+`b8be9d2757df520238240f611799364705c7765b725004645ae305000d5d0b58`.
+Actual-game verification of stable resource-bar fills is **NOT RUN**.
 
 ## 0.1.75 deferred Scaleform stencil repair (2026-09-25)
 
