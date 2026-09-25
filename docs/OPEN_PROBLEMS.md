@@ -1,9 +1,9 @@
 # Open implementation problems
 
-Checkpoint: installed 0.1.79 restores coloured health, stamina and magicka
-fills in the actual game. The live descriptor receipt proves the source DSV
-has read-only flags `0x3` and both owned writable/clear views have flags zero.
-Real DLSS remained continuous beyond 9,300 submissions with zero fallbacks.
+Checkpoint: installed 0.1.79 restored coloured health, stamina and magicka
+fills in the actual game and held real DLSS beyond 9,300 submissions with zero
+fallbacks. Installed 0.1.80 adds the exact fast-FP16 NR stage before DLSS SR;
+its standalone GPU paths pass, while its first Skyrim run is pending.
 This file describes remaining work, not completed features.
 The detailed run record is in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 and the render-size evidence is in
@@ -20,6 +20,7 @@ and the render-size evidence is in
 | P2 | FSR and XeSS SR/FG providers, capability selection and full configuration behavior remain incomplete. The current working display path is experimental NVIDIA SDR DLAA. | Continue the plan's provider-specific integration after the shared world/source/presentation contract is proven. |
 
 The owner no longer wants manual DRS console commands. Do not request another
-command-driven game run. The next runtime evidence should exercise save load,
-an interior/exterior transition and resize with 0.1.79; the assistant must not
-start Skyrim.
+command-driven game run. The next runtime evidence is a normal save load with
+installed 0.1.80. Confirm that NR submissions begin, then inspect image quality,
+ENB/ReShade/native UI, frame time and stability. The assistant must not start
+Skyrim.

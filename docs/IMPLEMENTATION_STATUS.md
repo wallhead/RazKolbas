@@ -47,6 +47,27 @@ the existing SR contract but remain unverified for live NR. The current bridge
 also waits synchronously for D3D12 completion each frame; it is a functional
 candidate, not the final asynchronous performance design.
 
+Source commit `7152f54` is pushed. The independently extracted and verified
+MO2 package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.80-fastfp16-nr-7152f54.zip`,
+SHA-256
+`b5e0ea4493fd9623a9a4d140f8ab37c04f9f3f4bec2121baca3f7e45c952a6df`.
+It contains exactly the five manifest-listed payloads plus the manifest: the
+plugin, NR-enabled test INI, signed SR runtime, exact fast-FP16 NR runtime and
+Dear ImGui notice. No PDB, reference host or signed original NR DLL is present.
+With Skyrim stopped, all 0.1.79 payloads first matched their manifest and the
+complete mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.80-7152f54-20260925`. The 0.1.80
+payloads were then installed to `D:/TESV_EX/MO2/mods/RazKolbas` and every
+manifest hash passed. Installed plugin SHA-256 is
+`9a598203f2545f57649e1cbfb0a559e351eb818ceff6b4cdf7b38d74d97e97e2`;
+installed NR SHA-256 is `91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7`;
+installed manifest SHA-256 is
+`1163698e98470eb7221c119dc2c460bff1da21f8dc60ba8fe2a743e2dbf1a684`.
+The test INI keeps DLSS Quality, sharpening 1.0 and manual render scale
+0.666667, and enables one-pass full-resolution SDR NR with Shipping preset.
+The assistant did not start Skyrim.
+
 ## 0.1.79 writable native UI depth views (2026-09-25)
 
 The user-started 0.1.78 run held real DLSS continuously after provider
