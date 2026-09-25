@@ -1,9 +1,9 @@
 # Open implementation problems
 
 Checkpoint: installed 0.1.73 proves the two centre fragments arrive only in a
-common UI flush after all 17 observed menu callbacks. Source 0.1.74 repairs the
-missing reduced-to-native scissor translation paired with the already mapped
-viewport; build packaging and actual-game verification are next.
+common UI flush after all 17 observed menu callbacks. Installed 0.1.74 repairs
+the missing reduced-to-native scissor translation paired with the already
+mapped viewport; actual-game verification is next.
 This file describes remaining work, not completed features.
 The detailed run record is in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 and the render-size evidence is in

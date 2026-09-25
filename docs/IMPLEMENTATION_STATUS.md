@@ -31,8 +31,23 @@ remap and powers of two are logged for runtime proof. A WARP regression first
 failed to compile because the scissor callback was absent; it now verifies a
 32x16-to-64x32 viewport/scissor translation, native-scissor pass-through and
 the remap counter. Complete Debug and Release builds each pass all 40 CTest
-groups. Package, installation and actual-game removal of the fragments remain
-pending.
+groups. Actual-game removal of the fragments remains pending.
+
+Source commit `5207858` is pushed. The independently extracted package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.74-ui-scissor-5207858.zip`, SHA-256
+`024b61404cd33902d727338b7084ead49346a42510d8df1e0ae40f32689759ee`.
+It contains exactly the four manifest payloads plus the manifest; all payload
+hashes match and the NVIDIA runtime signature is valid. With Skyrim stopped,
+the complete 0.1.73 mod was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.74-5207858-20260925`. Only the plugin
+DLL and manifest were replaced. Installed DLL SHA-256 is
+`77bb9dc805494a4be023418f202fa45e16aa123e7c778d2f48bb78dc9abfad42`.
+The latest loose INI written by the user's prior session was preserved at
+`2053bdc20ddf21d7c4a6bf351dfcd1cd4705d3557d34cdfb69db296122cd4ff1`;
+the signed NVIDIA runtime remains
+`c85f971ce023c9f3492fc7455f0b01a24ba18ea39636407a846902c4360b0b7e`.
+All effective installed payloads match the new manifest. The actual-game
+scissor-remap log and visual result are **NOT RUN** pending one user start.
 
 ## 0.1.73 same-frame per-menu UI owner trace (2026-09-25)
 
