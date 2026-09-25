@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## V5.4 MO2 deployment of 0.1.82 (2026-09-25)
+
+The verified 0.1.82 package was copied to
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.82-native-nr-depth-071a4b4.zip`
+and installed as the standalone mod
+`D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. The user-supplied path included
+an extra underscore after `BETA`; the existing portable MO2 root is
+`D:/TESV54BETA/BETA_TRUEAE_V54`. The package SHA-256 remains
+`3a0c936a55c796b09adbcab02855ab79ce8ae640c6b675427eb7ec083108b781`.
+All five manifest payloads and the installed manifest match the hashes recorded
+below, including DLL SHA-256 `5acb36c8...92b95`, INI SHA-256
+`44953a84...72d18`, DLSS SHA-256 `c85f971c...6b0b7e`, and DLSS-NR SHA-256
+`91ea4143...9e40be7`. The mod contains no PDB, nested archive, reference host,
+IDA database, capture or game data.
+
+Portable MO2 selected profile `V5.4 NO-LORE`. Its `modlist.txt` was backed up
+under ignored
+`artifacts/local/v54-install-backup-0.1.82-071a4b4-20260925`, then updated with
+exactly one `+RazKolbas` entry while preserving UTF-8 without BOM and CRLF.
+The enabled profile file remained stable while MO2 was running and has SHA-256
+`78f1c54c7bc6d815ae1ac5279125a1a249f1dbd98a487c567ae1bfccb485f287`.
+No loose RazKolbas DLL/INI exists in `Stock Game`, and no RazKolbas DLL exists
+in MO2 `overwrite`. The profile's other DLSS/upscaler alternatives remain
+disabled. Skyrim and `skse64_loader` were not running during deployment, so
+actual game loading and rendering in this new V5.4 modlist are **NOT RUN**.
+
 ## 0.1.82 native NR depth-contract correction candidate (2026-09-25)
 
 The installed 0.1.81 NativeAA run proved that the new stage ordering was active,
