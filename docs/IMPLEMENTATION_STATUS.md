@@ -43,8 +43,30 @@ pass while applying Style and Intensity at frame 10; input SHA-256 is
 `a15273e9bf608a48641cd44278e1a137a210ca11bb56200f3bdba7040f8df625`
 and final output SHA-256 is
 `ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`.
-The 0.1.81 game runtime is **NOT RUN**. At this checkpoint the installed MO2
-mod remains 0.1.80 until packaging and hash-verified replacement are complete.
+The 0.1.81 game runtime is **NOT RUN**. Source commit `d8274db` is pushed. The
+independently extracted and hash-verified MO2 package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.81-dlaa-nr-runtime-d8274db.zip`,
+SHA-256
+`82f34215f52dffe4d050dd36160f917a5f5df0ef662b79b6f03c8f4d229b3953`.
+It contains exactly the five manifest-listed payloads plus the manifest; no
+PDB, reference host, signed original NR DLL, capture or archive is tracked in
+git.
+
+Before installation, every old 0.1.80 payload except the user-edited INI
+matched its manifest. The complete mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.81-d8274db-20260925`. The current INI
+was intentionally preserved in the package and installation; its SHA-256 is
+`29663ea89c392cbb91d03f5512daa13e9db15bd6a2b265db0813fb48b8de117e`.
+It starts 0.1.81 in NativeAA with NR enabled, Auto network preset, Style 0,
+Intensity 2, Local Tone 0.17, Local Structure 0.34, Auto skin and one
+full-resolution SDR pass. All installed manifest payloads now match. Installed
+DLL SHA-256 is
+`7b19a916b0704da46aed70c584add5922d3420bb32024edeb889c40d0777baaf`;
+manifest SHA-256 is
+`59ce7f4a6cc3fe7082283716ac75a72f2d33480d1a02ed55d793ba19f898c7f4`.
+The signed SR runtime remains `c85f...b0b7e` and the fast-FP16 NR runtime
+remains `91ea...0be7`. Skyrim was absent for installation; the assistant did
+not start or close it.
 
 ## 0.1.80 fast-FP16 NR-before-SR candidate (2026-09-25)
 
