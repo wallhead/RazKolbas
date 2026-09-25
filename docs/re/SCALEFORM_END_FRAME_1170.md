@@ -79,3 +79,34 @@ The causal link from this correction to the Skyrim image is not a runtime fact
 until a user-started 0.1.75 run removes the fragments. The 0.1.74 scissor
 translation executed hundreds of times and did not remove them, disproving the
 prior scissor-only hypothesis.
+
+## 0.1.77 exact-flush rebind follow-up
+
+The user-started 0.1.75 run removed the two isolated centre fragments, which
+is actual-game confirmation that the missing D24S8 attachment caused that
+mask failure. Installed 0.1.76 kept the publication boundary latched and
+retired scissor mutation, but the health, stamina and magicka fills still
+periodically became black. Its log confirms that the route remained at the
+menu boundary, so boundary oscillation was not the fill cause.
+
+Capstone 5.0.7 independently decoded the exact reference
+`SkyrimUpscaler.dll` SHA-256
+`94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb`.
+`SetupDepth` at RVA `0x1f3e40` creates distinct display-sized writable depth
+at host `+0x330` and sampled UI depth at `+0x388`. The sampled resource is
+cleared at creation through context virtual slot `+0x1a8` with flags `3`,
+depth `1` and stencil `0`. The late world tail at RVA `0x156f75` separately
+obtains the writable DSV from `+0x330` and clears it each frame with the same
+values. This confirms RazKolbas's resource separation and clear values; it
+does not support another change to them.
+
+The remaining placement difference is submission timing. PureDark's late OM
+translation remains active for the final draw calls. RazKolbas published and
+bound the native DSV before Skyrim entered its menu loop, then relied on that
+binding surviving until the common deferred Scaleform flush. Any intervening
+menu can retain native colour while dropping the DSV. Version 0.1.77 therefore
+adds a third exact-hash CALL profile at RVA `0xfa51ea` and reasserts the
+current native MRT set with the existing full-size DSV immediately before the
+verified `GRenderer::EndFrame` wrapper. It does not clear depth/stencil again,
+does not change the MRT count or auxiliary identities, and always forwards the
+original wrapper once. Actual-game fill stability remains **NOT RUN**.

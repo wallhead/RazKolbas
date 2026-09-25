@@ -373,3 +373,29 @@ TEST_CASE("Skyrim menu-display boundary preserves the decoded four-argument call
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::verifySkyrim1170MenuDisplayCallAbi(caller,changedTarget)));
 }
+
+TEST_CASE("Skyrim deferred UI flush resolves the shared Scaleform EndFrame call",
+    "[patch][deferred_ui_flush]") {
+    constexpr std::array<std::uint8_t,16> caller{
+        0x48,0x8b,0x05,0xe2,0xbf,0x64,0x02,
+        0x48,0x8b,0x48,0x10,0xe8,0x11,0xe1,0x01,0x00};
+    constexpr std::array<std::uint8_t,33> target{
+        0x48,0x83,0xec,0x28,0x48,0x8b,0x01,0x48,0x8b,0x48,0x18,
+        0x48,0x8b,0x01,0xff,0x50,0x28,
+        0x48,0x8d,0x0d,0xa8,0x54,0x2c,0x02,
+        0x48,0x83,0xc4,0x28,0xe9,0x5f,0x7c,0xe8,0xff};
+    REQUIRE(std::get<bool>(
+        rk::verifySkyrim1170DeferredUiFlushCallAbi(caller,target)));
+    const rk::CallSiteDescriptor descriptor{
+        "skyrim1170.scaleform-end-frame.native-ui-v1",std::string(64,'a'),
+        0x3870000,0xfa51ea,0xfc3300,{0xe8,0x11,0xe1,0x01,0x00}};
+    REQUIRE(std::holds_alternative<rk::CallSitePlan>(rk::prepareCallSite(
+        std::span(caller).subspan(11,5),descriptor.gameSha256,
+        descriptor.imageSize,descriptor)));
+    auto changed=caller;changed[8]=0x49;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::verifySkyrim1170DeferredUiFlushCallAbi(changed,target)));
+    auto changedTarget=target;changedTarget[16]=0x30;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::verifySkyrim1170DeferredUiFlushCallAbi(caller,changedTarget)));
+}

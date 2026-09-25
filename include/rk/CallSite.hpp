@@ -34,6 +34,11 @@ Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
 Result<bool> verifySkyrim1170MenuDisplayCallAbi(
     std::span<const std::uint8_t> caller,
     std::span<const std::uint8_t> originalTarget);
+// Exact common call after Skyrim's IMenu::PostDisplay loop. The target
+// forwards RCX to Scaleform Renderer::EndFrame virtual slot +0x28.
+Result<bool> verifySkyrim1170DeferredUiFlushCallAbi(
+    std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget);
 // Read-only exact-code gate for the decoded DRS update CALL and scissor
 // function. A successful check does not activate reduced rendering or grant
 // permission to modify either site during an active game session.

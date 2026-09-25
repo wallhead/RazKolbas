@@ -10,6 +10,7 @@
 #include "rk/StagePairCapture.hpp"
 #include "rk/WorldDraw.hpp"
 #include "rk/MenuDisplay.hpp"
+#include "rk/DeferredUiFlush.hpp"
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
@@ -43,6 +44,7 @@ namespace {
 struct WorldState {
     WorldDrawForwarder forwarder;
     MenuDisplayForwarder menuForwarder;
+    DeferredUiFlushForwarder deferredUiFlushForwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
@@ -117,6 +119,8 @@ struct WorldState {
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
     bool nativeUiRouteActivated{};
+    std::uint64_t deferredUiFlushRebinds{};
+    bool deferredUiFlushWarningLogged{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
     std::uint64_t srActiveGeneration{};
@@ -937,6 +941,33 @@ void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
     state->menuForwarder.dispatch(first,second,third,fourth);
+}
+void beforeDeferredUiFlush(void*) noexcept {
+#ifdef RK_WITH_NGX
+    auto* state=active.load(std::memory_order_acquire);
+    auto* domain=activeOwnedSceneDomain();
+    if(!state||!domain||domain->phase()!=ScenePhase::NativeUi)return;
+    auto* ui=ownedUiRedirector();
+    if(!ui)return;
+    const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    const auto rebound=ui->rebindForDeferredUiFlush(frame);
+    if(SUCCEEDED(rebound)) {
+        const auto count=++state->deferredUiFlushRebinds;
+        if(count==1||count%600==0) {
+            try {spdlog::info("Deferred Scaleform UI flush frame {} reasserted native colour and full-size depth/stencil; count={}",
+                frame,count);}catch(...) {}
+        }
+    } else if(!state->deferredUiFlushWarningLogged) {
+        state->deferredUiFlushWarningLogged=true;
+        try {spdlog::warn("Deferred Scaleform UI flush frame {} could not reassert native depth/stencil; HRESULT=0x{:08x}",
+            frame,static_cast<std::uint32_t>(rebound));}catch(...) {}
+    }
+#endif
+}
+void deferredUiFlushProxy(void* renderer) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state)std::terminate();
+    state->deferredUiFlushForwarder.dispatch(renderer);
 }
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     auto* state=active.load(std::memory_order_acquire);
@@ -1807,7 +1838,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
        !settings.get<bool>("Patching.EnableVersionedPatches")||
        !settings.get<bool>("Patching.ExperimentalPatches")||
        patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,worldDrawPatchId)||
-       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,menuDisplayPatchId)) {
+       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,menuDisplayPatchId)||
+       patchDisabled(settings.get<Text>("Patching.DisabledPatchIds").value,deferredUiFlushPatchId)) {
         spdlog::info("World-draw pass-through disabled by configuration");
         return false;
     }
@@ -1845,6 +1877,21 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         verifiedGameHash,profile.imageSize,menuDescriptor);
     if(const auto error=std::get_if<Error>(&menuPlanned))return *error;
     const auto& menuPlan=std::get<CallSitePlan>(menuPlanned);
+    constexpr std::array<std::uint8_t,5> flushExpected{0xe8,0x11,0xe1,0x01,0x00};
+    const CallSiteDescriptor flushDescriptor{std::string(deferredUiFlushPatchId),
+        std::string(profile.gameSha256),profile.imageSize,0xfa51ea,0xfc3300,
+        flushExpected};
+    std::array<std::uint8_t,16> flushCaller{};
+    std::array<std::uint8_t,33> flushTarget{};
+    if(!read(base+0xfa51df,flushCaller.data(),flushCaller.size())||
+       !read(base+flushDescriptor.originalTargetRva,flushTarget.data(),flushTarget.size()))
+        return Error{ErrorCode::Io,"Cannot read decoded deferred UI flush ABI"};
+    if(const auto abi=verifySkyrim1170DeferredUiFlushCallAbi(flushCaller,flushTarget);
+       const auto error=std::get_if<Error>(&abi))return *error;
+    const auto flushPlanned=prepareCallSite(std::span(flushCaller).subspan(11,5),
+        verifiedGameHash,profile.imageSize,flushDescriptor);
+    if(const auto error=std::get_if<Error>(&flushPlanned))return *error;
+    const auto& flushPlan=std::get<CallSitePlan>(flushPlanned);
     auto pending=std::make_unique<WorldState>();
     // Address Library AE 1.6.1170 ID 400327. The executable hash gate above
     // makes this UI singleton pointer-cell RVA version-specific.
@@ -1909,6 +1956,10 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         reinterpret_cast<MenuDisplayFn>(base+menuPlan.originalTargetRva),
         &beforeMenuDisplay);
     if(const auto error=std::get_if<Error>(&menuConfigured))return *error;
+    const auto flushConfigured=pending->deferredUiFlushForwarder.configure(
+        reinterpret_cast<DeferredUiFlushFn>(base+flushPlan.originalTargetRva),
+        &beforeDeferredUiFlush);
+    if(const auto error=std::get_if<Error>(&flushConfigured))return *error;
     auto relayResult=prepareNearCallRelay(plan,base,reinterpret_cast<std::uintptr_t>(&worldDrawProxy));
     if(const auto error=std::get_if<Error>(&relayResult))return *error;
     auto relay=std::make_unique<NearCallRelay>(std::move(std::get<NearCallRelay>(relayResult)));
@@ -1917,6 +1968,11 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(const auto error=std::get_if<Error>(&menuRelayResult))return *error;
     auto menuRelay=std::make_unique<NearCallRelay>(
         std::move(std::get<NearCallRelay>(menuRelayResult)));
+    auto flushRelayResult=prepareNearCallRelay(flushPlan,base,
+        reinterpret_cast<std::uintptr_t>(&deferredUiFlushProxy));
+    if(const auto error=std::get_if<Error>(&flushRelayResult))return *error;
+    auto flushRelay=std::make_unique<NearCallRelay>(
+        std::move(std::get<NearCallRelay>(flushRelayResult)));
     HMODULE pinnedSelf{};
     constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(flags,reinterpret_cast<LPCWSTR>(&worldDrawProxy),&pinnedSelf))
@@ -1927,6 +1983,9 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     spdlog::info("Preparing {}: CALL RVA=0x{:x}, original RVA=0x{:x}, relay=0x{:x}; immediately before IMenu::PostDisplay",
         menuDisplayPatchId,menuPlan.siteRva,menuPlan.originalTargetRva,
         reinterpret_cast<std::uintptr_t>(menuRelay->entry()));
+    spdlog::info("Preparing {}: CALL RVA=0x{:x}, original RVA=0x{:x}, relay=0x{:x}; common deferred Scaleform EndFrame boundary",
+        deferredUiFlushPatchId,flushPlan.siteRva,flushPlan.originalTargetRva,
+        reinterpret_cast<std::uintptr_t>(flushRelay->entry()));
     auto* published=pending.release();
     active.store(published,std::memory_order_release);
     const auto menuApplied=applyCallInstruction(menuPlan,base,*menuRelay,
@@ -1936,9 +1995,9 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         delete published;
         return *error;
     }
-    const auto applied=applyCallInstruction(plan,base,*relay,
+    const auto flushApplied=applyCallInstruction(flushPlan,base,*flushRelay,
         CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
-    if(const auto error=std::get_if<Error>(&applied)) {
+    if(const auto error=std::get_if<Error>(&flushApplied)) {
         const auto restored=restoreCallInstruction(menuPlan,base,*menuRelay,
             CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
         if(std::holds_alternative<Error>(restored))std::terminate();
@@ -1946,10 +2005,24 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         delete published;
         return *error;
     }
+    const auto applied=applyCallInstruction(plan,base,*relay,
+        CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+    if(const auto error=std::get_if<Error>(&applied)) {
+        const auto flushRestored=restoreCallInstruction(flushPlan,base,*flushRelay,
+            CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+        const auto restored=restoreCallInstruction(menuPlan,base,*menuRelay,
+            CallWriteBoundary::SkyrimStartupBeforeWorldThreads);
+        if(std::holds_alternative<Error>(flushRestored)||
+           std::holds_alternative<Error>(restored))std::terminate();
+        active.store(nullptr,std::memory_order_release);
+        delete published;
+        return *error;
+    }
     relay.release(); // Reachable for process lifetime; never freed while CALL is installed.
     menuRelay.release();
+    flushRelay.release();
 #ifdef RK_WITH_NGX
-    try { spdlog::info("Installed {} and {}: exact five-byte CALLs; menu marker is read-only for bounded resource tracing; owned SR publishes at pre-Present; requested={}; configuredQuality={}; modelPreset={}",worldDrawPatchId,menuDisplayPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value,settings.get<Choice>("Upscaling.ModelPreset").value); } catch (...) {}
+    try { spdlog::info("Installed {}, {} and {}: exact five-byte CALLs; native UI depth/stencil is reasserted at the common deferred Scaleform flush; requested={}; configuredQuality={}; modelPreset={}",worldDrawPatchId,menuDisplayPatchId,deferredUiFlushPatchId,published->srRequested,settings.get<Choice>("Upscaling.Quality").value,settings.get<Choice>("Upscaling.ModelPreset").value); } catch (...) {}
 #else
     try { spdlog::info("Installed {}: exact five-byte CALL, original-first pass-through; no SR work",worldDrawPatchId); } catch (...) {}
 #endif

@@ -310,6 +310,27 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
         identity(native.Get()).Get());
     REQUIRE(identity(viewResource(nativeTargets[1].Get()).Get()).Get()!=
         identity(secondAuxiliary.Get()).Get());
+    // A later menu may retain native colour and auxiliary targets while
+    // dropping the shared DSV. The exact common EndFrame boundary restores
+    // the existing full-size stencil attachment without clearing it again or
+    // changing the current MRT set.
+    std::array<ID3D11RenderTargetView*,2> deferredTargets{
+        nativeTargets[0].Get(),nativeTargets[1].Get()};
+    context->OMSetRenderTargets(2,deferredTargets.data(),nullptr);
+    REQUIRE(SUCCEEDED(redirect.rebindForDeferredUiFlush(7)));
+    std::array<ComPtr<ID3D11RenderTargetView>,2> reboundTargets;
+    std::array<ID3D11RenderTargetView*,2> reboundRaw{};
+    boundDepth.Reset();
+    context->OMGetRenderTargets(2,reboundRaw.data(),boundDepth.GetAddressOf());
+    for(std::size_t i=0;i<reboundTargets.size();++i)
+        reboundTargets[i].Attach(reboundRaw[i]);
+    REQUIRE(identity(viewResource(reboundTargets[0].Get()).Get()).Get()==
+        identity(viewResource(nativeTargets[0].Get()).Get()).Get());
+    REQUIRE(identity(viewResource(reboundTargets[1].Get()).Get()).Get()==
+        identity(viewResource(nativeTargets[1].Get()).Get()).Get());
+    REQUIRE(boundDepth!=nullptr);
+    REQUIRE(viewExtent(boundDepth.Get()).width==display.width);
+    REQUIRE(viewExtent(boundDepth.Get()).height==display.height);
     const auto auxiliaryExtent=viewExtent(nativeTargets[1].Get());
     REQUIRE(auxiliaryExtent.width==display.width);
     REQUIRE(auxiliaryExtent.height==display.height);

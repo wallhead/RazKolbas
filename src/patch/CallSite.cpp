@@ -30,6 +30,28 @@ Result<bool> verifySkyrim1170MenuDisplayCallAbi(
             "Decoded menu-display arguments, target or PostDisplay continuation differ"};
     return true;
 }
+Result<bool> verifySkyrim1170DeferredUiFlushCallAbi(
+    std::span<const std::uint8_t> caller,
+    std::span<const std::uint8_t> originalTarget) {
+    // fa51df loads the UI renderer owner, materializes RCX and calls fc3300.
+    constexpr std::array<std::uint8_t,16> expectedCaller{
+        0x48,0x8b,0x05,0xe2,0xbf,0x64,0x02,
+        0x48,0x8b,0x48,0x10,
+        0xe8,0x11,0xe1,0x01,0x00};
+    // fc3300 dereferences the renderer at +0x18 and invokes virtual slot
+    // +0x28 (Scaleform Renderer::EndFrame), then continues to e4af80.
+    constexpr std::array<std::uint8_t,33> expectedTarget{
+        0x48,0x83,0xec,0x28,0x48,0x8b,0x01,0x48,0x8b,0x48,0x18,
+        0x48,0x8b,0x01,0xff,0x50,0x28,
+        0x48,0x8d,0x0d,0xa8,0x54,0x2c,0x02,
+        0x48,0x83,0xc4,0x28,0xe9,0x5f,0x7c,0xe8,0xff};
+    if(caller.size()<expectedCaller.size()||originalTarget.size()<expectedTarget.size()||
+       !std::equal(expectedCaller.begin(),expectedCaller.end(),caller.begin())||
+       !std::equal(expectedTarget.begin(),expectedTarget.end(),originalTarget.begin()))
+        return Error{ErrorCode::Conflict,
+            "Decoded deferred UI flush caller or EndFrame target differs"};
+    return true;
+}
 Result<bool> verifySkyrim1170WorldCallAbi(std::span<const std::uint8_t> caller,
     std::span<const std::uint8_t> originalTarget) {
     // Caller starts at RVA fa5071: xor edx,edx; lea rcx,[rip+22e3746];

@@ -12,6 +12,8 @@ namespace rk {
 inline constexpr std::string_view worldDrawPatchId="skyrim1170.world-draw.sr-v1";
 inline constexpr std::string_view menuDisplayPatchId=
     "skyrim1170.menu-post-display.start-v1";
+inline constexpr std::string_view deferredUiFlushPatchId=
+    "skyrim1170.scaleform-end-frame.native-ui-v1";
 // Called only at SKSEPlugin_Load, before any renderer/world-draw execution.
 // An installed hook and relay remain process-lifetime; no hot unpatch.
 Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedGameHash,

@@ -60,6 +60,9 @@ public:
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
+    // Reassert only the native colour/depth pair at Skyrim's common deferred
+    // Scaleform flush. The per-frame clear remains at publication.
+    HRESULT rebindForDeferredUiFlush(std::uint64_t frame) noexcept;
     // Read-only bounded trace between the semantic menu marker and Present.
     // It records only binds that contain the owned reduced scene and their
     // immediately following viewport; forwarding is unchanged.

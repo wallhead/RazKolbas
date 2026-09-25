@@ -193,6 +193,29 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     bindNativeTarget(true);
     return S_OK;
 }
+HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||!nativeRtv_||!companionsReady()||
+       GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
+       route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)return E_UNEXPECTED;
+    std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
+        rawTargets{};
+    context_->OMGetRenderTargets(static_cast<UINT>(rawTargets.size()),
+        rawTargets.data(),nullptr);
+    std::array<ComPtr<ID3D11RenderTargetView>,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
+        targets;
+    UINT count{};
+    for(UINT i=0;i<rawTargets.size();++i) {
+        targets[i].Attach(rawTargets[i]);
+        if(rawTargets[i])count=i+1;
+    }
+    if(!count)return E_UNEXPECTED;
+    auto boundResource=resource(targets[0].Get());
+    auto boundId=canonical(boundResource.Get());
+    if(!boundId||boundId.Get()!=nativeId_.Get())return E_UNEXPECTED;
+    next_.om(context_.Get(),count,rawTargets.data(),nativeDepthView_.Get());
+    return S_OK;
+}
 bool NativeUiRedirector::beginObservation(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!context_||!frame||GetCurrentThreadId()!=owner||

@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## 0.1.77 deferred Scaleform flush rebind (2026-09-25)
+
+The user started installed 0.1.76 and reported that the health, stamina and
+magicka fills still flicker black. This is an actual-game **FAIL** for the
+boundary-latch/scissor hypothesis. The run log proves the menu publication
+boundary remained latched while DLSS submissions and Present continued, so
+the earlier composition-order explanation is disproved.
+
+Targeted Capstone re-analysis of the exact PureDark reference confirmed its
+two full-size depth roles and the per-frame writable-depth clear with depth
+one/stencil zero. RazKolbas already matches those values. The material
+difference is that the reference's late OM translation covers actual late
+draw submission, while RazKolbas bound its DSV before the menu loop and relied
+on that state surviving until the common deferred Scaleform flush.
+
+Source 0.1.77 adds an exact-hash, exact-byte CALL hook at Skyrim 1.6.1170 RVA
+`0xfa51ea` (Address Library caller ID 82084) to the verified wrapper at RVA
+`0xfc3300` (ID 82733), which invokes `GRenderer::EndFrame` virtual slot
+`+0x28`. Immediately before forwarding the original wrapper once, the hook
+reasserts the currently bound native MRT set with the existing display-sized
+D24S8 attachment. It preserves every current render target and performs no
+second clear. A machine-readable patch record and exact ABI, exception-safe
+forwarding, and WARP MRT/DSV regressions cover the route. Complete Debug and
+Release tests each pass all 40 CTest groups. Packaging and actual-game fill
+stability remain **NOT RUN**.
+
 ## 0.1.76 stable native UI publication boundary (2026-09-25)
 
 The user started installed 0.1.75 and confirmed that the two isolated centre
@@ -38,7 +64,9 @@ stage was installed while preserving `meta.ini`. Installed DLL SHA-256 is
 `baf52150cb8681683982c6b0f17ad41a74841b266290c176f2ca36b66620d5ac`;
 all payloads match manifest SHA-256
 `b8be9d2757df520238240f611799364705c7765b725004645ae305000d5d0b58`.
-Actual-game verification of stable resource-bar fills is **NOT RUN**.
+The subsequent user run reported the same fill flicker. This visual check
+therefore **FAILED**, although the log confirmed the boundary latch itself
+worked and Present remained healthy.
 
 ## 0.1.75 deferred Scaleform stencil repair (2026-09-25)
 

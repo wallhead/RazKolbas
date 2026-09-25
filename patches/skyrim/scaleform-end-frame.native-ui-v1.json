@@ -1,0 +1,37 @@
+{
+  "id": "skyrim1170.scaleform-end-frame.native-ui-v1",
+  "status": "EXPERIMENTAL_RUNTIME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "Reassert the already-created native colour and full-size depth/stencil pair immediately before Skyrim submits deferred Scaleform HUD draws",
+  "target": {
+    "module": "SkyrimSE.exe",
+    "architecture": "x64",
+    "version": "1.6.1170.0",
+    "sha256": "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9",
+    "file_size": 37157144,
+    "image_size": "0x3870000"
+  },
+  "location": {
+    "rva": "0xfa51ea",
+    "address_library_id": 82084,
+    "address_library_addend": "0x2ea",
+    "original_target_rva": "0xfc3300",
+    "original_target_address_library_id": 82733,
+    "scaleform_virtual_slot": "0x28"
+  },
+  "original_live_bytes": "e811e10100",
+  "replacement": "encodeCallSiteReplacement to a process-lifetime near relay ending in the pinned RazKolbas deferredUiFlushProxy; the proxy reasserts the native RTV plus existing display-sized DSV, then calls the original target exactly once",
+  "abi": "Exact caller bytes load the UI renderer owner into RCX. The exact fc3300 body dereferences renderer +0x18 and calls virtual slot +0x28, CommonLibSSE Scaleform Renderer::EndFrame. The wrapper return is not consumed.",
+  "activation": "Prepared with the world and menu relays, then installed at SKSEPlugin_Load after exact executable hash, image size, caller, target and five-byte CALL validation. Any later coupled-write failure restores already-installed owned CALLs before startup resumes.",
+  "lifetime": "Callback DLL is pinned; relay and forwarding state remain reachable for process lifetime. No hot unpatch.",
+  "recovery": "The callback always forwards the original wrapper. A state-reassertion failure is logged and leaves the original flush intact. SafeMode or this disabled patch ID prevents the coupled render hooks on the next launch.",
+  "evidence": [
+    "docs/re/SCALEFORM_END_FRAME_1170.md",
+    "artifacts/local/live-stage-2026-09-20-1149/pre_ui_candidate.asm",
+    "artifacts/local/live-stage-2026-09-20-1149/post_world_call.asm",
+    "tests/unit/CallSiteTests.cpp",
+    "tests/unit/DeferredUiFlushTests.cpp",
+    "tests/integration/NativeUiRedirectorTests.cpp"
+  ],
+  "game_runtime": "NOT RUN"
+}
