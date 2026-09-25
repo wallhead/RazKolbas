@@ -23,8 +23,22 @@ reasserts the currently bound native MRT set with the existing display-sized
 D24S8 attachment. It preserves every current render target and performs no
 second clear. A machine-readable patch record and exact ABI, exception-safe
 forwarding, and WARP MRT/DSV regressions cover the route. Complete Debug and
-Release tests each pass all 40 CTest groups. Packaging and actual-game fill
-stability remain **NOT RUN**.
+Release tests each pass all 40 CTest groups. An independent subagent review
+matched the captured live bytes, Address Library IDs, proxy ABI, three-patch
+rollback, COM ownership and MRT preservation and found no blocking defect.
+
+Source commit `0f7a037` is pushed. The independently extracted and verified
+package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.77-ui-flush-0f7a037.zip`, SHA-256
+`0ae0a98450dab9adf99694b65412e4dd38d64ee6c726cc4fbc29b639afb7b41a`.
+Every payload matches its manifest and the NVIDIA runtime signature is valid.
+With Skyrim stopped, the complete 0.1.76 mod was backed up to ignored
+`artifacts/local/mo2-install-backup-0.1.77-0f7a037-20260925`, then the verified
+payload was installed while preserving `meta.ini`. Installed DLL SHA-256 is
+`577d46e1a95b002752f5e9a5f9d010f669664e5f637169a48afbcf49e6ec016c`;
+all payloads match installed manifest SHA-256
+`79879cb290e7cf11457d452314521b98d2033eb50ba73466b43beec88d19dffd`.
+Actual-game fill stability remains **NOT RUN**.
 
 ## 0.1.76 stable native UI publication boundary (2026-09-25)
 
