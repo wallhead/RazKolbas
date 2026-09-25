@@ -54,6 +54,19 @@ installed manifest SHA-256 is
 `e25ec6f4a18f697e613b0ad44d58b641ad0102c7f65dd99236232985b3be6afa`.
 The user INI, signed NVIDIA runtime and `meta.ini` remain byte-identical.
 
+The user started the installed 0.1.79 build, loaded the same scene and reported
+that the bars now work correctly. This is an actual-game **PASS** for health,
+stamina and magicka fill rendering. The automatic descriptor receipt confirms
+the exact causal contract at frame 2: D24S8 format 45, observed source DSV
+flags `0x3`, owned writable DSV flags `0x0`, and owned sampled-clear DSV flags
+`0x0`. The route then held real DLSS `mode=2` beyond 9,300 provider
+submissions with zero fallbacks while the deferred Scaleform rebind continued.
+The game remained responsive and accepted a normal close request. The final
+log is preserved below ignored
+`artifacts/local/runtime-0.1.79-writable-ui-depth-pass-20260925/RazKolbas.log`,
+SHA-256
+`070111aa615b362e9651531fad0aeb447a714d73f787af1b690f0a1950501977`.
+
 ## 0.1.78 generation-scoped provider admission (2026-09-25)
 
 The user-started 0.1.77 run still showed periodic black health, stamina and

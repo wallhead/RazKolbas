@@ -135,3 +135,11 @@ with both read-only flags and verifies both owned views are writable. The next
 actual-game run logs all three flag values and determines whether this is the
 runtime cause; if the source flags were already zero, the follow-up is a
 bounded Draw/DrawIndexed state trace at the exact EndFrame boundary.
+
+The user-started 0.1.79 run confirms the correction. The live source DSV is
+D24S8 with flags `0x3`; the owned writable and sampled-clear views both report
+flags `0x0`. The user reports that health, stamina and magicka fills are
+restored, while real DLSS remained continuous with zero fallbacks through more
+than 9,300 submissions. This is the actual-game causal confirmation: inherited
+read-only flags prevented the owned depth/stencil clear/write contract from
+serving Scaleform masks correctly.
