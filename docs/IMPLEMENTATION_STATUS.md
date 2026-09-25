@@ -37,6 +37,23 @@ flags zero and the bound native UI DSV is writable. The next run also logs the
 actual source and owned flags once. Complete Debug and Release builds and all
 40 CTest groups pass. Actual-game fill restoration remains **NOT RUN**.
 
+Source commit `c595997` is pushed. An independent subagent review found no
+blocking issue in the two writable-view corrections, WARP regression or
+one-time descriptor log; it separately reran all 40 Debug and Release CTest
+groups successfully. The independently extracted and verified package is
+`D:/TESV_EX/MO2/downloads/RazKolbas-0.1.79-writable-ui-depth-c595997.zip`,
+SHA-256
+`5055370577f5460c58367adbd644738fafa39d75a312befbf801d6b29d608bb4`.
+It contains exactly the four manifest-listed payloads plus the manifest, every
+payload hash matches and the NVIDIA runtime signature remains valid. With
+Skyrim stopped, the verified 0.1.78 installation was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.79-c595997-20260925`. Only the plugin
+DLL and manifest were replaced. Installed DLL SHA-256 is
+`c1b0c979fca3ce6fd6b5ebce2f6b6c4b24aaff906eafab4d7348a70379cd5a14`;
+installed manifest SHA-256 is
+`e25ec6f4a18f697e613b0ad44d58b641ad0102c7f65dd99236232985b3be6afa`.
+The user INI, signed NVIDIA runtime and `meta.ini` remain byte-identical.
+
 ## 0.1.78 generation-scoped provider admission (2026-09-25)
 
 The user-started 0.1.77 run still showed periodic black health, stamina and
