@@ -46,8 +46,23 @@ manifest entries match, effective and packaged INIs both match SHA-256
 `44953a...72d18`, and `meta.ini` is unchanged. Installed manifest SHA-256 is
 `d319251d0f57a2d1c08a90f35ccc501fa42261b61562932a69be804ac764f86a`.
 Skyrim remained absent throughout installation and verification. Actual 0.1.82
-NativeAA NR submissions and image quality are **NOT RUN** pending the next
-user-started game session.
+NativeAA NR then passed in the user-started session beginning at 20:49:52. The
+loaded DLL matched SHA-256 `5acb36...92b95`. NR completed submissions 1, 2 and
+3 at 20:52:16 and continued through at least submission 13,800 at 20:58:15.
+DLAA continued through at least 14,400 submissions with `skipped=0`; Present
+reached 21,000 with zero reported failures. Numerous live Style, Intensity,
+Local Tone, Local Structure, Auto Mask and native UI-correction changes were
+accepted with history resets while NR continued. The session contains no NR
+disable, resource-contract, device-removal, DLAA-disable or Present-failure
+marker. Its only warning is the expected reduced-owned-scene refusal because
+the selected quality is NativeAA rather than reduced DLSS SR. The user reports
+that it appears to be working. The latest persisted values observed during this
+check were Style 0, Intensity 1.01, Local Tone 0.99, Local Structure 1.0,
+Auto Mask off, native UI correction off and sharpening 0.49.
+
+This is an actual-game functional PASS for sustained NR-before-DLAA and live
+control updates. It is not an objective image-quality comparison, GPU-time
+measurement or DLSS Quality NR result; those remain separate checks.
 
 ## 0.1.81 DLAA NR, live controls and temporal handoff candidate (2026-09-25)
 
