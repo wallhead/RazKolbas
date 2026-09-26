@@ -166,6 +166,17 @@ Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings
         replaced = MoveFileExW(temporary, full.c_str(), MOVEFILE_WRITE_THROUGH) != FALSE;
         error = GetLastError();
     }
+    if (!replaced && existed && error == ERROR_UNABLE_TO_REMOVE_REPLACED &&
+        GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES &&
+        GetFileAttributesW(temporary) != INVALID_FILE_ATTRIBUTES) {
+        // ReplaceFileW leaves both names intact for error 1175. MO2 can map
+        // the destination and temporary file to different physical folders;
+        // USVFS hooks MoveFileExW for mapped names. Keep the flushed backup
+        // until this replacement has actually succeeded.
+        replaced = MoveFileExW(temporary, full.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+        if (!replaced) error = GetLastError();
+    }
     if (!replaced) {
         bool recovered = false;
         if (existed && GetFileAttributesW(full.c_str()) == INVALID_FILE_ATTRIBUTES)

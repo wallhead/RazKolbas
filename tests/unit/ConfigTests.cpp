@@ -165,3 +165,25 @@ TEST_CASE("Partially failed replacement recovers original INI from a durable bac
     }
     std::filesystem::remove_all(directory);
 }
+TEST_CASE("Undeletable replaced name retries through a file move", "[config]") {
+    const auto directory = std::filesystem::temp_directory_path() / ("rk-move-save-" + std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directories(directory);
+    const auto path = directory / "settings.ini";
+    { std::ofstream out(path); out << "last-good-original"; }
+    const auto settings = rk::defaultSettings();
+    bool replaceAttempted = false;
+    const auto result = rk::saveIni(path, settings, [&](const auto& destination, const auto& temporary) {
+        replaceAttempted = true;
+        REQUIRE(std::filesystem::exists(destination));
+        REQUIRE(std::filesystem::exists(temporary));
+        return 1175U;
+    });
+    REQUIRE(replaceAttempted);
+    REQUIRE(std::holds_alternative<bool>(result));
+    REQUIRE(std::get<bool>(result));
+    std::ifstream input(path);
+    const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+    REQUIRE(bytes == std::get<std::string>(rk::serializeIni(settings)));
+    input.close();
+    std::filesystem::remove_all(directory);
+}

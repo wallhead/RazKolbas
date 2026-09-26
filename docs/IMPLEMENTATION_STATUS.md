@@ -1,5 +1,46 @@
 # Implementation checkpoint
 
+## 0.1.87 MO2 INI-save retry candidate (2026-09-26)
+
+The user confirmed that NR responds correctly to off/on toggles in the
+user-started 0.1.86 V5.4 session. Its log had 13 diagnostics save warnings
+with Win32 1175, and the physical MO2 mod INI remained unchanged. The save
+path writes a flushed temporary and last-good backup, then calls
+`ReplaceFileW` on a virtualized destination. Inspection found its temporary
+and backup files in MO2's `overwrite/SKSE/Plugins`, while the destination INI
+is supplied by `mods/RazKolbas`. The inspected upstream USVFS source hooks
+`MoveFileExW` but not `ReplaceFileW`; the installed MO2 version has not been
+independently matched to that source revision.
+
+For error 1175 only, when both original and temporary names still exist,
+`saveIni` now retries via `MoveFileExW` with replace-existing and write-through
+flags. The durable backup remains until success; other/partial replacement
+failures keep their recovery behavior. A new test first failed against 0.1.86,
+then passed with the retry. The locked-destination and 1176/1177 recovery
+tests also passed. Debug and Release builds each passed all 41 CTest groups.
+The SKSE plugin metadata and CMake version are 0.1.87.
+
+The independently extracted V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.87-v54-ini-save-final.zip`
+(SHA-256 `d1075981bafc363e465c8ec220bfdb1406c35eedc2ce2b8c3e918f966ff95668`).
+Its five manifest payload hashes and exact file set passed verification.
+After Skyrim exited, the 0.1.86 install matched its prior manifest; DLL,
+INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.87-install-backup`. Only the DLL and manifest were
+replaced. The installed DLL SHA-256 is
+`50b6dd317d52f52aaa3f6fde9eef657f4218daf01926b0eb64999a28a3a53ea7`;
+all five installed payloads match the new manifest. The user's physical INI,
+signed SR runtime and community NR runtime remain byte-identical. The
+assistant did not launch Skyrim.
+
+Actual MO2 `MoveFileExW` behavior, successful menu Save, saved INI contents,
+reload persistence, and continued in-game NR/SR behavior are **NOT RUN** for
+0.1.87. The next step is a user-started V5.4 session: change one visible NR
+control, use Save, exit normally, and check the effective virtual INI,
+physical mod INI, MO2 overwrite, and next launch. A successful save may
+change the mutable INI hash from the static package manifest; later
+installers must preserve that user data.
+
 ## 0.1.86 NR audit-fix candidate (2026-09-26)
 
 The 0.1.82 external code review remains relevant to this branch. The NR
@@ -45,6 +86,22 @@ all five installed payload hashes match the new manifest, so the INI and SR/NR
 runtimes remain byte-identical. The assistant did not start Skyrim. The next
 required game action is a user-started V5.4 loaded-world test with NR enabled
 in DLSS Quality and NativeAA.
+
+The user-started V5.4 session at 09:55 on 2026-09-26 loaded the installed
+0.1.86 DLL. At the inspected 10:02:58 checkpoint, the process was responsive;
+the native UI resource route had activated at frame 11372. NR-before-SR
+reached at least 8400 submissions, while menu-boundary DLSS Quality
+publication reached 8340 provider submissions from a 1707x960 source to
+2560x1440 display, with zero fallbacks in flight. Present observation reached
+19800 calls with HRESULT 0 and zero failures. The inspected session had no
+NR, DLSS, native UI contract, device-removal, or Present warnings/errors.
+The user changed live NR controls, including enabled off/on, and the log
+recorded history-reset updates and later continued NR submissions. The only
+non-startup warnings were 13 diagnostics INI replacement failures (Win32
+1175); the physical MO2 mod INI remained unchanged, so menu changes were
+not persisted. The user reported that NR responds correctly to off/on toggles
+in the running game; comparative frame time and motion-quality measurements
+remain **NOT VERIFIED**. A NativeAA interval was not observed in this session.
 
 ## 0.1.85 V5.4 native UI boundary candidate (2026-09-26)
 
