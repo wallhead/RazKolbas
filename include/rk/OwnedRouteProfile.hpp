@@ -33,11 +33,22 @@ struct OwnedRouteSite {
 const OwnedRouteSite& reshade673FactoryCreateSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
+const OwnedRouteSite& reshade680FactoryCreateSite() noexcept;
+const OwnedRouteSite& reshade680SwapGetBufferSite() noexcept;
+const OwnedRouteSite& reshade680SwapGetDescSite() noexcept;
+const OwnedRouteSite* findFactoryCreateSite(std::string_view hash) noexcept;
+const OwnedRouteSite* findSwapGetBufferSite(std::string_view hash) noexcept;
+const OwnedRouteSite* findSwapGetDescSite(std::string_view hash) noexcept;
 const OwnedRouteSite& enbContextOmSite() noexcept;
 const OwnedRouteSite& enbContextViewportSite() noexcept;
 const OwnedRouteSite& enbContextScissorSite() noexcept;
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept;
 std::span<const OwnedRouteSite> enbContextSamplerSites() noexcept;
+struct EnbContextSites {
+    const OwnedRouteSite* om{},*viewport{},*scissor{},*psResources{};
+    std::span<const OwnedRouteSite> samplers{};
+};
+EnbContextSites findEnbContextSites(std::string_view hash) noexcept;
 // Mapped image bytes, not disk file layout. The caller separately verifies the
 // loaded file's hash and the actual COM object's table address before patching.
 Result<bool> validateOwnedRouteSite(std::span<const std::uint8_t> image,
@@ -53,5 +64,9 @@ bool isSkyrim1170OwnedSceneBufferCall(std::uintptr_t returnAddress,
 bool isEnb20260508OwnedSceneBufferCall(std::uintptr_t returnAddress,
     std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
 bool isEnb20260508ReducedDescriptionCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
+bool isVerifiedEnbOwnedSceneBufferCall(std::uintptr_t returnAddress,
+    std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
+bool isVerifiedEnbReducedDescriptionCall(std::uintptr_t returnAddress,
     std::uintptr_t enbBase,std::string_view verifiedEnbHash) noexcept;
 }

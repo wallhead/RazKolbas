@@ -1,7 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/OwnedRouteProfile.hpp"
+#include "rk/RendererHook.hpp"
+#include "rk/SwapObserver.hpp"
+#include "rk/PatchDescriptor.hpp"
 #include <array>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <vector>
 #include <d3d11.h>
 
@@ -53,6 +58,85 @@ TEST_CASE("Exact live ReShade factory and swap GetBuffer sites are separate", "[
         std::string(64,'0'),factory.fileSize,factory.tableRva,factory)));
     REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(image,base,
         factory.moduleSha256,factory.fileSize,factory.tableRva+8,factory)));
+}
+TEST_CASE("V5.4 selects its exact ReShade and ENB owned-route contracts", "[owned_route_profile]") {
+    constexpr auto reshade="b2945c29e7095491a901746b400e58db9b1592ab092bacf2a888ce37f02d08da";
+    constexpr auto enb="35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3";
+    const auto* factory=rk::findFactoryCreateSite(reshade);
+    const auto* buffer=rk::findSwapGetBufferSite(reshade);
+    const auto* desc=rk::findSwapGetDescSite(reshade);
+    REQUIRE(factory);REQUIRE(buffer);REQUIRE(desc);
+    REQUIRE(factory->tableRva==0x3ee350);
+    REQUIRE(factory->methodRva==0x14a4f0);
+    REQUIRE(buffer->tableRva==0x3ee960);
+    REQUIRE(buffer->methodRva==0x14c510);
+    REQUIRE(desc->methodRva==0x14c750);
+    REQUIRE_FALSE(rk::findFactoryCreateSite(std::string(64,'0')));
+    const auto sites=rk::findEnbContextSites(enb);
+    REQUIRE(sites.om);REQUIRE(sites.viewport);REQUIRE(sites.scissor);
+    REQUIRE(sites.psResources);REQUIRE(sites.samplers.size()==6);
+    REQUIRE(sites.om->tableRva==0x18fa08);
+    REQUIRE(sites.om->methodRva==0x690d0);
+    REQUIRE_FALSE(rk::findEnbContextSites(std::string(64,'0')).om);
+    constexpr std::uintptr_t base=0x180000000;
+    REQUIRE(rk::isVerifiedEnbOwnedSceneBufferCall(base+0x5e620,base,enb));
+    REQUIRE(rk::isVerifiedEnbOwnedSceneBufferCall(base+0x5e835,base,enb));
+    REQUIRE(rk::isVerifiedEnbReducedDescriptionCall(base+0x5e5de,base,enb));
+    REQUIRE(rk::isVerifiedEnbReducedDescriptionCall(base+0x4872d,base,enb));
+    REQUIRE_FALSE(rk::isVerifiedEnbOwnedSceneBufferCall(base+0x5e621,base,enb));
+}
+TEST_CASE("V5.4 owned-route sites match local PE files without executing them",
+    "[.local_v54_owned_route]") {
+    const auto check=[](const wchar_t* env,bool reshade) {
+        wchar_t path[32768]{};
+        const auto count=GetEnvironmentVariableW(env,path,32768);
+        if(!count||count>=32768)return false;
+        std::ifstream stream(std::filesystem::path(path),std::ios::binary);
+        REQUIRE(stream.good());
+        std::vector<std::uint8_t> file((std::istreambuf_iterator<char>(stream)),{});
+        const auto hash=rk::sha256(file);
+        IMAGE_DOS_HEADER dos{};std::memcpy(&dos,file.data(),sizeof(dos));
+        IMAGE_NT_HEADERS64 nt{};std::memcpy(&nt,file.data()+dos.e_lfanew,sizeof(nt));
+        std::vector<std::uint8_t> mapped(nt.OptionalHeader.SizeOfImage);
+        REQUIRE(nt.OptionalHeader.SizeOfHeaders<=file.size());
+        REQUIRE(nt.OptionalHeader.SizeOfHeaders<=mapped.size());
+        std::memcpy(mapped.data(),file.data(),nt.OptionalHeader.SizeOfHeaders);
+        for(std::size_t i=0;i<nt.FileHeader.NumberOfSections;++i) {
+            IMAGE_SECTION_HEADER s{};
+            std::memcpy(&s,file.data()+dos.e_lfanew+sizeof(nt)+i*sizeof(s),sizeof(s));
+            REQUIRE(s.PointerToRawData<=file.size());
+            REQUIRE(s.SizeOfRawData<=file.size()-s.PointerToRawData);
+            REQUIRE(s.VirtualAddress<=mapped.size());
+            REQUIRE(s.SizeOfRawData<=mapped.size()-s.VirtualAddress);
+            std::memcpy(mapped.data()+s.VirtualAddress,file.data()+s.PointerToRawData,s.SizeOfRawData);
+        }
+        const auto base=static_cast<std::uintptr_t>(nt.OptionalHeader.ImageBase);
+        if(reshade) {
+            const auto* factory=rk::findFactoryCreateSite(hash);
+            const auto* buffer=rk::findSwapGetBufferSite(hash);
+            const auto* desc=rk::findSwapGetDescSite(hash);
+            REQUIRE(factory);REQUIRE(buffer);REQUIRE(desc);
+            for(const auto* site:{factory,buffer,desc})
+                REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(mapped,base,hash,
+                    file.size(),site->tableRva,*site)));
+            const auto& swap=rk::reshade680SwapProfile();
+            REQUIRE(std::get<bool>(rk::validateSwapTable(mapped,base,hash,file.size(),
+                swap.tableRva,swap)));
+        } else {
+            const auto sites=rk::findEnbContextSites(hash);
+            REQUIRE(sites.om);REQUIRE(sites.samplers.size()==6);
+            for(const auto* site:{sites.om,sites.viewport,sites.scissor,sites.psResources})
+                REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(mapped,base,hash,
+                    file.size(),site->tableRva,*site)));
+            for(const auto& site:sites.samplers)
+                REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(mapped,base,hash,
+                    file.size(),site.tableRva,site)));
+        }
+        return true;
+    };
+    if(!check(L"RAZKOLBAS_V54_RESHADE_TEST_FILE",true)||
+       !check(L"RAZKOLBAS_V54_ENB_TEST_FILE",false))
+        SKIP("Set both V5.4 local DLL paths for the opt-in PE audit");
 }
 
 TEST_CASE("Only exact ENB creation consumers use the early scene contract", "[owned_route_profile]") {

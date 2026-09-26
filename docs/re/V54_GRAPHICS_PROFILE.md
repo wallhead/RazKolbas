@@ -35,3 +35,21 @@ candidate**, not a claim of DLSS SR or NR in V5.4. The next user-started game
 run must first establish creation, outer swap provenance, Present counts and
 End-menu visibility. Only then should the separate owned scene contracts be
 mapped and tested for this ENB/ReShade pair.
+
+## Subsequent runtime evidence and 0.1.84 source candidate
+
+User-started 0.1.83 runs on 2026-09-26 established that the End menu opens
+and `Quality=Quality` is read from the INI at startup. World buffers and the
+display stayed at 2560x1440 because no early owned reduced scene was routed.
+The ReShade 6.8 factory table was observed live at RVA `0x3ee350`, with
+`CreateSwapChain` at RVA `0x14a4f0`. One loaded-world interval submitted more
+than 11,000 native-size DLAA frames and logged pre-SR NR submissions. A later
+run remained in depth-rejected native fallback. Neither is reduced DLSS SR.
+
+The 0.1.84 source candidate adds separate hash-checked ReShade 6.8 factory
+and nested swap profiles, ENB 0.505 context slots, and version-specific ENB
+GetBuffer/GetDesc caller-return sites. Static mapped-image tests against the
+exact local binaries passed 81 assertions; the new ReShade swap-table audit
+passed 39 assertions. These are offline binary-contract results. Reduced
+scene publication, ENB/native-UI composition, DLSS SR output and stability
+on V5.4 remain **NOT RUN** pending a user-started game test.

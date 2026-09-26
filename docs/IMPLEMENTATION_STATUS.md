@@ -1,6 +1,41 @@
 # Implementation checkpoint
 
-## 0.1.83 V5.4 End-menu compatibility candidate (2026-09-25)
+## 0.1.84 V5.4 reduced-scene route candidate (2026-09-26)
+
+The user changed the V5.4 mod's INI to `Quality=Quality`. The 0.1.83 runtime
+log confirms that value was read at startup, but the world inputs and display
+remained 2560x1440. The missing condition was the ReShade 6.8 factory and
+nested swap route; 0.1.83 contained only the earlier ReShade 6.7.3 exact
+profiles. The End menu did open. In one loaded-world interval native-size
+DLAA exceeded 11,000 submitted frames and pre-SR NR submissions were logged;
+this does not establish DLSS SR. A later interval used native fallback while
+waiting for world-like depth. The INI save path also repeatedly failed with
+Win32 error 1175 under the MO2 virtual path; this did not prevent startup
+reading of Quality and is a separate follow-up.
+
+Source 0.1.84 adds versioned ReShade 6.8 factory/nested swap and ENB 0.505
+context/caller profiles while retaining the earlier profiles and rejecting
+unknown hashes. The local mapped-image ENB/ReShade audit passed 81 assertions;
+the ReShade swap audit passed 39. The final 0.1.84 Release build and all 40
+CTest groups passed. **V5.4 reduced-scene runtime: NOT RUN.**
+No claim of visible DLSS SR is made until the user launches the installed
+candidate and its log shows an early reduced scene plus provider submissions.
+See `docs/re/V54_GRAPHICS_PROFILE.md` for the binary identities and sites.
+
+The 0.1.84 MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.84-v54-owned-sr-candidate.zip`
+(SHA-256 `963df0efb812be6f7b0689ebaca296867238555db7423440a743f0b6481cea87`).
+The installed Release DLL is SHA-256
+`1057da7b5f5b067ab93eb92af418d0d434a1a83cd5596080925ca2a218c5ee86`.
+All five payload hashes in the staged and installed manifests were verified;
+the user's INI and both pinned NVIDIA runtimes were preserved. The prior DLL,
+manifest and INI were copied to ignored
+`artifacts/local/v54-owned-0.1.84-install-backup`. Skyrim was not started by
+the assistant. The exact next action is a user-started V5.4 Skyrim launch and
+loaded-world observation of early scene size, ENB UI routing, NGX submission,
+visual quality and crash status.
+
+## 0.1.83 V5.4 End-menu compatibility candidate (2026-09-25 historical checkpoint)
 
 The first user-started V5.4 launch loaded 0.1.82, but the log recorded
 `Unverified D3D11 owner; existing hook left untouched` and `renderer observation
@@ -17,8 +52,9 @@ passed the opt-in offline mapped-image swap-table audit (31 assertions),
 the targeted Debug tests passed 255 assertions across 15 cases, and the
 Release build passed all 40 CTest groups. Actual V5.4 End-menu rendering is
 **NOT RUN** until the updated DLL is installed and Skyrim is user-started.
-The new ReShade owned-scene and ENB UI routes are **NOT RUN/NOT IMPLEMENTED**;
-DLSS SR and NR are not claimed active in V5.4 by this candidate.
+At this checkpoint, the new ReShade owned-scene and ENB UI routes were **NOT
+RUN/NOT IMPLEMENTED**. Subsequent runtime findings and the 0.1.84 candidate
+are recorded above.
 
 The 0.1.83 package was staged from Release using the latest V5.4 MO2 INI,
 without altering either pinned NVIDIA runtime, and independently verified
@@ -39,9 +75,8 @@ After MO2 was closed, its saved state returned to `+RazKolbas` and `-DLSS5`.
 MO2 was reopened and the profile remained in that state with SHA-256
 `d95bf38b11bca10840639b3e154b5bd22ec46bc43f2529e34a8da1a76fbb6482`.
 All installed manifest payloads verify. Skyrim was not started by the assistant;
-the V5.4 0.1.83 game test remains **NOT RUN**. The next action is a
-user-started V5.4 Skyrim run, followed by log confirmation of the new ENB
-creation/Present hooks and visual confirmation of the End menu.
+the V5.4 0.1.83 game test was **NOT RUN at this checkpoint**. Subsequent
+user-started runs confirmed ENB creation/Present hooks and End-menu visibility.
 
 ## V5.4 MO2 deployment of 0.1.82 (2026-09-25)
 

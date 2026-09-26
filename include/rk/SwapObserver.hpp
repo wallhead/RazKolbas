@@ -3,6 +3,7 @@
 #include <dxgi1_4.h>
 namespace rk {
 inline constexpr std::string_view swapObserverPatchId="reshade673.swapchain-observe-v1";
+inline constexpr std::string_view reshade680SwapObserverPatchId="reshade680.swapchain-observe-v1";
 inline constexpr std::string_view enbSwapObserverPatchId="enb20260508.swapchain-observe-v1";
 inline constexpr std::string_view enb505SwapObserverPatchId="enb0505.swapchain-observe-v1";
 bool validDisabledPatchIds(std::string_view ids);
@@ -39,6 +40,7 @@ struct SwapTableProfile {
     std::string_view id{swapObserverPatchId};
 };
 const SwapTableProfile& reshade673SwapProfile();
+const SwapTableProfile& reshade680SwapProfile();
 const SwapTableProfile& enbSwapProfile();
 const SwapTableProfile& enb505SwapProfile();
 const SwapTableProfile* findSwapProfile(std::string_view hash,std::uintptr_t tableRva);

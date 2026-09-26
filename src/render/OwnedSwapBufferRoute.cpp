@@ -61,7 +61,7 @@ HRESULT OwnedSwapBufferRoute::getBufferForConsumers(std::uintptr_t returnAddress
     IDXGISwapChain* swap,UINT index,REFIID iid,void** output) const noexcept {
     const auto game=isSkyrim1170OwnedSceneBufferCall(returnAddress,
         verifiedGameBase,verifiedGameHash,swap,swap_.Get(),index,iid);
-    const auto enb=isEnb20260508OwnedSceneBufferCall(returnAddress,
+    const auto enb=isVerifiedEnbOwnedSceneBufferCall(returnAddress,
         verifiedEnbBase,verifiedEnbHash)&&swap==swap_.Get()&&index==0&&
         IsEqualIID(iid,__uuidof(ID3D11Texture2D));
     return getBuffer(swap,index,iid,output,game||enb);
@@ -73,7 +73,7 @@ HRESULT OwnedSwapBufferRoute::getDescForCaller(std::uintptr_t returnAddress,
     if(!nextDesc_)return DXGI_ERROR_INVALID_CALL;
     const auto result=nextDesc_(swap,output);
     if(SUCCEEDED(result)&&scene_&&swap==swap_.Get()&&
-       isEnb20260508ReducedDescriptionCall(returnAddress,
+       isVerifiedEnbReducedDescriptionCall(returnAddress,
            verifiedEnbBase,verifiedEnbHash)) {
         output->BufferDesc.Width=scene_->renderExtent().width;
         output->BufferDesc.Height=scene_->renderExtent().height;

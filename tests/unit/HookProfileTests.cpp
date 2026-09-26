@@ -149,6 +149,7 @@ TEST_CASE("Local ENB or ReShade reproduces the swap-chain profile without execut
     const auto* expected=rk::findSwapProfile(hash,
         hash==rk::enbSwapProfile().hash?rk::enbSwapProfile().tableRva:
         hash==rk::enb505SwapProfile().hash?rk::enb505SwapProfile().tableRva:
+        hash==rk::reshade680SwapProfile().hash?rk::reshade680SwapProfile().tableRva:
         rk::reshade673SwapProfile().tableRva);
     REQUIRE(expected!=nullptr);
     REQUIRE(file.size()==expected->fileSize);REQUIRE(hash==expected->hash);

@@ -65,6 +65,7 @@ struct BufferTraceLease {
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> earlyContext;
     std::uintptr_t gameBase{};
     std::string gameHash;
+    std::string enbHash;
     std::atomic<std::uintptr_t> enbBase{0};
     std::atomic<bool> ownedArmed{false};
     std::atomic<bool> integrationReady{false};
@@ -298,8 +299,7 @@ std::uintptr_t resolveVerifiedEnbBase(BufferTraceLease& state,
             reinterpret_cast<LPCWSTR>(caller),&owner)||!owner)return 0;
         struct Reference {HMODULE value;~Reference(){if(value)FreeLibrary(value);}} reference{owner};
         const auto identity=identify(owner);
-        if(identity.hash!="47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58"||
-           identity.size!=4664320)return 0;
+        if(identity.hash!=state.enbHash||!findEnbContextSites(identity.hash).om)return 0;
         const auto base=reinterpret_cast<std::uintptr_t>(owner);
         std::uintptr_t expected{};
         state.enbBase.compare_exchange_strong(expected,base,
@@ -317,7 +317,7 @@ HRESULT WINAPI swapGetBufferTrace(IDXGISwapChain* swap,UINT index,
         reinterpret_cast<std::uintptr_t>(caller)):0;
     const auto result=owned?state->route->getBufferForConsumers(
         reinterpret_cast<std::uintptr_t>(caller),state->gameBase,state->gameHash,
-        enbBase,"47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
+        enbBase,state->enbHash,
         swap,index,iid,output):state->next(swap,index,iid,output);
     const auto sequence=state->calls.fetch_add(1,std::memory_order_relaxed)+1;
     if(sequence<=64) {
@@ -354,7 +354,7 @@ HRESULT WINAPI swapGetDescTrace(IDXGISwapChain* swap,
         return state->nextDesc(swap,output);
     const auto enbBase=resolveVerifiedEnbBase(*state,caller);
     return state->route->getDescForCaller(caller,enbBase,
-        "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",
+        state->enbHash,
         swap,output);
 }
 void publishEarlySpatialFallback(BufferTraceLease& state,
@@ -405,15 +405,20 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
         reinterpret_cast<LPCWSTR>(table),&owner))
         return Error{ErrorCode::Unsupported,"Returned swap table has no loaded-module owner"};
     struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
-    const auto& site=reshade673SwapGetBufferSite();
-    const auto& descSite=reshade673SwapGetDescSite();
     const auto id=identify(owner);
+    const auto* sitePtr=findSwapGetBufferSite(id.hash);
+    const auto* descPtr=findSwapGetDescSite(id.hash);
+    if(!sitePtr||!descPtr)return Error{ErrorCode::Unsupported,
+        "Returned swap is not a verified ReShade version"};
+    const auto& site=*sitePtr;
+    const auto& descSite=*descPtr;
     const auto base=reinterpret_cast<std::uintptr_t>(owner);
     const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
     if(tableAddress<base||tableAddress-base!=site.tableRva)
         return Error{ErrorCode::Unsupported,"Returned swap is not the verified ReShade table"};
     const auto mapped=snapshotModule(owner,site.imageSize);
-    const auto& swapProfile=reshade673SwapProfile();
+    const auto& swapProfile=id.hash==reshade680SwapProfile().hash?
+        reshade680SwapProfile():reshade673SwapProfile();
     const auto swapValidated=validateSwapTable(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(tableAddress-base),swapProfile);
     if(const auto error=std::get_if<Error>(&swapValidated))return *error;
@@ -425,6 +430,9 @@ Result<bool> installSwapGetBufferTrace(IDXGISwapChain* swap) {
     if(const auto error=std::get_if<Error>(&descValidated))return *error;
     if(bufferTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     auto pending=std::make_unique<BufferTraceLease>();
+    if(const auto* factory=factoryTrace.load(std::memory_order_acquire);
+       factory&&factory->exactEnbOwner)
+        pending->enbHash=identify(factory->exactEnbOwner).hash;
     pending->next=reinterpret_cast<SwapGetBufferFn>(base+site.methodRva);
     pending->nextDesc=reinterpret_cast<SwapGetDescFn>(base+descSite.methodRva);
     pending->nextPresent=reinterpret_cast<PresentFn>(base+swapProfile.methods[1].rva);
@@ -467,12 +475,14 @@ Result<bool> validateEarlyEnbUiContract(HMODULE module) {
     if(!module)return Error{ErrorCode::Unsupported,
         "Exact ENB creation owner is unavailable"};
     const auto identity=identify(module);
-    const auto& om=enbContextOmSite();
+    const auto sites=findEnbContextSites(identity.hash);
+    if(!sites.om)return Error{ErrorCode::Unsupported,"ENB creation owner identity differs"};
+    const auto& om=*sites.om;
     if(identity.hash!=om.moduleSha256||identity.size!=om.fileSize)
         return Error{ErrorCode::Unsupported,"ENB creation owner identity differs"};
     const auto base=reinterpret_cast<std::uintptr_t>(module);
     const auto image=snapshotModule(module,om.imageSize);
-    for(const auto* site:{&om,&enbContextViewportSite(),&enbContextPsResourcesSite()}) {
+    for(const auto* site:{sites.om,sites.viewport,sites.psResources}) {
         const auto checked=validateOwnedRouteSite(image,base,identity.hash,
             identity.size,site->tableRva,*site);
         if(const auto error=std::get_if<Error>(&checked))return *error;
@@ -591,11 +601,11 @@ HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
 }
 Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
     auto* observer=lease.load(std::memory_order_acquire);
-    if(!observer||!observer->exactEnbOwner||
-       patchDisabled(observer->disabledPatchIds,enbContextOmSite().id)||
-       patchDisabled(observer->disabledPatchIds,enbContextViewportSite().id)||
-       patchDisabled(observer->disabledPatchIds,enbContextPsResourcesSite().id))
-        return false;
+    if(!observer||!observer->exactEnbOwner)return false;
+    const auto enbSites=findEnbContextSites(identify(observer->exactEnbOwner).hash);
+    if(!enbSites.om||patchDisabled(observer->disabledPatchIds,enbSites.om->id)||
+       patchDisabled(observer->disabledPatchIds,enbSites.viewport->id)||
+       patchDisabled(observer->disabledPatchIds,enbSites.psResources->id))return false;
     if(factoryTraceAttempted.test_and_set(std::memory_order_acq_rel))return false;
     if(!adapter)return Error{ErrorCode::Unavailable,"No adapter for early factory trace"};
     Microsoft::WRL::ComPtr<IDXGIFactory> factory;
@@ -607,8 +617,11 @@ Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
         reinterpret_cast<LPCWSTR>(table),&owner))
         return Error{ErrorCode::Unsupported,"Factory table has no loaded-module owner"};
     struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
-    const auto& site=reshade673FactoryCreateSite();
     const auto id=identify(owner);
+    const auto* sitePtr=findFactoryCreateSite(id.hash);
+    if(!sitePtr)return Error{ErrorCode::Unsupported,
+        "Factory owner is not a verified ReShade version"};
+    const auto& site=*sitePtr;
     const auto base=reinterpret_cast<std::uintptr_t>(owner);
     const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
     if(tableAddress<base||tableAddress-base!=site.tableRva)
@@ -981,17 +994,6 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
        !reducedScene||!nativeTarget||!domain.plan().valid())
         return Error{ErrorCode::InvalidInput,"Owned UI context is not prepared"};
-    const auto& omSite=enbContextOmSite();
-    const auto& viewportSite=enbContextViewportSite();
-    const auto& scissorSite=enbContextScissorSite();
-    const auto& psSite=enbContextPsResourcesSite();
-    const auto samplerSites=enbContextSamplerSites();
-    if(patchDisabled(disabledPatchIds,omSite.id)||
-       patchDisabled(disabledPatchIds,viewportSite.id)||
-       patchDisabled(disabledPatchIds,scissorSite.id)||
-       patchDisabled(disabledPatchIds,psSite.id))return false;
-    for(const auto& site:samplerSites)
-        if(patchDisabled(disabledPatchIds,site.id))return false;
     try {
         auto** table=*reinterpret_cast<void***>(context);
         HMODULE owner=nullptr;
@@ -1000,6 +1002,20 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
             return Error{ErrorCode::Unsupported,"UI context table has no loaded-module owner"};
         struct ModuleReference {HMODULE value;~ModuleReference(){FreeLibrary(value);}} reference{owner};
         const auto id=identify(owner);
+        const auto sites=findEnbContextSites(id.hash);
+        if(!sites.om)return Error{ErrorCode::Unsupported,
+            "UI context owner is not a verified ENB version"};
+        const auto& omSite=*sites.om;
+        const auto& viewportSite=*sites.viewport;
+        const auto& scissorSite=*sites.scissor;
+        const auto& psSite=*sites.psResources;
+        const auto samplerSites=sites.samplers;
+        if(patchDisabled(disabledPatchIds,omSite.id)||
+           patchDisabled(disabledPatchIds,viewportSite.id)||
+           patchDisabled(disabledPatchIds,scissorSite.id)||
+           patchDisabled(disabledPatchIds,psSite.id))return false;
+        for(const auto& site:samplerSites)
+            if(patchDisabled(disabledPatchIds,site.id))return false;
         const auto base=reinterpret_cast<std::uintptr_t>(owner);
         const auto tableAddress=reinterpret_cast<std::uintptr_t>(table);
         if(tableAddress<base||tableAddress-base!=omSite.tableRva||
@@ -1259,9 +1275,8 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         auto pending=std::make_unique<ObserverLease>();
         pending->original=reinterpret_cast<CreateD3D11>(original); pending->notification=notification;
         pending->disabledPatchIds=settings.get<Text>("Patching.DisabledPatchIds").value;
-        constexpr std::string_view exactEnbHash=
-            "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58";
-        if(ownerIdentity.hash==exactEnbHash&&ownerIdentity.size==4664320)
+        if(const auto sites=findEnbContextSites(ownerIdentity.hash);
+           sites.om&&ownerIdentity.size==sites.om->fileSize)
             pending->exactEnbOwner=owner;
         HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
         constexpr DWORD pinFlags=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;

@@ -45,7 +45,8 @@ bool validDisabledPatchIds(std::string_view ids) {
     while(true) {
         const auto comma=ids.find(',');const auto id=trimId(ids.substr(0,comma));
         const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:
-            id==enbSwapObserverPatchId?4U:id==enb505SwapObserverPatchId?8U:0U;
+            id==enbSwapObserverPatchId?4U:id==enb505SwapObserverPatchId?8U:
+            id==reshade680SwapObserverPatchId?16U:0U;
         if(!bit||(seen&bit))return false;
         seen|=bit;
         if(comma==ids.npos)return true;
@@ -82,6 +83,16 @@ const SwapTableProfile& reshade673SwapProfile() {
         {39,0x13c060,{0x44,0x89,0x4c,0x24,0x20,0x44,0x89,0x44,0x24,0x18,0x55,0x53,0x56,0x57,0x41,0x54}}
     }}};return profile;
 }
+const SwapTableProfile& reshade680SwapProfile() {
+    static constexpr SwapTableProfile profile{
+        "b2945c29e7095491a901746b400e58db9b1592ab092bacf2a888ce37f02d08da",5255448,0x534000,0x3ee960,{{
+        {2,0x14c010,{0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x74,0x24,0x18,0x57,0x48,0x83,0xec,0x30,0x48}},
+        {8,0x14c140,{0x48,0x89,0x5c,0x24,0x18,0x55,0x56,0x57,0x41,0x56,0x41,0x57,0x48,0x81,0xec,0x90}},
+        {13,0x14c840,{0x48,0x8b,0xc4,0x44,0x89,0x40,0x18,0x89,0x50,0x10,0x48,0x89,0x48,0x08,0x55,0x53}},
+        {22,0x14cef0,{0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x54,0x41,0x56}},
+        {39,0x14d550,{0x48,0x8b,0xc4,0x44,0x89,0x48,0x20,0x44,0x89,0x40,0x18,0x48,0x89,0x48,0x08,0x55}}
+    }},5,reshade680SwapObserverPatchId};return profile;
+}
 const SwapTableProfile& enbSwapProfile() {
     static constexpr SwapTableProfile profile{
         "47ff220dd26a44520d4cec2d515d89effe87b632c1885c32388c93e8d0ceda58",4664320,0xaae000,0x1a4848,{{
@@ -101,7 +112,8 @@ const SwapTableProfile& enb505SwapProfile() {
     }},3,enb505SwapObserverPatchId};return profile;
 }
 const SwapTableProfile* findSwapProfile(std::string_view hash,std::uintptr_t tableRva) {
-    for(const auto* profile:{&enbSwapProfile(),&enb505SwapProfile(),&reshade673SwapProfile()})
+    for(const auto* profile:{&enbSwapProfile(),&enb505SwapProfile(),
+        &reshade673SwapProfile(),&reshade680SwapProfile()})
         if(profile->hash==hash&&profile->tableRva==tableRva)return profile;
     return nullptr;
 }
