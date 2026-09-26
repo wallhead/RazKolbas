@@ -48,6 +48,24 @@ struct UiFrameObservation {
     UINT firstSampledDepthSlot{~0u};
     std::array<UiObservationEvent,64> events{};
 };
+enum class UiFaultTraceKind { RenderTargets, Viewport, SampledTarget };
+struct UiFaultTraceResource {
+    std::uintptr_t id{};
+    Extent extent{};
+    DXGI_FORMAT format{DXGI_FORMAT_UNKNOWN};
+};
+struct UiFaultTraceEvent {
+    UiFaultTraceKind kind{UiFaultTraceKind::RenderTargets};
+    UINT count{},slot{};
+    std::array<UiFaultTraceResource,4> targets{};
+    UiFaultTraceResource depth{};
+    Extent viewport{};
+};
+struct UiFaultTrace {
+    std::uint64_t frame{};
+    std::uint32_t count{},dropped{};
+    std::array<UiFaultTraceEvent,256> events{};
+};
 enum class UiObservationLayout { FourPairs, FourPairsThenSceneBind };
 bool matchesNativeUiObservation(const UiFrameObservation& observation,
     Extent render,std::uintptr_t sceneId,UiObservationLayout layout) noexcept;
@@ -82,11 +100,14 @@ public:
     bool beginObservation(std::uint64_t frame) noexcept;
     std::optional<UiFrameObservation> finishObservation(
         std::uint64_t frame) noexcept;
+    // Capture one full menu-to-Present interval after the first late-route
+    // incompatibility. This only observes context binds; it never redirects.
+    bool beginFaultTrace(std::uint64_t frame) noexcept;
+    std::optional<UiFaultTrace> finishFaultTrace(std::uint64_t frame) noexcept;
     // Allocate display-sized counterparts for the reduced auxiliary colour
     // and depth resources learned by the read-only menu trace. Allocation is
     // kept outside the context callbacks.
     HRESULT prepareObservedCompanions() noexcept;
-    bool hasUnpreparedAuxiliary() const noexcept;
     bool companionsReady() const noexcept;
     std::optional<UiDepthViewContract> depthViewContract() const noexcept;
     bool latePassRoutingAvailable() const noexcept {
@@ -120,8 +141,6 @@ private:
         Microsoft::WRL::ComPtr<IUnknown> sourceId;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sourceView;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> nativeView;
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sourceShaderView,nativeShaderView;
-        bool requiresSampledView{};
     };
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
@@ -140,9 +159,12 @@ private:
     bool latePassPermanentlyDisabled_{};
     unsigned latePassFaults_{};
     std::uint64_t latePassFaultFrame_{};
-    bool learnedSampledAuxiliaryOnFault_{};
     UiCompatibilityFault faultInfo_{};
     UiFrameObservation observation_{};
+    UiFaultTrace faultTrace_{};
+    std::array<std::uintptr_t,48> faultTraceTargetIds_{};
+    unsigned faultTraceTargetCount_{};
+    bool faultTraceArmed_{true},faultTraceNextFrame_{},faultTracing_{};
     bool observing_{},observeViewport_{};
     std::uint32_t completedObservations_{};
     std::uint32_t validRouteObservations_{};

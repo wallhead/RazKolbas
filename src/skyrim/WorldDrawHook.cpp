@@ -912,6 +912,9 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
             if(ui->resumeLatePassRouting(frame,state->ownedSceneGate.ready()))
                 spdlog::info("Owned native UI late route resumed at frame {} after scene admission and 120-frame cooldown",
                     frame);
+            if(ui->beginFaultTrace(frame))
+                spdlog::info("Owned UI post-fault bind trace started at frame {}; observation only",
+                    frame);
             if(frame<=12)ui->beginObservation(frame);
             if(frame>12&&state->ownedSceneGate.ready()&&
                ui->latePassRoutingAvailable()&&
@@ -1623,16 +1626,35 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                     }catch(...) {}
                 }
             }
-            if(ui->hasUnpreparedAuxiliary()) {
-                const auto prepared=ui->prepareObservedCompanions();
-                if(FAILED(prepared)) {
-                    if(frame%600==0)
-                        try {spdlog::warn("Owned sampled UI auxiliary preparation frame {} failed: HRESULT=0x{:08x}",
-                            frame,static_cast<std::uint32_t>(prepared));}catch(...) {}
-                } else if(!ui->hasUnpreparedAuxiliary()) {
-                    try {spdlog::info("Owned sampled UI auxiliary RTV/SRV prepared at frame {} for inventory compositing",
-                        frame);}catch(...) {}
-                }
+            if(auto trace=ui->finishFaultTrace(frame)) {
+                try {
+                    spdlog::info("Owned UI post-fault bind trace frame {}: events={} dropped={}; observation only",
+                        frame,trace->count,trace->dropped);
+                    for(std::uint32_t i=0;i<trace->count;++i) {
+                        const auto& event=trace->events[i];
+                        if(event.kind==UiFaultTraceKind::Viewport) {
+                            spdlog::info("Owned UI fault trace {} event {}: viewport count={} extent={}x{}",
+                                frame,i,event.count,event.viewport.width,event.viewport.height);
+                        } else if(event.kind==UiFaultTraceKind::SampledTarget) {
+                            const auto& target=event.targets[0];
+                            spdlog::info("Owned UI fault trace {} event {}: PS slot={} callCount={} id=0x{:x} format={} extent={}x{}",
+                                frame,i,event.slot,event.count,target.id,
+                                static_cast<unsigned>(target.format),
+                                target.extent.width,target.extent.height);
+                        } else {
+                            const auto& a=event.targets[0];
+                            const auto& b=event.targets[1];
+                            const auto& c=event.targets[2];
+                            const auto& d=event.depth;
+                            spdlog::info("Owned UI fault trace {} event {}: OM count={} target0=0x{:x}/{} {}x{} target1=0x{:x}/{} {}x{} target2=0x{:x}/{} {}x{} depth=0x{:x}/{} {}x{}",
+                                frame,i,event.count,a.id,static_cast<unsigned>(a.format),
+                                a.extent.width,a.extent.height,b.id,
+                                static_cast<unsigned>(b.format),b.extent.width,b.extent.height,
+                                c.id,static_cast<unsigned>(c.format),c.extent.width,c.extent.height,
+                                d.id,static_cast<unsigned>(d.format),d.extent.width,d.extent.height);
+                        }
+                    }
+                } catch(...) {}
             }
         }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
@@ -1649,11 +1671,10 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 frame);}catch(...) {}
         } else if(ui->compatibilityFault()) {
             const auto fault=ui->compatibilityFaultInfo();
-            try {spdlog::info("Owned UI fault frame {} source target PS reads={} firstSlot={} sampledCompanionCandidate={}",
+            try {spdlog::info("Owned UI fault frame {} source target PS reads={} firstSlot={}; observation only",
                 frame,fault.unknownTargetSrvReads,
                 fault.unknownTargetFirstSrvSlot==~0u?-1:
-                    static_cast<int>(fault.unknownTargetFirstSrvSlot),
-                ui->hasUnpreparedAuxiliary());}catch(...) {}
+                    static_cast<int>(fault.unknownTargetFirstSrvSlot));}catch(...) {}
             ui->suspendLatePassRouting(frame);
             state->menuSceneGate.record(frame,std::nullopt,std::nullopt);
             if(!closingDomain->closePublishedFrame(frame,
