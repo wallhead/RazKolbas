@@ -1,6 +1,37 @@
 # Implementation checkpoint
 
-## 0.1.84 V5.4 reduced-scene route candidate (2026-09-26)
+## 0.1.85 V5.4 native UI boundary candidate (2026-09-26)
+
+After the 0.1.84 reduced DLSS SR run, the user reported that UI blurs while
+moving. The exact prepared input capture confirms HUD bars/text already in
+the 1707x960 source. Twelve consecutive menu-to-Present traces in the
+user-started run had nine events: four reduced scene render-target/viewport
+pairs followed by a reduced scene singleton bind with the same depth. The
+existing UI observation contract accepted only eight events and latched a
+contract fault, leaving native UI companion routing unavailable. The source
+candidate adds a separate, exact ENB 0.505 nine-event contract; the earlier
+ENB profile retains its eight-event contract. The new pure contract test
+rejects altered depth and target count, and the WARP integration test exercises
+both layouts with native colour/depth translation. Targeted `[native_ui]`
+tests passed 226 assertions in three cases. **V5.4 UI visual test: NOT RUN**
+until a user-started game run; the change is not yet claimed to fix visible
+HUD blur.
+
+The final 0.1.85 Release build and all 40 CTest groups passed. The MO2 package
+is `D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.85-v54-native-ui-candidate.zip`
+(SHA-256 `1d6c690608cf51e8946ee4047bdf4ecf4d7a77e67472220e8720c5af93f2ca13`).
+SkyrimSE.exe had exited before installation. Only the RazKolbas DLL and
+manifest were replaced in the V5.4 MO2 mod; the INI and NVIDIA SR/NR runtimes
+remained byte-identical. All five installed payload hashes matched the
+manifest. The installed DLL SHA-256 is
+`fdea4ed2a6c8e9b9be219bf0f48f1a58258d753d1631326630b4b4f004f75760`.
+The previous DLL, manifest and INI were copied to ignored
+`artifacts/local/v54-ui-0.1.85-install-backup`. The exact next action is a
+user-started V5.4 loaded-world test: confirm native UI companion readiness,
+menu-boundary publication, sustained SR/NR submissions, visual HUD sharpness
+while moving, and crash status. The assistant did not start Skyrim.
+
+## 0.1.84 V5.4 reduced-scene route runtime observation (2026-09-26)
 
 The user changed the V5.4 mod's INI to `Quality=Quality`. The 0.1.83 runtime
 log confirms that value was read at startup, but the world inputs and display
@@ -17,9 +48,7 @@ Source 0.1.84 adds versioned ReShade 6.8 factory/nested swap and ENB 0.505
 context/caller profiles while retaining the earlier profiles and rejecting
 unknown hashes. The local mapped-image ENB/ReShade audit passed 81 assertions;
 the ReShade swap audit passed 39. The final 0.1.84 Release build and all 40
-CTest groups passed. **V5.4 reduced-scene runtime: NOT RUN.**
-No claim of visible DLSS SR is made until the user launches the installed
-candidate and its log shows an early reduced scene plus provider submissions.
+CTest groups passed. The subsequent V5.4 runtime outcome is recorded below.
 See `docs/re/V54_GRAPHICS_PROFILE.md` for the binary identities and sites.
 
 The 0.1.84 MO2 package is
@@ -34,6 +63,33 @@ manifest and INI were copied to ignored
 the assistant. The exact next action is a user-started V5.4 Skyrim launch and
 loaded-world observation of early scene size, ENB UI routing, NGX submission,
 visual quality and crash status.
+
+The user started SkyrimSE.exe PID 30080 at 08:41:11 and loaded a world. The
+installed DLL hash matched the tested Release build. At 08:42:09 the exact
+ReShade 6.8 factory and nested swap hooks installed; the log reported an
+early owned scene of **1707x960** for a **2560x1440** display before ENB
+GetDesc/GetBuffer. At 08:42:18 the ENB 0.505 UI context hooks installed and
+early scene integration completed. Initial empty/loading frames correctly
+used the spatial fallback. At frame 9421 the colour/depth admission gate
+accepted a world-like source. At frame 9541 the first NR pre-SR submission
+completed, NGX evaluation returned, and an exact three-stage capture was
+written. By 08:46:36 the log reported 9,060 provider submissions and 9,000
+NR pre-SR submissions; pre-Present mode was 2 with zero fallbacks in flight.
+The process was responding, Present HRESULTs remained zero, and no new
+warning/error lines appeared in the checked post-admission interval. This is
+an actual-game PASS for reduced input routing and repeated DLSS SR/NR
+submission in this interval, not a claim of long-term stability or final
+visual quality.
+
+The capture manifest records prepared colour at 1707x960 and raw DLSS plus
+final composition at 2560x1440. Inspection shows a nonblack scene and HUD
+elements already in the prepared pre-SR colour. Native-resolution HUD
+separation is therefore still incomplete for at least these elements. The
+same-frame native UI sequence capture reported zero entry snapshots. No
+user visual-quality verdict was received for this run. The next engineering
+task is to identify which HUD draw path enters the reduced scene before SR
+and move or reconstruct that UI at display resolution without disturbing
+ENB/ReShade placement. Preserve this runtime capture outside Git.
 
 ## 0.1.83 V5.4 End-menu compatibility candidate (2026-09-25 historical checkpoint)
 

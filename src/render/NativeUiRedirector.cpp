@@ -114,9 +114,45 @@ bool hasStencil(DXGI_FORMAT format) noexcept {
         format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 }
 }
+bool matchesNativeUiObservation(const UiFrameObservation& observation,
+    Extent render,std::uintptr_t sceneId,UiObservationLayout layout) noexcept {
+    const auto count=layout==UiObservationLayout::FourPairsThenSceneBind?9u:8u;
+    if(!render.valid()||!sceneId||observation.dropped||
+       observation.count!=count)return false;
+    const auto isRender=[render](Extent value) {
+        return value.width==render.width&&value.height==render.height;
+    };
+    std::uintptr_t depth{};
+    for(std::uint32_t i=0;i<8;++i) {
+        const auto& event=observation.events[i];
+        if(i%2) {
+            if(event.kind!=UiObservationKind::Viewport||
+               !isRender(event.viewport))return false;
+            continue;
+        }
+        if(event.kind!=UiObservationKind::RenderTargets||event.sceneSlot!=0||
+           !event.hasDepth||!isRender(event.depth)||!isRender(event.targets[0])||
+           event.targetIdentities[0]!=sceneId)return false;
+        if(!depth)depth=event.depthIdentity;
+        if(!depth||event.depthIdentity!=depth)return false;
+        if(i==0) {
+            if(event.targetCount!=2||!isRender(event.targets[1])||
+               !event.targetIdentities[1]||
+               event.targetIdentities[1]==event.targetIdentities[0])return false;
+        } else if(event.targetCount!=1)return false;
+    }
+    if(layout==UiObservationLayout::FourPairsThenSceneBind) {
+        const auto& final=observation.events[8];
+        if(final.kind!=UiObservationKind::RenderTargets||final.targetCount!=1||
+           final.sceneSlot!=0||!final.hasDepth||!isRender(final.depth)||
+           !isRender(final.targets[0])||final.targetIdentities[0]!=sceneId||
+           final.depthIdentity!=depth)return false;
+    }
+    return true;
+}
 HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderThread,
     UiContextNext next,ID3D11Texture2D* reducedScene,
-    ID3D11RenderTargetView* nativeRtv) noexcept {
+    ID3D11RenderTargetView* nativeRtv,UiObservationLayout layout) noexcept {
     if(context_||!context||!renderThread||!next.om||!next.viewport||
        !next.scissor||!next.ps||
        !reducedScene||!nativeRtv||!route_.plan().valid()||
@@ -138,6 +174,7 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     scene_=reducedScene;sceneId_=canonical(reducedScene);
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     generation_=route_.plan().generation;compatibilityFault_=false;faultInfo_={};
+    observationLayout_=layout;
     return S_OK;
 }
 HRESULT NativeUiRedirector::replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept {
@@ -242,32 +279,8 @@ std::optional<UiFrameObservation> NativeUiRedirector::finishObservation(
     return observation_;
 }
 bool NativeUiRedirector::observationMatchesRoute() const noexcept {
-    if(observation_.dropped||observation_.count!=8)return false;
-    const auto render=route_.plan().render;
-    const auto isRender=[render](Extent value) {
-        return value.width==render.width&&value.height==render.height;
-    };
-    std::uintptr_t depth{};
-    for(std::uint32_t i=0;i<observation_.count;++i) {
-        const auto& event=observation_.events[i];
-        if(i%2) {
-            if(event.kind!=UiObservationKind::Viewport||
-               !isRender(event.viewport))return false;
-            continue;
-        }
-        if(event.kind!=UiObservationKind::RenderTargets||event.sceneSlot!=0||
-           !event.hasDepth||!isRender(event.depth)||!isRender(event.targets[0])||
-           event.targetIdentities[0]!=reinterpret_cast<std::uintptr_t>(sceneId_.Get()))
-            return false;
-        if(!depth)depth=event.depthIdentity;
-        if(!depth||event.depthIdentity!=depth)return false;
-        if(i==0) {
-            if(event.targetCount!=2||!isRender(event.targets[1])||
-               !event.targetIdentities[1]||
-               event.targetIdentities[1]==event.targetIdentities[0])return false;
-        } else if(event.targetCount!=1)return false;
-    }
-    return true;
+    return matchesNativeUiObservation(observation_,route_.plan().render,
+        reinterpret_cast<std::uintptr_t>(sceneId_.Get()),observationLayout_);
 }
 void NativeUiRedirector::rememberObservedCompanions(UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth,
@@ -522,6 +535,7 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=false;
+    observationLayout_=UiObservationLayout::FourPairs;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
     validRouteObservations_=0;observationContractFault_=false;
     observedMrtDepth_=observedSingleDepth_=false;

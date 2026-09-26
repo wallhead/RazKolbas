@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/ReducedSdrSurface.hpp"
 #include <wrl/client.h>
@@ -8,6 +9,44 @@ using Microsoft::WRL::ComPtr;
 void STDMETHODCALLTYPE forwardOm(ID3D11DeviceContext* context,UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) {
     context->OMSetRenderTargets(count,views,depth);
+}
+
+TEST_CASE("V5.4 final scene bind is admitted only by its exact UI layout",
+    "[native_ui]") {
+    constexpr rk::Extent render{1707,960};
+    constexpr std::uintptr_t scene=0x1000,aux=0x2000,depth=0x3000;
+    rk::UiFrameObservation trace{};
+    trace.count=9;
+    for(unsigned i=0;i<8;++i) {
+        auto& event=trace.events[i];
+        if(i%2) {
+            event.kind=rk::UiObservationKind::Viewport;
+            event.viewport=render;
+        } else {
+            event.kind=rk::UiObservationKind::RenderTargets;
+            event.targetCount=i?1:2;
+            event.sceneSlot=0;event.hasDepth=true;event.depth=render;
+            event.depthIdentity=depth;event.targets[0]=render;
+            event.targetIdentities[0]=scene;
+            if(!i) {event.targets[1]=render;event.targetIdentities[1]=aux;}
+        }
+    }
+    trace.events[8]=trace.events[6];
+    REQUIRE(rk::matchesNativeUiObservation(trace,render,scene,
+        rk::UiObservationLayout::FourPairsThenSceneBind));
+    REQUIRE_FALSE(rk::matchesNativeUiObservation(trace,render,scene,
+        rk::UiObservationLayout::FourPairs));
+    trace.events[8].depthIdentity=0x4000;
+    REQUIRE_FALSE(rk::matchesNativeUiObservation(trace,render,scene,
+        rk::UiObservationLayout::FourPairsThenSceneBind));
+    trace.events[8].depthIdentity=depth;
+    trace.events[8].targetCount=2;
+    REQUIRE_FALSE(rk::matchesNativeUiObservation(trace,render,scene,
+        rk::UiObservationLayout::FourPairsThenSceneBind));
+    trace.events[8].targetCount=1;
+    trace.count=8;
+    REQUIRE(rk::matchesNativeUiObservation(trace,render,scene,
+        rk::UiObservationLayout::FourPairs));
 }
 void STDMETHODCALLTYPE forwardVp(ID3D11DeviceContext* context,UINT count,
     const D3D11_VIEWPORT* views) { context->RSSetViewports(count,views); }
@@ -168,6 +207,7 @@ TEST_CASE("WARP cached reduced RTV and viewport bind routes native UI after publ
 }
 
 TEST_CASE("WARP menu marker observes reduced scene binds without changing them", "[native_ui]") {
+    const bool trailing=GENERATE(false,true);
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     D3D_FEATURE_LEVEL level{};
@@ -223,7 +263,9 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(route.begin(7,1,GetCurrentThreadId()));
     rk::NativeUiRedirector redirect(route);
     REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
-        {&forwardOm,&forwardVp,&forwardScissor,&forwardPs},scene.texture(),nativeView.Get())));
+        {&forwardOm,&forwardVp,&forwardScissor,&forwardPs},scene.texture(),nativeView.Get(),
+        trailing?rk::UiObservationLayout::FourPairsThenSceneBind:
+            rk::UiObservationLayout::FourPairs)));
     auto* sceneView=scene.renderTarget();
     const D3D11_VIEWPORT reducedViewport{0,0,32,16,0,1};
     std::array<ID3D11RenderTargetView*,2> reducedTargets{
@@ -242,10 +284,11 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
         redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
         redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
     }
+    if(trailing)redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
     auto observed=redirect.finishObservation(7);
     REQUIRE(observed.has_value());
     REQUIRE(observed->frame==7);
-    REQUIRE(observed->count==8);
+    REQUIRE(observed->count==(trailing?9u:8u));
     REQUIRE(observed->sampledDepthReads==1);
     REQUIRE(observed->firstSampledDepthSlot==3);
     REQUIRE(observed->events[0].kind==rk::UiObservationKind::RenderTargets);
@@ -283,9 +326,10 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
         redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
         redirect.onRSSetViewports(context.Get(),1,&reducedViewport);
     }
+    if(trailing)redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
     observed=redirect.finishObservation(7);
     REQUIRE(observed.has_value());
-    REQUIRE(observed->count==8);
+    REQUIRE(observed->count==(trailing?9u:8u));
     REQUIRE(observed->events[0].targetIdentities[1]==
         reinterpret_cast<std::uintptr_t>(identity(secondAuxiliary.Get()).Get()));
     REQUIRE(SUCCEEDED(redirect.prepareObservedCompanions()));

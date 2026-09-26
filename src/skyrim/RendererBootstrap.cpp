@@ -1045,8 +1045,11 @@ Result<bool> installOwnedUiContextHooks(ID3D11DeviceContext* context,
         for(std::size_t i=0;i<samplerSites.size();++i)
             pending->nextSamplers[i]=reinterpret_cast<UiHookLease::Sampler>(
                 base+samplerSites[i].methodRva);
+        const auto observationLayout=id.hash==enb505SwapProfile().hash?
+            UiObservationLayout::FourPairsThenSceneBind:
+            UiObservationLayout::FourPairs;
         const auto configured=pending->redirect.configure(context,GetCurrentThreadId(),
-            pending->next,reducedScene,nativeTarget);
+            pending->next,reducedScene,nativeTarget,observationLayout);
         if(FAILED(configured))
             return Error{ErrorCode::Conflict,"Owned UI redirector rejected the ENB context or target"};
         if(FAILED(pending->samplerBias.configure(context,mipBias)))

@@ -53,3 +53,23 @@ exact local binaries passed 81 assertions; the new ReShade swap-table audit
 passed 39 assertions. These are offline binary-contract results. Reduced
 scene publication, ENB/native-UI composition, DLSS SR output and stability
 on V5.4 remain **NOT RUN** pending a user-started game test.
+
+## 0.1.84 loaded-world and UI-boundary evidence
+
+The user-started 0.1.84 game run on 2026-09-26 proved a 1707x960 owned scene
+feeding DLSS and 2560x1440 display output, with thousands of continuous SR
+and pre-SR NR submissions. The user reported that UI blurs while moving.
+The same-frame prepared-colour capture includes HUD bars and text before SR.
+
+The first 12 read-only menu-to-Present traces each recorded **nine** events:
+four render-target/viewport pairs, then one additional singleton bind of the
+same reduced scene target with the same reduced depth. The earlier exact UI
+contract admits only eight events, so `observationContractFault_` prevented
+display-sized companion allocation and `latePassRoutingAvailable()` remained
+false. Consequently the frame was published at pre-Present, after HUD had
+already entered the reduced input. The 0.1.85 source candidate adds a separate
+ENB 0.505 observation layout requiring that ninth bind with the same scene,
+depth identity and reduced dimensions. The older ENB contract still requires
+exactly eight events. WARP integration covers both layouts. The 0.1.85 DLL
+is installed in the V5.4 MO2 mod. **Runtime visual effect: NOT RUN** until
+Skyrim is started by the user.

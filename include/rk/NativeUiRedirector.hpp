@@ -43,6 +43,9 @@ struct UiFrameObservation {
     UINT firstSampledDepthSlot{~0u};
     std::array<UiObservationEvent,64> events{};
 };
+enum class UiObservationLayout { FourPairs, FourPairsThenSceneBind };
+bool matchesNativeUiObservation(const UiFrameObservation& observation,
+    Extent render,std::uintptr_t sceneId,UiObservationLayout layout) noexcept;
 struct UiDepthViewContract {
     DXGI_FORMAT sourceFormat{DXGI_FORMAT_UNKNOWN};
     UINT sourceFlags{},writableFlags{},sampledClearFlags{};
@@ -55,7 +58,8 @@ public:
     explicit NativeUiRedirector(OwnedSceneDomain& route) noexcept:route_(route) {}
     HRESULT configure(ID3D11DeviceContext* context,DWORD renderThread,
         UiContextNext next,ID3D11Texture2D* reducedScene,
-        ID3D11RenderTargetView* nativeRtv) noexcept;
+        ID3D11RenderTargetView* nativeRtv,
+        UiObservationLayout layout=UiObservationLayout::FourPairs) noexcept;
     // Select the native flip buffer for this frame before UI publication.
     HRESULT replaceNativeTarget(ID3D11RenderTargetView* nativeRtv) noexcept;
     // Move output binding to the current native target before DLSS publication
@@ -128,6 +132,7 @@ private:
     std::uint32_t completedObservations_{};
     std::uint32_t validRouteObservations_{};
     bool observationContractFault_{};
+    UiObservationLayout observationLayout_{UiObservationLayout::FourPairs};
     bool observedMrtDepth_{},observedSingleDepth_{};
     std::array<AuxiliaryCompanion,4> auxiliaries_{};
     Microsoft::WRL::ComPtr<IUnknown> depthSourceId_;
