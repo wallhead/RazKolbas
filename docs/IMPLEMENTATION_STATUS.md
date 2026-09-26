@@ -1,5 +1,52 @@
 # Implementation checkpoint
 
+## 0.1.98 inventory-gated boundary diagnostic and updated FG reference (2026-09-26)
+
+The user-started 0.1.97 run still had an invisible inventory and a blurry
+hero. The log copied under ignored
+`artifacts/local/runtime-0.1.97-inventory-invisible-20260926/RazKolbas.log`
+has SHA-256 `fec48ce9a07eded5ae7ab79c8003da4e417ef6600de05d11b933bdb39fd35540`.
+Its one-shot five-image capture at
+`Skyrim Special Edition/SKSE/RazKolbasCaptures/inventory-boundary-1144-70194-22957578`
+was visually a world/dialogue frame, **not inventory**. The trigger was the
+first motion-MRT pattern anywhere, so the capture cannot decide where the
+inventory pixels disappear. Its reduced source remained unchanged through
+pre-Present, and the native target after the late copy matched its
+pre-Present image in that particular frame. This does not validate inventory
+composition. The user's report that the title screen looks downscaled and
+the loaded image improves after a stutter is consistent with the logged
+early spatial path switching to world-admitted DLSS; the timing and visual
+cause of that stutter were not measured.
+
+Source 0.1.98 changes only this diagnostic's admission: it waits for an
+`InventoryMenu` object in Skyrim's live UI stack before consuming the
+one-shot capture. Render routing remains the unsuccessful 0.1.96 strategy;
+**inventory visibility is not fixed or claimed fixed**. The independent
+static audit of the supplied RE20 archive, including the manager and AIO
+transition timing, is in `docs/re/INVENTORY_HERO_RE20_AUDIT.md`. The newly
+updated DynamicShaderFrameGen v1.52 source was inspected read-only at
+`879ab2c`; its current code removed DLSS SR despite stale README claims, so
+it supplies no inventory/SR fix. See `docs/re/DYNAMIC_SHADER_FRAMEGEN.md`.
+
+Debug and Release `tools/Build.ps1` each compiled the diagnostic and passed
+all 42 CTest groups. Release was rebuilt after the 0.1.98 version and
+manifest-label edits and again passed 42/42. This is build verification,
+not a visual fix. The V5.4 ZIP is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.98-v54-inventory-gated.zip`
+(SHA-256 `b311219b69d9d27184087a5ccc8a2ee0847c9fa268990ed56d6b91282b64e89c`).
+All five payload hashes and the manifest entry were independently checked
+inside the ZIP. Release/installed DLL SHA-256 is
+`f5c9cc5bb33d2af8f772baf2e5ee7a428eaa2320857f0a9781947558e31b6283`.
+
+With no SkyrimSE process running, the 0.1.97 installation's five payloads
+matched its manifest. Its DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.98-install-backup`; only the DLL and manifest were
+replaced in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. All five
+installed payloads now match the new manifest; INI, signed SR, patched NR and
+license files are unchanged. Actual inventory-gated capture is **NOT RUN**
+until the user opens inventory in a user-started Skyrim session. The assistant
+did not start Skyrim.
+
 ## 0.1.97 one-frame menu-boundary diagnostic (2026-09-26)
 
 The user-started 0.1.96 V5.4 run again had an invisible inventory. Its

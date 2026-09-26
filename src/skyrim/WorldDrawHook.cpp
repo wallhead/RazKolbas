@@ -524,6 +524,20 @@ std::pair<std::uintptr_t,std::string> menuAtOrdinal(
             reinterpret_cast<std::uintptr_t>(menu),name.c_str()};
     return {reinterpret_cast<std::uintptr_t>(menu),"unregistered"};
 }
+bool inventoryMenuOnStack(const WorldState* state) {
+    RE::UI* ui{};
+    if(!state||!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return false;
+    for(auto& [name,entry]:ui->menuMap) {
+        if(std::string_view(name.c_str())!="InventoryMenu")continue;
+        auto* inventory=entry.menu.get();
+        if(!inventory)return false;
+        for(const auto& stacked:ui->menuStack)
+            if(stacked.get()==inventory)return true;
+        return false;
+    }
+    return false;
+}
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
@@ -1010,7 +1024,7 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {
             std::optional<WorldState::MenuBoundaryCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
-            if(!state->menuBoundaryCaptureAttempted) {
+            if(!state->menuBoundaryCaptureAttempted&&inventoryMenuOnStack(state)) {
                 state->menuBoundaryCaptureAttempted=true;
                 const auto device=state->createdDevice.load(std::memory_order_relaxed);
                 const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -1848,7 +1862,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                                 "native-pre-present.raw"};
                             const auto saved=saveProbeBundle(directory,
                                 capture.images,names,
-                                "One inventory menu frame before and after the deferred copy, then before Present; diagnostic only");
+                                "One InventoryMenu-stack frame before and after the deferred copy, then before Present; diagnostic only");
                             if(const auto error=std::get_if<Error>(&saved))
                                 spdlog::warn("Inventory boundary capture save failed: {}",
                                     error->message);
