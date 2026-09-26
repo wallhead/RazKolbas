@@ -92,6 +92,12 @@ struct WorldState {
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
+    struct MenuBoundaryCapture {
+        std::uint64_t frame{};
+        std::vector<ProbeImage> images;
+    };
+    bool menuBoundaryCaptureAttempted{};
+    std::optional<MenuBoundaryCapture> menuBoundaryCapture;
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
         UINT width{},height{};
@@ -1002,8 +1008,54 @@ void beforeDeferredUiFlush(void*) noexcept {
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     if(ui->reducedMenuPassPending()) {
         try {
+            std::optional<WorldState::MenuBoundaryCapture> capture;
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
+            if(!state->menuBoundaryCaptureAttempted) {
+                state->menuBoundaryCaptureAttempted=true;
+                const auto device=state->createdDevice.load(std::memory_order_relaxed);
+                const auto context=state->createdContext.load(std::memory_order_relaxed);
+                const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+                auto* scene=activeOwnedSceneTexture();
+                if(device&&context&&swap&&scene) {
+                    auto native=acquireNativeFlipTarget(
+                        reinterpret_cast<IDXGISwapChain*>(swap),
+                        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                    if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                        captureTarget=target->texture;
+                        const std::array<ID3D11Texture2D*,2> sources{
+                            scene,captureTarget.Get()};
+                        auto before=readbackCandidates(
+                            reinterpret_cast<ID3D11DeviceContext*>(context),
+                            sources,24*1024*1024);
+                        if(auto* images=std::get_if<std::vector<ProbeImage>>(&before))
+                            capture.emplace(WorldState::MenuBoundaryCapture{
+                                frame,std::move(*images)});
+                        else
+                            spdlog::warn("Inventory boundary capture before copy unavailable: {}",
+                                std::get<Error>(before).message);
+                    } else
+                        spdlog::warn("Inventory boundary capture target unavailable: {}",
+                            std::get<Error>(native).message);
+                }
+            }
             auto late=ui->publishHeldMenuScene(frame);
             if(auto* fallback=std::get_if<SpatialFallbackFrame>(&late)) {
+                if(capture&&captureTarget) {
+                    const std::array<ID3D11Texture2D*,1> sources{
+                        captureTarget.Get()};
+                    auto after=readbackCandidates(
+                        reinterpret_cast<ID3D11DeviceContext*>(
+                            state->createdContext.load(std::memory_order_relaxed)),
+                        sources,16*1024*1024);
+                    if(auto* images=std::get_if<std::vector<ProbeImage>>(&after)) {
+                        capture->images.emplace_back(std::move(images->front()));
+                        state->menuBoundaryCapture.emplace(std::move(*capture));
+                        spdlog::info("Inventory boundary frame {} captured reduced source and native before/after late copy; awaiting pre-Present",
+                            frame);
+                    } else
+                        spdlog::warn("Inventory boundary capture after copy unavailable: {}",
+                            std::get<Error>(after).message);
+                }
                 state->ownedFallbacks.emplace_back(SdrSrFrameMode::SpatialFallback,
                     std::optional<SpatialFallbackFrame>{std::move(*fallback)},
                     std::nullopt);
@@ -1735,6 +1787,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     const bool ownedProbe=ownedRemaining!=0;
     bool ownedSrStageProbe=false;
     bool menuUiSequenceProbe=false;
+    bool menuBoundaryProbe=false;
 #ifdef RK_WITH_NGX
     {
         std::scoped_lock lock(state->ownedSrStageMutex);
@@ -1744,12 +1797,75 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
         std::scoped_lock lock(state->menuUiSequenceMutex);
         menuUiSequenceProbe=state->menuUiSequence.has_value();
     }
+    menuBoundaryProbe=state->menuBoundaryCapture.has_value();
 #endif
-    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&!menuUiSequenceProbe)return;
+    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&
+       !menuUiSequenceProbe&&!menuBoundaryProbe)return;
     if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
         if(!context)return;
+#ifdef RK_WITH_NGX
+        if(menuBoundaryProbe) {
+            auto capture=std::move(*state->menuBoundaryCapture);
+            state->menuBoundaryCapture.reset();
+            const auto frame=state->forwarded.load(std::memory_order_relaxed);
+            auto* domain=activeOwnedSceneDomain();
+            auto* scene=activeOwnedSceneTexture();
+            const auto device=state->createdDevice.load(std::memory_order_relaxed);
+            if(capture.frame!=frame||!domain||!scene||!device)
+                spdlog::warn("Inventory boundary capture frame {} could not match pre-Present frame {}",
+                    capture.frame,frame);
+            else {
+                auto native=acquireNativeFlipTarget(swap,
+                    reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                    const std::array<ID3D11Texture2D*,2> sources{
+                        scene,target->texture.Get()};
+                    auto final=readbackCandidates(
+                        reinterpret_cast<ID3D11DeviceContext*>(context),
+                        sources,24*1024*1024);
+                    if(auto* images=std::get_if<std::vector<ProbeImage>>(&final)) {
+                        for(auto& image:*images)
+                            capture.images.emplace_back(std::move(image));
+                        PWSTR documents=nullptr;
+                        const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+                            KF_FLAG_DEFAULT,nullptr,&documents);
+                        struct FreeDocuments {
+                            PWSTR value;~FreeDocuments(){CoTaskMemFree(value);}
+                        } free{documents};
+                        if(SUCCEEDED(found)&&documents) {
+                            const auto directory=std::filesystem::path(documents)/
+                                "My Games"/"Skyrim Special Edition"/"SKSE"/
+                                "RazKolbasCaptures"/
+                                ("inventory-boundary-"+
+                                std::to_string(GetCurrentProcessId())+"-"+
+                                std::to_string(frame)+"-"+
+                                std::to_string(GetTickCount64()));
+                            const std::array<std::string_view,5> names{
+                                "reduced-before-copy.raw","native-before-copy.raw",
+                                "native-after-copy.raw","reduced-pre-present.raw",
+                                "native-pre-present.raw"};
+                            const auto saved=saveProbeBundle(directory,
+                                capture.images,names,
+                                "One inventory menu frame before and after the deferred copy, then before Present; diagnostic only");
+                            if(const auto error=std::get_if<Error>(&saved))
+                                spdlog::warn("Inventory boundary capture save failed: {}",
+                                    error->message);
+                            else
+                                spdlog::info("Inventory boundary frame {} capture complete at {}",
+                                    frame,directory.string());
+                        } else
+                            spdlog::warn("Inventory boundary capture Documents directory unavailable");
+                    } else
+                        spdlog::warn("Inventory boundary pre-Present readback unavailable: {}",
+                            std::get<Error>(final).message);
+                } else
+                    spdlog::warn("Inventory boundary pre-Present target unavailable: {}",
+                        std::get<Error>(native).message);
+            }
+        }
+#endif
         if(ownedProbe) {
 #ifdef RK_WITH_NGX
             const auto numbers=readWorldNumbers(reinterpret_cast<void*>(state->expectedRenderer),

@@ -1,5 +1,53 @@
 # Implementation checkpoint
 
+## 0.1.97 one-frame menu-boundary diagnostic (2026-09-26)
+
+The user-started 0.1.96 V5.4 run again had an invisible inventory. Its
+late reduced-scene publication ran at frame 10228 and at least 600 times
+thereafter without a compatibility fault; DLSS continued to submit at the
+menu boundary. This refutes the hypothesis that the inventory was missing
+merely because the 0.1.95 producer chain was released too early. The
+complete log is preserved only under ignored
+`artifacts/local/runtime-0.1.96-inventory-invisible-20260926/RazKolbas.log`
+(SHA-256 `f43cc67e9bc78238ae8151df1d24a64e9464f63f32d727551ff4844e14998c58`).
+Skyrim was closed by the user. All five installed 0.1.96 payloads matched
+their manifest; the failed DLL, INI and manifest were backed up under
+ignored `artifacts/local/v54-0.1.96-regression-rollback-backup`. The
+previous visible-inventory 0.1.94 DLL and manifest were restored, and all
+five installed payloads rehashed. The INI and SR/NR libraries did not change.
+
+The user also reports that the title screen before loading a save looks
+downscaled. The 0.1.96 startup log shows the owned 1707x960 scene is
+published at swap creation while the display is 2560x1440; early frames
+use spatial publication before the native UI route is ready. This is a
+separate title-screen issue, not evidence that the inventory pass itself
+uses the same target. Independent, read-only RE of the exact AIO DLL found
+a Main Menu-specific viewport sizing gate and a native UI transition that
+clears it; see `docs/re/MAIN_MENU_RE20.md`. Static code does not prove the
+reference's live timing or pixels in this modlist.
+
+Source 0.1.97 adds a **diagnostic only** capture of the first observed
+inventory motion-MRT frame: reduced colour and native colour before the
+late copy, native colour after it, then both colours at pre-Present. The
+five raw images share one frame and are saved under the game's existing
+`SKSE/RazKolbasCaptures` directory, with a manifest and bounded byte
+budget. This tests whether the inventory appears in the reduced source,
+whether the copy reaches the native buffer, and whether later composition
+removes it. The 0.1.96 render behavior remains unchanged, so inventory
+visibility is **not claimed fixed**. Debug and Release builds and all 42
+CTest groups passed; Skyrim runtime capture is **NOT RUN**. The isolated
+V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.97-v54-inventory-boundary.zip`
+(SHA-256 `1caf3d003c837a7d5df2aa82d5e945d90f10cf00fc81d16f907146daf91c5b0f`).
+Independent extraction verified all five manifest payloads; the DLL
+SHA-256 is
+`6e26a60364bf30542d525aa66eab9f8e02d73f6f48e2b5ec28105e0f0d26dc6a`.
+With Skyrim closed, 0.1.94 was backed up under ignored
+`artifacts/local/v54-0.1.97-install-backup`. Only the 0.1.97 DLL and
+manifest were installed; all five installed payloads match the new
+manifest. The INI and SR/NR libraries remain unchanged. The assistant
+has not started Skyrim.
+
 ## 0.1.96 deferred inventory composition candidate (2026-09-26)
 
 The user-started 0.1.95 V5.4 run is an **actual-game regression**: the
