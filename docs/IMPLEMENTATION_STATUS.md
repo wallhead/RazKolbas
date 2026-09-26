@@ -9,8 +9,9 @@ path did not fault, and DLSS provider submissions continued. Therefore
 0.1.95's early release of the reduced inventory producer chain was not a
 visual fix. A copy of the live log is kept only under ignored
 `artifacts/local/runtime-0.1.95-inventory-invisible-20260926/RazKolbas.log`
-(SHA-256 `379e434752497d8097ef1c484522c67bafbab34096d014af81683ec5d969ca1a`
-at capture time; the game was still running, so this is not a final-log hash).
+(final-log SHA-256
+`f67735c4b4e4fe9950bbf7c0746f9e129b1c46cc08f426ec0fb8aa6d05d626f8`).
+The user closed Skyrim after the report; the assistant did not launch it.
 
 Source 0.1.96 retains the observed reduced inventory colour/motion/depth
 chain through the deferred menu boundary. Immediately before Scaleform's
@@ -34,8 +35,13 @@ Independent extraction matched the exact five manifest payloads; staged
 DLL SHA-256 is
 `48437d70405164eba11b66697d058b7079c9dc79b274666213c17b303a38ab6d`.
 The current INI and pinned SR/NR libraries are preserved in the package.
-The assistant has not started Skyrim. The 0.1.95 game remains running, so
-0.1.96 is **packaged but not installed** until that process closes.
+With Skyrim closed, all five installed 0.1.95 payloads matched their
+manifest. The failed DLL, INI, and manifest were backed up under ignored
+`artifacts/local/v54-0.1.96-install-backup`. The previous visible-inventory
+0.1.94 DLL and manifest were restored and all five payloads rehashed.
+Then only the 0.1.96 DLL and manifest were installed. All five installed
+payloads match the 0.1.96 manifest, including the unchanged INI and
+SR/NR runtimes. **The installed 0.1.96 build has not yet been run in Skyrim.**
 
 ## 0.1.95 inventory producer-chain routing candidate (2026-09-26)
 
