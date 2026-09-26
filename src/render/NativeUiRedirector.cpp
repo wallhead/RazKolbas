@@ -51,22 +51,6 @@ HRESULT createNativeAuxiliary(ID3D11Device* device,ID3D11RenderTargetView* sourc
     if(FAILED(hr))return hr;
     return device->CreateRenderTargetView(texture.Get(),&viewDesc,&result);
 }
-bool canPrepareNativeAuxiliary(ID3D11RenderTargetView* source,
-    Extent render) noexcept {
-    if(!source||!render.valid())return false;
-    auto value=resource(source);
-    ComPtr<ID3D11Texture2D> texture;
-    if(!value||FAILED(value.As(&texture)))return false;
-    D3D11_TEXTURE2D_DESC textureDesc{};texture->GetDesc(&textureDesc);
-    D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};source->GetDesc(&viewDesc);
-    return textureDesc.Width==render.width&&textureDesc.Height==render.height&&
-        textureDesc.ArraySize==1&&textureDesc.MipLevels==1&&
-        textureDesc.SampleDesc.Count==1&&
-        textureDesc.Usage==D3D11_USAGE_DEFAULT&&
-        (textureDesc.BindFlags&D3D11_BIND_RENDER_TARGET)!=0&&
-        viewDesc.ViewDimension==D3D11_RTV_DIMENSION_TEXTURE2D&&
-        viewDesc.Texture2D.MipSlice==0;
-}
 HRESULT createNativeDepth(ID3D11Device* device,ID3D11DepthStencilView* source,
     Extent display,ComPtr<ID3D11DepthStencilView>& result) noexcept {
     if(!device||!source||!display.valid())return E_INVALIDARG;
@@ -191,7 +175,7 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     generation_=route_.plan().generation;compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
-    latePassFaults_=0;latePassFaultFrame_=0;learnedAuxiliaryOnFault_=false;
+    latePassFaults_=0;latePassFaultFrame_=0;
     observationLayout_=layout;
     return S_OK;
 }
@@ -317,7 +301,8 @@ void NativeUiRedirector::rememberObservedCompanions(UINT count,
     for(UINT i=0;i<count&&i<D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;++i) {
         if(static_cast<int>(i)==sceneSlot||!views[i])continue;
         auto value=resource(views[i]);auto id=canonical(value.Get());
-        if(!id||!canPrepareNativeAuxiliary(views[i],route_.plan().render))continue;
+        if(!id||extentOf(value.Get()).width!=route_.plan().render.width||
+           extentOf(value.Get()).height!=route_.plan().render.height)continue;
         for(auto& auxiliary:auxiliaries_) {
             if(auxiliary.sourceId&&auxiliary.sourceId.Get()!=id.Get())continue;
             if(!auxiliary.sourceId) {
@@ -357,11 +342,6 @@ HRESULT NativeUiRedirector::prepareObservedCompanions() noexcept {
     }
     return companionsReady()?S_OK:S_FALSE;
 }
-bool NativeUiRedirector::hasUnpreparedAuxiliary() const noexcept {
-    for(const auto& auxiliary:auxiliaries_)
-        if(auxiliary.sourceView&&!auxiliary.nativeView)return true;
-    return false;
-}
 bool NativeUiRedirector::companionsReady() const noexcept {
     if(observationContractFault_||validRouteObservations_<2||
        !observedMrtDepth_||!observedSingleDepth_||
@@ -372,27 +352,22 @@ bool NativeUiRedirector::companionsReady() const noexcept {
         if(item.sourceId&&!item.nativeView)return false;
         if(item.sourceId)++auxiliaryCount;
     }
-    return auxiliaryCount>=2;
+    return auxiliaryCount==2;
 }
 void NativeUiRedirector::suspendLatePassRouting(std::uint64_t frame) noexcept {
     latePassRoutingDisabled_=true;
-    learnedAuxiliaryOnFault_=faultInfo_.learnedAuxiliary;
     compatibilityFault_=false;faultInfo_={};
     latePassFaultFrame_=frame;
     if(++latePassFaults_>1)latePassPermanentlyDisabled_=true;
 }
 bool NativeUiRedirector::resumeLatePassRouting(std::uint64_t frame,
     bool sceneReady) noexcept {
-    if(!latePassRoutingDisabled_||latePassPermanentlyDisabled_||
+    if(!latePassRoutingDisabled_||latePassPermanentlyDisabled_||!sceneReady||
        route_.phase()!=ScenePhase::World||route_.frame()!=frame||
        generation_!=route_.plan().generation||
-       frame<latePassFaultFrame_||
-       (learnedAuxiliaryOnFault_?
-           frame-latePassFaultFrame_<2:
-           (!sceneReady||frame-latePassFaultFrame_<120))||
+       frame<latePassFaultFrame_||frame-latePassFaultFrame_<120||
        !companionsReady())return false;
     latePassRoutingDisabled_=false;
-    learnedAuxiliaryOnFault_=false;
     return true;
 }
 std::optional<UiDepthViewContract> NativeUiRedirector::depthViewContract() const noexcept {
@@ -534,23 +509,8 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
                     faultInfo_.unknownTargetSlot=i;
                     faultInfo_.unknownTargetMips=desc.MipLevels;
                     faultInfo_.unknownTargetFormat=desc.Format;
+                    faultInfo_.unknownTargetBindFlags=desc.BindFlags;
                     break;
-                }
-                // Inventory may bind another ordinary reduced auxiliary in
-                // RTV1. Retain its view here, then allocate the native-size
-                // counterpart outside this context callback on a later World
-                // frame. Unrecognized depth and unsupported texture shapes
-                // keep the conservative fallback.
-                if(count==2&&sceneSlot==0&&
-                   faultInfo_.unknownTargetSlot==1&&
-                   faultInfo_.depthId&&
-                   faultInfo_.depthId==faultInfo_.expectedDepthId&&
-                   canPrepareNativeAuxiliary(views[1],route_.plan().render)) {
-                    rememberObservedCompanions(count,views,depth,sceneSlot);
-                    for(const auto& auxiliary:auxiliaries_)
-                        if(reinterpret_cast<std::uintptr_t>(auxiliary.sourceId.Get())==
-                           faultInfo_.unknownTargetId&&!auxiliary.nativeView)
-                            faultInfo_.learnedAuxiliary=true;
                 }
             }
             compatibilityFault_=true; // Unknown MRT/depth semantics.
@@ -586,6 +546,19 @@ void NativeUiRedirector::onRSSetScissorRects(ID3D11DeviceContext* context,
 }
 void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
     UINT start,UINT count,ID3D11ShaderResourceView* const* views) noexcept {
+    if(compatibilityFault_&&faultInfo_.unknownTargetId&&
+       context==context_.Get()&&views) {
+        for(UINT i=0;i<count&&i<D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;++i) {
+            if(!views[i])continue;
+            auto value=resource(views[i]);auto id=canonical(value.Get());
+            if(reinterpret_cast<std::uintptr_t>(id.Get())!=
+               faultInfo_.unknownTargetId)continue;
+            if(faultInfo_.unknownTargetSrvReads!=~0u)
+                ++faultInfo_.unknownTargetSrvReads;
+            if(faultInfo_.unknownTargetFirstSrvSlot==~0u)
+                faultInfo_.unknownTargetFirstSrvSlot=start+i;
+        }
+    }
     if(observing_&&context==context_.Get()&&count==1&&views&&views[0]&&
        GetCurrentThreadId()==(route_.renderThread()?route_.renderThread():thread_)) {
         auto value=resource(views[0]);
@@ -612,7 +585,7 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
-    latePassFaults_=0;latePassFaultFrame_=0;learnedAuxiliaryOnFault_=false;
+    latePassFaults_=0;latePassFaultFrame_=0;
     observationLayout_=UiObservationLayout::FourPairs;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
     validRouteObservations_=0;observationContractFault_=false;

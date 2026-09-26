@@ -27,7 +27,8 @@ struct UiCompatibilityFault {
     std::uintptr_t unknownTargetId{},depthId{},expectedDepthId{};
     UINT unknownTargetSlot{~0u},unknownTargetMips{};
     DXGI_FORMAT unknownTargetFormat{DXGI_FORMAT_UNKNOWN};
-    bool learnedAuxiliary{};
+    UINT unknownTargetBindFlags{},unknownTargetSrvReads{};
+    UINT unknownTargetFirstSrvSlot{~0u};
 };
 enum class UiObservationKind { RenderTargets, Viewport };
 struct UiObservationEvent {
@@ -85,15 +86,14 @@ public:
     // and depth resources learned by the read-only menu trace. Allocation is
     // kept outside the context callbacks.
     HRESULT prepareObservedCompanions() noexcept;
-    bool hasUnpreparedAuxiliary() const noexcept;
     bool companionsReady() const noexcept;
     std::optional<UiDepthViewContract> depthViewContract() const noexcept;
     bool latePassRoutingAvailable() const noexcept {
         return !latePassRoutingDisabled_&&companionsReady();
     }
-    // An additional supported auxiliary is prepared outside the context
-    // callback and retried after two frames. Other first mismatches may retry
-    // after 120 scene-ready frames; a second mismatch stays on pre-Present.
+    // A single transient late bind may occur during a loading transition.
+    // Fall back for that frame and allow one retry after 120 ready world frames.
+    // A repeated mismatch keeps the conservative pre-Present route.
     void suspendLatePassRouting(std::uint64_t frame) noexcept;
     bool resumeLatePassRouting(std::uint64_t frame,bool sceneReady) noexcept;
     void disableLatePassRouting() noexcept {
@@ -137,7 +137,6 @@ private:
     bool latePassPermanentlyDisabled_{};
     unsigned latePassFaults_{};
     std::uint64_t latePassFaultFrame_{};
-    bool learnedAuxiliaryOnFault_{};
     UiCompatibilityFault faultInfo_{};
     UiFrameObservation observation_{};
     bool observing_{},observeViewport_{};
