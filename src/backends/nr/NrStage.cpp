@@ -1,5 +1,6 @@
 #include "rk/NrStage.hpp"
 #include "rk/NrCommandRing.hpp"
+#include "rk/NrEvaluationRecovery.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include <nvsdk_ngx.h>
@@ -178,7 +179,8 @@ struct NrStage::Impl {
     bool runtimeResetPending{};
     UINT width{},height{};
     std::uint64_t fenceValue{},submitted{},saturated{},cpuWaitCalls{};
-    std::uint64_t pendingOutputFence{},pendingConsumerFence{};
+    NrPendingFences pendingFences;
+    NrEvaluationRecovery evaluationRecovery;
     bool consumerRetirementUncertain{};
     NrCommandRing commandRing;
     std::array<CommandSlot,NrCommandRing::size> commandSlots;
@@ -260,11 +262,11 @@ struct NrStage::Impl {
         ID3D12CommandList* lists[]{slot.commands.Get()};
         queue->ExecuteCommandLists(1,lists);
         retirementUncertain=true;
-        pendingOutputFence=0;
+        pendingFences.retireOutput();
         const auto value=++fenceValue;
         if(FAILED(queue->Signal(fence12.Get(),value)))
             return Error{ErrorCode::DeviceRemoved,"Cannot signal NR evaluation completion"};
-        pendingOutputFence=value;
+        pendingFences.markOutput(value);
         commandRing.markSubmitted(index,value);
         return value;
     }
@@ -272,15 +274,13 @@ struct NrStage::Impl {
         if(consumerRetirementUncertain)
             return Error{ErrorCode::DeviceRemoved,
                 "Cannot prove NR D3D11 copyback retirement; resources retained"};
-        if(pendingConsumerFence) {
-            if(const auto result=waitCpu(pendingConsumerFence);
+        if(pendingFences.consumer()) {
+            if(const auto result=waitCpu(pendingFences.consumer());
                const auto error=std::get_if<Error>(&result))return *error;
-            pendingConsumerFence=0;
-            pendingOutputFence=0;
-            retirementUncertain=false;
+            if(pendingFences.retireConsumer())retirementUncertain=false;
         }
         if(retirementUncertain&&queue&&fence12) {
-            auto value=pendingOutputFence;
+            auto value=pendingFences.output();
             if(!value) {
                 value=++fenceValue;
                 if(FAILED(queue->Signal(fence12.Get(),value)))
@@ -289,7 +289,7 @@ struct NrStage::Impl {
             }
             if(const auto result=waitCpu(value);
                const auto error=std::get_if<Error>(&result))return *error;
-            pendingOutputFence=0;
+            pendingFences.retireOutput();
             retirementUncertain=false;
         }
         return true;
@@ -617,8 +617,31 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
             impl_->disabled=true;return *error;
         }
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(evaluateResult))) {
-            impl_->disabled=true;
-            return Error{ErrorCode::Unavailable,"Fast-FP16 NR evaluation failed"};
+            if(FAILED(impl_->device12->GetDeviceRemovedReason())) {
+                impl_->disabled=true;
+                return Error{ErrorCode::DeviceRemoved,
+                    "NR D3D12 device was removed during evaluation"};
+            }
+            const auto outputReady=std::get<std::uint64_t>(submitted);
+            const auto action=impl_->evaluationRecovery.failed([&] {
+                return SUCCEEDED(impl_->context11->Wait(impl_->fence11.Get(),outputReady));
+            },[&] { impl_->context11->Flush(); });
+            if(action==NrEvaluationAction::DeviceLost) {
+                impl_->disabled=true;
+                return Error{ErrorCode::DeviceRemoved,
+                    "NR failed evaluation output handoff failed"};
+            }
+            {
+                std::scoped_lock lock(impl_->runtimeMutex);
+                impl_->runtimeResetPending=true;
+            }
+            if(action==NrEvaluationAction::Disable) {
+                impl_->disabled=true;
+                return Error{ErrorCode::Unavailable,
+                    "Fast-FP16 NR evaluation failed on three consecutive frames"};
+            }
+            return Error{ErrorCode::Unavailable,
+                "Fast-FP16 NR evaluation failed; original colour retained, reset pending"};
         }
         const auto outputReady=std::get<std::uint64_t>(submitted);
         if(FAILED(impl_->context11->Wait(impl_->fence11.Get(),outputReady))) {
@@ -632,13 +655,14 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
             impl_->disabled=true;
             return Error{ErrorCode::DeviceRemoved,"NR output copyback signal failed"};
         }
-        impl_->pendingConsumerFence=consumerReady;
+        impl_->pendingFences.markConsumer(consumerReady);
         impl_->context11->Flush();
         {
             std::scoped_lock lock(impl_->runtimeMutex);
             if(impl_->runtimeGeneration==runtimeGeneration)
                 impl_->runtimeResetPending=false;
         }
+        impl_->evaluationRecovery.succeeded();
         ++impl_->submitted;return true;
     } catch(const std::exception& error) {
         impl_->disabled=true;

@@ -1980,14 +1980,18 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
             const SrFrameMetadata& metadata,NgxJitter,bool reset) {
             const auto processed=stage->process(device,context,frame,reset);
             if(const auto processError=std::get_if<Error>(&processed)) {
-                if(!*failureLogged) {
-                    *failureLogged=true;
+                if(!stage->enabled()) {
                     spdlog::warn("Neural Rendering disabled after frame {}: {}; original colour continues to DLSS/DLAA",
+                        metadata.frameId,processError->message);
+                } else if(!*failureLogged) {
+                    *failureLogged=true;
+                    spdlog::warn("Neural Rendering skipped frame {}: {}; original colour continues to DLSS/DLAA",
                         metadata.frameId,processError->message);
                 }
                 return false;
             }
             if(std::get<bool>(processed)) {
+                *failureLogged=false;
                 const auto count=stage->submittedFrames();
                 if(count<=3||count%600==0)
                     spdlog::info("Neural Rendering pre-SR submission {} completed for frame {}",

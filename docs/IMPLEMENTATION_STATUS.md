@@ -1,5 +1,50 @@
 # Implementation checkpoint
 
+## 0.1.88 NR evaluation recovery candidate (2026-09-26)
+
+The 0.1.87 menu-save retry remains **NOT RUN** in Skyrim; the user elected to
+continue to the next audit item. In the prior NR path, any NGX evaluation
+failure permanently disabled NR. The command list was still submitted, but
+the code returned before enqueuing a D3D11 wait for its output fence; the
+next input copy could race that D3D12 work. Teardown could also treat an
+older successful copyback fence as proof that a later failed evaluation had
+retired.
+
+The 0.1.88 failure path checks device removal, enqueues and flushes the
+D3D11 wait on the failed evaluation's D3D12 output fence, leaves the
+original prepared colour for DLSS SR/DLAA, and requests a temporal reset.
+One or two consecutive evaluation failures retry on the next valid frame;
+three disable NR until restart. A failed fence handoff or device removal
+disables immediately. The pending-fence ledger now retains a newer output
+fence after an older copyback retires, so teardown waits for both when
+needed. Other initialization, unsupported resource, and rebuild errors are
+still terminal; they were not reclassified without fault evidence.
+
+The retry/fence policy tests first failed to compile before implementation
+and then passed, including injected one-frame failure, success reset,
+three-failure disable, failed handoff, and old-copyback/new-output ordering.
+Debug and Release builds each passed all 42 CTest groups. The standalone
+RTX 4080 SUPER bridge completed 30 normal NR frames at 16 ms pacing with
+output SHA-256 `ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`,
+zero ring saturations, and one creation CPU wait with no per-frame CPU wait.
+This bridge did not inject a real NGX evaluation failure; the recovery policy
+and queue-ordering behavior are unit-tested, while real-GPU recovery and
+in-game behavior remain **NOT RUN**.
+
+The independently extracted V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.88-v54-nr-recovery.zip`
+(SHA-256 `85cd3a56be079a18ea74e6d561cbb9bbfe2a61c28865e8ed82de8e05b16804ad`).
+Its five payload hashes and exact file set passed verification. With Skyrim
+absent, the installed 0.1.87 immutable payloads matched their prior
+manifest; DLL, INI, and manifest were backed up under ignored
+`artifacts/local/v54-0.1.88-install-backup`. Only DLL and manifest were
+replaced. The installed 0.1.88 DLL SHA-256 is
+`e4b09cb83258c5e8582f6fd6f032f9d0a44ba3e5f1c30ecc253f0ce18b72e118`;
+all five installed payload hashes match the new manifest. The INI and both
+vendor runtimes are byte-identical to the previous install. The assistant
+did not start Skyrim. The next required action is a user-started V5.4 run
+to check startup, NR off/on, image continuity, and menu-save persistence.
+
 ## 0.1.87 MO2 INI-save retry candidate (2026-09-26)
 
 The user confirmed that NR responds correctly to off/on toggles in the
