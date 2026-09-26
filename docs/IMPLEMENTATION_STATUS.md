@@ -1,5 +1,38 @@
 # Implementation checkpoint
 
+## 0.1.101 inventory cursor overlay (2026-09-27)
+
+The user-started 0.1.100 run confirmed that the inventory is visible again,
+but its cursor is invisible. Inventory items still react to mouse movement,
+so input is working. With inventory open, the existing End diagnostics menu
+shows a cursor that tracks the mouse. The 0.1.100 log recorded the native
+inventory-preservation path repeatedly (first at frame 8683, count 600 at
+frame 9282) and a functioning diagnostics mouse overlay. A copy of the log
+is preserved only under ignored
+`artifacts/local/runtime-0.1.100-inventory-cursor-missing-20260927/RazKolbas.log`
+(SHA-256 `b1ba32f731945fbd20bc9f29a60562bf9e247428f44b92529592c0a70db63b90`).
+
+Source 0.1.101 reuses that ImGui-drawn cursor on frames where the inventory
+copy is skipped, even while the End panel is closed. It renders at Present
+above the preserved native inventory. This cursor-only path does not capture
+mouse input from Skyrim; pressing End continues to draw the normal diagnostics
+panel and only one ImGui cursor. The overlay is disabled on frames outside
+the targeted inventory-preservation path. Cursor appearance and alignment
+in 0.1.101 are **NOT RUN in Skyrim**. The Release build passed all 42 CTest
+groups.
+
+The V5.4 MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.101-v54-inventory-cursor.zip`
+(SHA-256 `b4917d8d073a9dc88073e907260a574bb4cfa919d254bdfaaaab3a2e7a6438ec`).
+All five payload hashes and the manifest entry were independently checked
+inside the ZIP. Release DLL SHA-256 is
+`ae9eb2d902d539321e78e4d2ae4070d9ffe2905e909c9b0f640c7666e027e61d`.
+With Skyrim closed, all five installed 0.1.100 payloads matched its manifest.
+The prior DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.101-install-backup`; only the DLL and manifest were
+replaced in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. All five installed
+payloads match the new manifest. The INI and SR/NR libraries did not change.
+
 ## 0.1.100 preserve the composed inventory (2026-09-27)
 
 The user-started 0.1.99 run captured frame 61644 after 30 consecutive

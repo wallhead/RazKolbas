@@ -49,6 +49,7 @@ struct WorldState {
     DeferredUiFlushForwarder deferredUiFlushForwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
+    std::atomic<bool> inventoryCursorOverlayNeeded{false};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
     std::atomic<std::uint64_t> statusDlssFrames{0},statusSkippedFrames{0};
     std::atomic<bool> statusDlssDisabled{false};
@@ -976,6 +977,8 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     auto* state=active.load(std::memory_order_acquire);
     auto* domain=activeOwnedSceneDomain();
     const auto frame=state?state->forwarded.load(std::memory_order_relaxed):0;
+    if(state)state->inventoryCursorOverlayNeeded.store(false,
+        std::memory_order_release);
     if(state&&domain&&domain->phase()==ScenePhase::World) {
         if(auto* ui=ownedUiRedirector()) {
           try {
@@ -1096,6 +1099,8 @@ void beforeDeferredUiFlush(void*) noexcept {
             // native colour before this boundary. Publishing the reduced
             // scene here erased the list; keep the already-composed target.
             state->menuBoundaryCaptureAttempted=true;
+            state->inventoryCursorOverlayNeeded.store(true,
+                std::memory_order_release);
             const auto count=++state->preservedInventoryComposites;
             if(count==1||count%600==0)
                 spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
@@ -1752,6 +1757,8 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
        reinterpret_cast<std::uintptr_t>(swap))return std::nullopt;
     DiagnosticsSnapshot snapshot{};
     snapshot.mode=state->displayedMode.load(std::memory_order_acquire);
+    snapshot.inventoryCursorOverlayNeeded=
+        state->inventoryCursorOverlayNeeded.load(std::memory_order_acquire);
     snapshot.displayWidth=state->statusWidth.load(std::memory_order_relaxed);
     snapshot.displayHeight=state->statusHeight.load(std::memory_order_relaxed);
     DXGI_SWAP_CHAIN_DESC swapDesc{};
