@@ -106,6 +106,9 @@ public:
     // Capture one full menu-to-Present interval after the first late-route
     // incompatibility. This only observes context binds; it never redirects.
     bool beginFaultTrace(std::uint64_t frame) noexcept;
+    // One bounded read-only bind trace on a sustained InventoryMenu frame.
+    // Unlike the fault trace, this does not require a routing failure.
+    bool beginInventoryTrace(std::uint64_t frame) noexcept;
     std::optional<UiFaultTrace> finishFaultTrace(std::uint64_t frame) noexcept;
     // Allocate display-sized counterparts for the reduced auxiliary colour
     // and depth resources learned by the read-only menu trace. Allocation is

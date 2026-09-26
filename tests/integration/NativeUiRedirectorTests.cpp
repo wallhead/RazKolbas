@@ -520,6 +520,14 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(trace->events[2].kind==rk::UiFaultTraceKind::SampledTarget);
     REQUIRE(trace->events[2].slot==5);
     REQUIRE(trace->events[2].targets[0].id==trace->events[0].targets[1].id);
+    REQUIRE(redirect.beginInventoryTrace(127));
+    REQUIRE_FALSE(redirect.beginInventoryTrace(127));
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+    const auto inventoryTrace=redirect.finishFaultTrace(127);
+    REQUIRE(inventoryTrace.has_value());
+    REQUIRE(inventoryTrace->count==1);
+    REQUIRE(inventoryTrace->events[0].targets[0].id==
+        reinterpret_cast<std::uintptr_t>(identity(scene.texture()).Get()));
     REQUIRE_FALSE(redirect.resumeLatePassRouting(127,false));
     REQUIRE(redirect.resumeLatePassRouting(127,true));
     REQUIRE(redirect.latePassRoutingAvailable());

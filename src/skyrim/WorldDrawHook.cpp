@@ -27,6 +27,7 @@
 #include <spdlog/spdlog.h>
 #include <RE/Skyrim.h>
 #include <ShlObj.h>
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -95,9 +96,12 @@ struct WorldState {
     struct MenuBoundaryCapture {
         std::uint64_t frame{};
         std::vector<ProbeImage> images;
+        bool afterEndFrameCaptured{};
     };
     bool menuBoundaryCaptureAttempted{};
     std::optional<MenuBoundaryCapture> menuBoundaryCapture;
+    std::uint64_t inventoryMenuLastFrame{},inventoryTraceFrame{};
+    unsigned inventoryMenuStableFrames{},inventoryTraceWindowFrames{};
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
         UINT width{},height{};
@@ -538,6 +542,49 @@ bool inventoryMenuOnStack(const WorldState* state) {
     }
     return false;
 }
+struct BoundUiView {
+    std::uintptr_t id{};
+    UINT width{},height{};
+    DXGI_FORMAT format{DXGI_FORMAT_UNKNOWN};
+};
+BoundUiView boundUiView(ID3D11View* view) noexcept {
+    if(!view)return {};
+    Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+    view->GetResource(&resource);
+    if(!resource)return {};
+    Microsoft::WRL::ComPtr<IUnknown> identity;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    if(FAILED(resource.As(&identity))||FAILED(resource.As(&texture)))return {};
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+    return {reinterpret_cast<std::uintptr_t>(identity.Get()),
+        desc.Width,desc.Height,desc.Format};
+}
+void logInventoryBinding(WorldState* state,std::uint64_t frame,
+    std::string_view phase) noexcept {
+    if(!state||state->inventoryTraceFrame!=frame)return;
+    auto* context=reinterpret_cast<ID3D11DeviceContext*>(
+        state->createdContext.load(std::memory_order_relaxed));
+    if(!context)return;
+    std::array<ID3D11RenderTargetView*,2> raw{};
+    ID3D11DepthStencilView* rawDepth{};
+    context->OMGetRenderTargets(static_cast<UINT>(raw.size()),raw.data(),&rawDepth);
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> first,second;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth;
+    first.Attach(raw[0]);second.Attach(raw[1]);depth.Attach(rawDepth);
+    const auto a=boundUiView(first.Get());
+    const auto b=boundUiView(second.Get());
+    const auto d=boundUiView(depth.Get());
+    UINT viewCount=1;
+    D3D11_VIEWPORT viewport{};
+    context->RSGetViewports(&viewCount,&viewport);
+    try {spdlog::info("Inventory frame {} {} binding: RTV0=0x{:x}/{} {}x{} RTV1=0x{:x}/{} {}x{} DSV=0x{:x}/{} {}x{} viewportCount={} viewport={}x{}",
+        frame,phase,a.id,static_cast<unsigned>(a.format),a.width,a.height,
+        b.id,static_cast<unsigned>(b.format),b.width,b.height,
+        d.id,static_cast<unsigned>(d.format),d.width,d.height,
+        viewCount,viewCount?viewport.Width:0,viewCount?viewport.Height:0);
+    }catch(...) {}
+}
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
@@ -932,6 +979,26 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     if(state&&domain&&domain->phase()==ScenePhase::World) {
         if(auto* ui=ownedUiRedirector()) {
           try {
+            if(inventoryMenuOnStack(state)) {
+                if(frame!=state->inventoryMenuLastFrame) {
+                    state->inventoryMenuStableFrames=
+                        frame==state->inventoryMenuLastFrame+1?
+                            std::min(state->inventoryMenuStableFrames+1,30u):1u;
+                    state->inventoryMenuLastFrame=frame;
+                }
+                if(state->inventoryMenuStableFrames==30&&
+                   !state->menuBoundaryCaptureAttempted&&
+                   state->inventoryTraceWindowFrames<180&&
+                   ui->beginInventoryTrace(frame)) {
+                    state->inventoryTraceFrame=frame;
+                    if(++state->inventoryTraceWindowFrames==1)
+                        spdlog::info("Sustained InventoryMenu trace window began at frame {} after 30 consecutive menu frames",
+                            frame);
+                }
+            } else {
+                state->inventoryMenuStableFrames=0;
+                state->inventoryMenuLastFrame=frame;
+            }
             if(ui->resumeLatePassRouting(frame,state->ownedSceneGate.ready()))
                 spdlog::info("Owned native UI late route resumed at frame {} after scene admission and 120-frame cooldown",
                     frame);
@@ -995,6 +1062,7 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
             try {spdlog::warn("Owned menu-boundary admission frame {} failed safely",
                 frame);}catch(...) {}
           }
+          logInventoryBinding(state,frame,"before-menu-prep");
         }
     }
     if(state) {
@@ -1011,6 +1079,8 @@ void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
     state->menuForwarder.dispatch(first,second,third,fourth);
+    logInventoryBinding(state,state->forwarded.load(std::memory_order_relaxed),
+        "after-menu-prep-before-PostDisplay");
 }
 void beforeDeferredUiFlush(void*) noexcept {
 #ifdef RK_WITH_NGX
@@ -1024,7 +1094,8 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {
             std::optional<WorldState::MenuBoundaryCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
-            if(!state->menuBoundaryCaptureAttempted&&inventoryMenuOnStack(state)) {
+            if(!state->menuBoundaryCaptureAttempted&&
+               state->inventoryTraceFrame==frame) {
                 state->menuBoundaryCaptureAttempted=true;
                 const auto device=state->createdDevice.load(std::memory_order_relaxed);
                 const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -1107,12 +1178,46 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {spdlog::warn("Deferred Scaleform UI flush frame {} could not reassert native depth/stencil; HRESULT=0x{:08x}",
             frame,static_cast<std::uint32_t>(rebound));}catch(...) {}
     }
+    logInventoryBinding(state,frame,"before-EndFrame");
 #endif
 }
 void deferredUiFlushProxy(void* renderer) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
     state->deferredUiFlushForwarder.dispatch(renderer);
+#ifdef RK_WITH_NGX
+    const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    logInventoryBinding(state,frame,"after-EndFrame");
+    if(state->menuBoundaryCapture&&state->menuBoundaryCapture->frame==frame&&
+       state->menuBoundaryCapture->images.size()==3) {
+        try {
+            const auto device=state->createdDevice.load(std::memory_order_relaxed);
+            const auto context=state->createdContext.load(std::memory_order_relaxed);
+            const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+            auto* domain=activeOwnedSceneDomain();
+            if(device&&context&&swap&&domain) {
+                auto native=acquireNativeFlipTarget(
+                    reinterpret_cast<IDXGISwapChain*>(swap),
+                    reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                    const std::array<ID3D11Texture2D*,1> source{target->texture.Get()};
+                    auto image=readbackCandidates(
+                        reinterpret_cast<ID3D11DeviceContext*>(context),
+                        source,16*1024*1024);
+                    if(auto* images=std::get_if<std::vector<ProbeImage>>(&image)) {
+                        state->menuBoundaryCapture->images.emplace_back(
+                            std::move(images->front()));
+                        state->menuBoundaryCapture->afterEndFrameCaptured=true;
+                    } else spdlog::warn("Inventory frame {} after-EndFrame readback unavailable: {}",
+                        frame,std::get<Error>(image).message);
+                }
+            }
+        }catch(...) {
+            try {spdlog::warn("Inventory frame {} after-EndFrame readback threw",
+                frame);}catch(...) {}
+        }
+    }
+#endif
 }
 void worldDrawProxy(void* world,std::uint32_t flags) noexcept {
     auto* state=active.load(std::memory_order_acquire);
@@ -1724,18 +1829,26 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                     }catch(...) {}
                 }
             }
-            if(auto trace=ui->finishFaultTrace(frame)) {
+            auto trace=ui->finishFaultTrace(frame);
+            if(trace&&state->inventoryTraceFrame==frame&&
+               !state->menuBoundaryCaptureAttempted&&
+               state->inventoryTraceWindowFrames==180)
+                spdlog::warn("Sustained InventoryMenu trace window ended at frame {} without a reduced menu pass",
+                    frame);
+            if(trace&&(state->inventoryTraceFrame!=frame||
+                       state->menuBoundaryCaptureAttempted)) {
                 try {
-                    spdlog::info("Owned UI post-fault bind trace frame {}: events={} dropped={}; observation only",
+                    spdlog::info("Owned UI {} bind trace frame {}: events={} dropped={}; observation only",
+                        state->inventoryTraceFrame==frame?"sustained-inventory":"post-fault",
                         frame,trace->count,trace->dropped);
                     for(std::uint32_t i=0;i<trace->count;++i) {
                         const auto& event=trace->events[i];
                         if(event.kind==UiFaultTraceKind::Viewport) {
-                            spdlog::info("Owned UI fault trace {} event {}: viewport count={} extent={}x{}",
+                            spdlog::info("Owned UI bind trace {} event {}: viewport count={} extent={}x{}",
                                 frame,i,event.count,event.viewport.width,event.viewport.height);
                         } else if(event.kind==UiFaultTraceKind::SampledTarget) {
                             const auto& target=event.targets[0];
-                            spdlog::info("Owned UI fault trace {} event {}: PS slot={} callCount={} id=0x{:x} format={} extent={}x{}",
+                            spdlog::info("Owned UI bind trace {} event {}: PS slot={} callCount={} id=0x{:x} format={} extent={}x{}",
                                 frame,i,event.slot,event.count,target.id,
                                 static_cast<unsigned>(target.format),
                                 target.extent.width,target.extent.height);
@@ -1744,7 +1857,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                             const auto& b=event.targets[1];
                             const auto& c=event.targets[2];
                             const auto& d=event.depth;
-                            spdlog::info("Owned UI fault trace {} event {}: OM count={} target0=0x{:x}/{} {}x{} target1=0x{:x}/{} {}x{} target2=0x{:x}/{} {}x{} depth=0x{:x}/{} {}x{}",
+                            spdlog::info("Owned UI bind trace {} event {}: OM count={} target0=0x{:x}/{} {}x{} target1=0x{:x}/{} {}x{} target2=0x{:x}/{} {}x{} depth=0x{:x}/{} {}x{}",
                                 frame,i,event.count,a.id,static_cast<unsigned>(a.format),
                                 a.extent.width,a.extent.height,b.id,
                                 static_cast<unsigned>(b.format),b.extent.width,b.extent.height,
@@ -1761,6 +1874,43 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
               closingDomain&&closingDomain->phase()==ScenePhase::NativeUi) {
         const auto frame=state->forwarded.load(std::memory_order_relaxed);
         auto* ui=ownedUiRedirector();
+        if(ui&&state->inventoryTraceFrame==frame) {
+            auto trace=ui->finishFaultTrace(frame);
+            if(trace&&!state->menuBoundaryCaptureAttempted&&
+               state->inventoryTraceWindowFrames==180)
+                spdlog::warn("Sustained InventoryMenu trace window ended at frame {} without a reduced menu pass",
+                    frame);
+            if(trace&&state->menuBoundaryCaptureAttempted) {
+                try {
+                    spdlog::info("Owned sustained-inventory bind trace frame {}: events={} dropped={}; observation only",
+                        frame,trace->count,trace->dropped);
+                    for(std::uint32_t i=0;i<trace->count;++i) {
+                        const auto& event=trace->events[i];
+                        if(event.kind==UiFaultTraceKind::Viewport) {
+                            spdlog::info("Inventory bind trace {} event {}: viewport count={} extent={}x{}",
+                                frame,i,event.count,event.viewport.width,event.viewport.height);
+                        } else if(event.kind==UiFaultTraceKind::SampledTarget) {
+                            const auto& target=event.targets[0];
+                            spdlog::info("Inventory bind trace {} event {}: PS slot={} callCount={} id=0x{:x} format={} extent={}x{}",
+                                frame,i,event.slot,event.count,target.id,
+                                static_cast<unsigned>(target.format),
+                                target.extent.width,target.extent.height);
+                        } else {
+                            const auto& a=event.targets[0];
+                            const auto& b=event.targets[1];
+                            const auto& c=event.targets[2];
+                            const auto& d=event.depth;
+                            spdlog::info("Inventory bind trace {} event {}: OM count={} target0=0x{:x}/{} {}x{} target1=0x{:x}/{} {}x{} target2=0x{:x}/{} {}x{} depth=0x{:x}/{} {}x{}",
+                                frame,i,event.count,a.id,static_cast<unsigned>(a.format),
+                                a.extent.width,a.extent.height,b.id,
+                                static_cast<unsigned>(b.format),b.extent.width,b.extent.height,
+                                c.id,static_cast<unsigned>(c.format),c.extent.width,c.extent.height,
+                                d.id,static_cast<unsigned>(d.format),d.extent.width,d.extent.height);
+                        }
+                    }
+                }catch(...) {}
+            }
+        }
         if(!ui) {
             state->srDisabled=true;
             state->statusDlssDisabled.store(true,std::memory_order_release);
@@ -1856,13 +2006,16 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                                 std::to_string(GetCurrentProcessId())+"-"+
                                 std::to_string(frame)+"-"+
                                 std::to_string(GetTickCount64()));
-                            const std::array<std::string_view,5> names{
+                            std::vector<std::string_view> names{
                                 "reduced-before-copy.raw","native-before-copy.raw",
-                                "native-after-copy.raw","reduced-pre-present.raw",
-                                "native-pre-present.raw"};
+                                "native-after-copy.raw"};
+                            if(capture.afterEndFrameCaptured)
+                                names.emplace_back("native-after-endframe.raw");
+                            names.emplace_back("reduced-pre-present.raw");
+                            names.emplace_back("native-pre-present.raw");
                             const auto saved=saveProbeBundle(directory,
                                 capture.images,names,
-                                "One InventoryMenu-stack frame before and after the deferred copy, then before Present; diagnostic only");
+                                "One sustained InventoryMenu frame around deferred copy, EndFrame and Present; diagnostic only");
                             if(const auto error=std::get_if<Error>(&saved))
                                 spdlog::warn("Inventory boundary capture save failed: {}",
                                     error->message);

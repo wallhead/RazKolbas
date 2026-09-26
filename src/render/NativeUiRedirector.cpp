@@ -343,6 +343,16 @@ bool NativeUiRedirector::beginFaultTrace(std::uint64_t frame) noexcept {
     faultTraceNextFrame_=false;faultTracing_=true;
     return true;
 }
+bool NativeUiRedirector::beginInventoryTrace(std::uint64_t frame) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(faultTracing_||!frame||!context_||
+       GetCurrentThreadId()!=owner||route_.phase()!=ScenePhase::World||
+       route_.frame()!=frame)return false;
+    faultTrace_={};faultTrace_.frame=frame;
+    faultTraceTargetIds_={};faultTraceTargetCount_=0;
+    faultTracing_=true;
+    return true;
+}
 std::optional<UiFaultTrace> NativeUiRedirector::finishFaultTrace(
     std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;

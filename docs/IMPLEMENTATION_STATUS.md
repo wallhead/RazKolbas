@@ -1,5 +1,44 @@
 # Implementation checkpoint
 
+## 0.1.99 sustained-inventory diagnostic (2026-09-26)
+
+The user-started 0.1.98 run still had an invisible inventory, confirmed after
+the capture. Its `InventoryMenu`-gated capture at
+`C:/Users/user/Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures/inventory-boundary-20744-17222-27399781`
+contains one frame's reduced scene and native target before/after the deferred
+copy and at pre-Present. The reduced and native pre-copy images contain the
+world and NPC, but no visible inventory panels. The reduced source is unchanged
+at pre-Present, and the native after-copy image matches native pre-Present.
+This frame may have been the menu's first transitional frame: stack presence
+does not prove `InventoryMenu::PostDisplay` drew on that frame. The capture
+therefore does not establish whether the persistent inventory disappeared
+before, during, or after its actual draw. The user confirmed it remained
+invisible in that run.
+
+Source 0.1.99 adds a bounded, read-only bind trace starting after 30 consecutive
+`InventoryMenu` stack frames. It watches up to 180 frames for a reduced menu
+pass, then records OM targets, viewport and sampled target changes across the
+menu call and deferred Scaleform EndFrame. It adds an optional native readback
+immediately after EndFrame to the existing before-copy/after-copy/pre-Present
+set. The menu preparatory call returns *before* virtual `PostDisplay`; trace
+labels reflect that ordering. This remains the 0.1.96 render strategy and is
+**not an inventory fix**. The trace does not hook the exact preview draw or
+the AIO-equivalent `0x972D34` transition, so its conclusions must be limited
+to observed binds and pixels.
+
+The Release build passed all 42 CTest groups; Skyrim runtime verification of
+0.1.99 is **NOT RUN**. The V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.99-v54-inventory-trace-r2.zip`
+(SHA-256 `d3dc9acae490c394ef9cc5a2f2b2ab919acca8df356722b2117ddbf283000d47`).
+All five payload hashes and the manifest entry were independently checked
+inside the ZIP. Release DLL SHA-256 is
+`33d3970c2ddd5d3708013e20b13c95369f9b46a21ea5fb712b7aa78847b21c6b`.
+With Skyrim closed, all five installed 0.1.98 payloads matched its manifest.
+The DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.99-install-backup`; only the DLL and manifest were
+replaced in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. All five installed
+payloads match the new manifest. The INI and SR/NR libraries were unchanged.
+
 ## 0.1.98 inventory-gated boundary diagnostic and updated FG reference (2026-09-26)
 
 The user-started 0.1.97 run still had an invisible inventory and a blurry
