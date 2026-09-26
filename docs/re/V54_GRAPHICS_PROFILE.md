@@ -71,5 +71,13 @@ already entered the reduced input. The 0.1.85 source candidate adds a separate
 ENB 0.505 observation layout requiring that ninth bind with the same scene,
 depth identity and reduced dimensions. The older ENB contract still requires
 exactly eight events. WARP integration covers both layouts. The 0.1.85 DLL
-is installed in the V5.4 MO2 mod. **Runtime visual effect: NOT RUN** until
-Skyrim is started by the user.
+is installed in the V5.4 MO2 mod. In the subsequent user-started 0.1.85
+run, native UI companions became ready at frame 2 and the native UI resource
+route activated at frame 9962. Deferred Scaleform UI flushes reasserted
+native colour and full-size depth/stencil. The log showed pre-SR NR and NGX
+evaluation from frame 10051, then continuous menu-boundary publication through
+at least frame 15000 (4950 provider submissions, 1707x960 scene to
+2560x1440 output, zero fallbacks in flight). The user reported that the
+moving UI now seems to work. This is positive visual evidence for the
+previously reported blur; longer-run stability and detailed image quality
+have not been measured in this run.

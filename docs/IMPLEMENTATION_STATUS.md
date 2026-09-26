@@ -13,9 +13,10 @@ candidate adds a separate, exact ENB 0.505 nine-event contract; the earlier
 ENB profile retains its eight-event contract. The new pure contract test
 rejects altered depth and target count, and the WARP integration test exercises
 both layouts with native colour/depth translation. Targeted `[native_ui]`
-tests passed 226 assertions in three cases. **V5.4 UI visual test: NOT RUN**
-until a user-started game run; the change is not yet claimed to fix visible
-HUD blur.
+tests passed 226 assertions in three cases. In the user-started 0.1.85 game
+run on 2026-09-26, the user reported that the moving UI now seems to work.
+This is a positive visual result for the reported blur, not a long-term
+stability or frame-by-frame image-quality measurement.
 
 The final 0.1.85 Release build and all 40 CTest groups passed. The MO2 package
 is `D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.85-v54-native-ui-candidate.zip`
@@ -26,10 +27,17 @@ remained byte-identical. All five installed payload hashes matched the
 manifest. The installed DLL SHA-256 is
 `fdea4ed2a6c8e9b9be219bf0f48f1a58258d753d1631326630b4b4f004f75760`.
 The previous DLL, manifest and INI were copied to ignored
-`artifacts/local/v54-ui-0.1.85-install-backup`. The exact next action is a
-user-started V5.4 loaded-world test: confirm native UI companion readiness,
-menu-boundary publication, sustained SR/NR submissions, visual HUD sharpness
-while moving, and crash status. The assistant did not start Skyrim.
+`artifacts/local/v54-ui-0.1.85-install-backup`. The assistant did not start
+Skyrim. In the subsequent user-started session, the log recorded native UI
+companions ready at frame 2, native UI resource routing activated at frame
+9962, and a deferred Scaleform UI flush reasserting native colour and
+full-size depth/stencil. NR pre-SR submission and NGX evaluation followed at
+frame 10051. Menu-boundary publication continued through at least frame
+15000 with 4950 provider submissions, a 1707x960 source, 2560x1440 output,
+and zero fallbacks in flight. No native UI contract fault or world SR
+suspension was observed in the inspected session. The separate diagnostics
+INI save warning (`INI replacement failed: 1175`) persisted; it did not
+prevent this UI route or DLSS submissions.
 
 ## 0.1.84 V5.4 reduced-scene route runtime observation (2026-09-26)
 
