@@ -275,8 +275,8 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
        GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)return E_UNEXPECTED;
     if(preserveReducedMenuPass_) {
-        // The usual scene-as-SRV completion was absent. Keep deferred
-        // Scaleform text native even if the private reduced pass is incomplete.
+        // The inventory producer chain remained reduced through its final
+        // pass. Its colour was published before this deferred Scaleform draw.
         preserveReducedMenuPass_=false;
         bindNativeTarget(true);
         return S_FALSE;
@@ -298,6 +298,20 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
     if(!boundId||boundId.Get()!=nativeId_.Get())return E_UNEXPECTED;
     next_.om(context_.Get(),count,rawTargets.data(),nativeDepthView_.Get());
     return S_OK;
+}
+Result<SpatialFallbackFrame> NativeUiRedirector::publishHeldMenuScene(
+    std::uint64_t frame) {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!preserveReducedMenuPass_||!context_||!scene_||!nativeRtv_||
+       GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
+       route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)
+        return Error{ErrorCode::Conflict,"Reduced menu publication boundary is unavailable"};
+    auto targetResource=resource(nativeRtv_.Get());
+    ComPtr<ID3D11Texture2D> display;
+    if(!targetResource||FAILED(targetResource.As(&display)))
+        return Error{ErrorCode::Conflict,"Native menu target is not a texture"};
+    return publishSdrSpatialFallbackToDisplay(context_.Get(),scene_.Get(),
+        display.Get());
 }
 bool NativeUiRedirector::beginObservation(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
@@ -677,22 +691,6 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
                 ++faultInfo_.unknownTargetSrvReads;
             if(faultInfo_.unknownTargetFirstSrvSlot==~0u)
                 faultInfo_.unknownTargetFirstSrvSlot=start+i;
-        }
-    }
-    if(preserveReducedMenuPass_&&eligible(context)&&views&&count&&
-       start<D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT&&
-       count<=D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT-start) {
-        bool sceneRead=false;
-        for(UINT i=0;i<count;++i) {
-            auto value=resource(views[i]);auto id=canonical(value.Get());
-            if(id&&id.Get()==sceneId_.Get()) {sceneRead=true;break;}
-        }
-        if(sceneRead) {
-            ComPtr<ID3D11RenderTargetView> bound;
-            context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
-            auto value=resource(bound.Get());auto id=canonical(value.Get());
-            if(id&&id.Get()!=sceneId_.Get()&&id.Get()!=nativeId_.Get())
-                preserveReducedMenuPass_=false;
         }
     }
     if(observing_&&context==context_.Get()&&count==1&&views&&views[0]&&

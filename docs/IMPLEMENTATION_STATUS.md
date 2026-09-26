@@ -1,5 +1,42 @@
 # Implementation checkpoint
 
+## 0.1.96 deferred inventory composition candidate (2026-09-26)
+
+The user-started 0.1.95 V5.4 run is an **actual-game regression**: the
+inventory was invisible and the hero preview blurry. The live log showed
+that the native UI route stayed active, the exact motion-MRT compatibility
+path did not fault, and DLSS provider submissions continued. Therefore
+0.1.95's early release of the reduced inventory producer chain was not a
+visual fix. A copy of the live log is kept only under ignored
+`artifacts/local/runtime-0.1.95-inventory-invisible-20260926/RazKolbas.log`
+(SHA-256 `379e434752497d8097ef1c484522c67bafbab34096d014af81683ec5d969ca1a`
+at capture time; the game was still running, so this is not a final-log hash).
+
+Source 0.1.96 retains the observed reduced inventory colour/motion/depth
+chain through the deferred menu boundary. Immediately before Scaleform's
+deferred draw, it publishes the held reduced scene to the native target
+using the existing SDR spatial path, then rebinds native colour and a
+display-size depth/stencil view for Scaleform. This affects only frames
+where the exact observed motion-MRT pattern set the pending-menu flag.
+During those frames the final menu publication is spatial fallback, not
+DLSS SR; the hero preview may still be limited by its reduced source.
+Unknown target shapes retain the existing compatibility fault path.
+This is a **candidate**, not a proven visual fix.
+
+The focused WARP test verifies that the reduced chain remains bound after
+the offscreen scene read, that the late spatial publication succeeds, and
+that deferred Scaleform resumes on native colour/depth. Debug and Release
+builds and all 42 CTest groups passed after the change. **Skyrim runtime
+verification is pending.** The V5.4 MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.96-v54-deferred-menu.zip`
+(SHA-256 `9e31a4a6a90ebad1c4c2815a6fcc0c6922deec15013292760bef94685d14361d`).
+Independent extraction matched the exact five manifest payloads; staged
+DLL SHA-256 is
+`48437d70405164eba11b66697d058b7079c9dc79b274666213c17b303a38ab6d`.
+The current INI and pinned SR/NR libraries are preserved in the package.
+The assistant has not started Skyrim. The 0.1.95 game remains running, so
+0.1.96 is **packaged but not installed** until that process closes.
+
 ## 0.1.95 inventory producer-chain routing candidate (2026-09-26)
 
 The user-started 0.1.94 V5.4 inventory run reported that the UI and image

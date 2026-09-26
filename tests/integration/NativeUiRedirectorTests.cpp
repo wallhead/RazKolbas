@@ -421,9 +421,8 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(nativeViewport.Height==display.height);
     REQUIRE_FALSE(redirect.compatibilityFault());
     // Inventory first binds the reduced main colour with a motion-format
-    // attachment, then samples the reduced colour into another target before
-    // returning to main composition. Keep that producer chain intact and
-    // resume native routing only after its scene read.
+    // attachment and then runs more reduced offscreen passes. Publish the
+    // finished reduced scene only at the deferred Scaleform boundary.
     auto motionDesc=desc;
     motionDesc.Format=DXGI_FORMAT_R16G16_FLOAT;
     motionDesc.MipLevels=1;
@@ -460,10 +459,10 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
     bound.Reset();context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
     REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
-        identity(native.Get()).Get());
-    // If no offscreen consumer reads the scene, the deferred Scaleform
-    // boundary still restores a native colour/depth target for text.
-    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+        identity(scene.texture()).Get());
+    REQUIRE(redirect.reducedMenuPassPending());
+    auto latePublish=redirect.publishHeldMenuScene(7);
+    REQUIRE(std::holds_alternative<rk::SpatialFallbackFrame>(latePublish));
     REQUIRE(redirect.rebindForDeferredUiFlush(7)==S_FALSE);
     bound.Reset();boundDepth.Reset();
     context->OMGetRenderTargets(1,bound.GetAddressOf(),boundDepth.GetAddressOf());

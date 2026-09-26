@@ -124,8 +124,10 @@ struct WorldState {
     bool nativeUiRouteActivated{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
+    std::uint64_t deferredMenuPublications{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
+    bool deferredMenuPublicationWarningLogged{};
     bool uiDepthViewContractLogged{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
@@ -998,11 +1000,35 @@ void beforeDeferredUiFlush(void*) noexcept {
     auto* ui=ownedUiRedirector();
     if(!ui)return;
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    if(ui->reducedMenuPassPending()) {
+        try {
+            auto late=ui->publishHeldMenuScene(frame);
+            if(auto* fallback=std::get_if<SpatialFallbackFrame>(&late)) {
+                state->ownedFallbacks.emplace_back(SdrSrFrameMode::SpatialFallback,
+                    std::optional<SpatialFallbackFrame>{std::move(*fallback)},
+                    std::nullopt);
+                state->displayedMode.store(DisplayMode::SpatialFallback,
+                    std::memory_order_release);
+                const auto count=++state->deferredMenuPublications;
+                if(count==1||count%600==0)
+                    spdlog::info("Deferred reduced menu scene published before native Scaleform at frame {}; count={}",
+                        frame,count);
+            } else if(!state->deferredMenuPublicationWarningLogged) {
+                state->deferredMenuPublicationWarningLogged=true;
+                spdlog::warn("Deferred reduced menu scene could not publish at frame {}: {}",
+                    frame,std::get<Error>(late).message);
+            }
+        } catch(...) {
+            state->deferredMenuPublicationWarningLogged=true;
+            try {spdlog::warn("Deferred reduced menu scene publication threw at frame {}",
+                frame);}catch(...) {}
+        }
+    }
     const auto rebound=ui->rebindForDeferredUiFlush(frame);
     if(SUCCEEDED(rebound)) {
         if(rebound==S_FALSE&&!state->deferredUiFlushMotionWarningLogged) {
             state->deferredUiFlushMotionWarningLogged=true;
-            try {spdlog::warn("Deferred Scaleform UI flush frame {} restored native colour after an unfinished reduced menu pass",
+            try {spdlog::info("Deferred Scaleform UI flush frame {} restored native colour after the reduced menu pass",
                 frame);}catch(...) {}
         }
         const auto count=++state->deferredUiFlushRebinds;

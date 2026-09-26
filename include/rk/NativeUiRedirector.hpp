@@ -1,5 +1,6 @@
 #pragma once
 #include "rk/OwnedSceneDomain.hpp"
+#include "rk/SpatialFallback.hpp"
 #include <Windows.h>
 #include <array>
 #include <d3d11.h>
@@ -94,6 +95,8 @@ public:
     // Reassert only the native colour/depth pair at Skyrim's common deferred
     // Scaleform flush. The per-frame clear remains at publication.
     HRESULT rebindForDeferredUiFlush(std::uint64_t frame) noexcept;
+    bool reducedMenuPassPending() const noexcept { return preserveReducedMenuPass_; }
+    Result<SpatialFallbackFrame> publishHeldMenuScene(std::uint64_t frame);
     // Read-only bounded trace between the semantic menu marker and Present.
     // It records only binds that contain the owned reduced scene and their
     // immediately following viewport; forwarding is unchanged.
