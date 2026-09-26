@@ -307,11 +307,12 @@ void drawNeuralRenderingTab(MenuState& state) {
     if(ImGui::Checkbox("Generate Skin Mask Automatically",&autoMask)) {
         state.requestedSettings.values["NeuralRendering.UseAutoMask"]=autoMask;save(true);
     }
-    bool uiCorrection=state.requestedSettings.get<bool>(
-        "NeuralRendering.NativeUICorrection");
-    if(ImGui::Checkbox("Model UI Correction",&uiCorrection)) {
-        state.requestedSettings.values["NeuralRendering.NativeUICorrection"]=uiCorrection;save(true);
-    }
+    ImGui::BeginDisabled();
+    bool uiCorrection=false;
+    ImGui::Checkbox("Model UI Correction",&uiCorrection);
+    ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("UI is composed at native resolution after NR/SR; model UI/alpha inputs are unavailable.");
     ImGui::TextDisabled("Passes: 1 (multi-pass is not validated in this build)");
     ImGui::BeginDisabled();
     bool hdr=state.requestedSettings.get<bool>("NeuralRendering.InputColorIsHDR");

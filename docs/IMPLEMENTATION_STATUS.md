@@ -1,5 +1,51 @@
 # Implementation checkpoint
 
+## 0.1.86 NR audit-fix candidate (2026-09-26)
+
+The 0.1.82 external code review remains relevant to this branch. The NR
+evaluation path no longer calls the blocking CPU fence wait after every
+submission. Three D3D12 command contexts are reused only after their output
+fence retires; a full ring fails open for that frame and requests an NR
+history reset. The D3D11 input Signal/Flush, D3D12 queue Wait, D3D12 output
+Signal, and D3D11 output Wait/copyback remain in same-frame order. Feature
+creation, rebuild, and teardown still drain on the CPU when necessary to
+prove resource retirement. A D3D11 signal after output copyback protects
+shared output lifetime during rebuild or shutdown. Input formats, guide
+scales, depth convention, NR pass count, runtime identity, and SR insertion
+point were not changed.
+
+The model-native `DLSSNR.UICorrection` parameter is forced off because this
+host does not supply validated model UI/alpha resources. The menu control is
+disabled with an explanation; the existing INI key remains accepted but has
+no evaluation effect. The exact 165,840,496-byte NR runtime is now hashed in
+64 KiB chunks rather than loaded into a whole-file vector. Hashing still
+occurs at NR initialization, so first-use latency has not been eliminated.
+
+Debug and Release builds each passed all 41 CTest groups. The standalone RTX 4080 SUPER
+NR bridge completed 30 frames twice at 16 ms pacing with identical output
+SHA-256 `ae6231bac4ad697363fe4ccb1bfde6fe3ddb08329378b6e253af1a8c5444ae0c`,
+zero ring saturations, and no CPU fence wait calls after feature creation.
+An unpaced 30-frame run also completed, with nine ring saturations that were
+retried by the harness; its output hash differed from the paced run because
+skipped NR evaluations reset temporal history. These are standalone GPU
+results, not Skyrim/ENB/ReShade runtime verification. Actual-game temporal
+quality, frame time, resize, save-load, and teardown behavior remain **NOT
+RUN** for 0.1.86.
+
+The MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.86-v54-nr-audit-candidate.zip`
+(SHA-256 `65a0b24132911af576e2bc89287f918b2e9a8d683c5a9b462f259d8c04768e4d`).
+Its six ZIP entries were expanded and all five manifest payload hashes
+verified. With Skyrim stopped, the existing V5.4 mod was checked against
+its prior manifest and the DLL/manifest/INI backed up under ignored
+`artifacts/local/v54-audit-0.1.86-install-backup`. Only DLL and manifest
+were replaced. The installed DLL SHA-256 is
+`aee84a660e4ed38d4994a32211fbca51e07e6b547f7286f92a07f60fe71713bb`;
+all five installed payload hashes match the new manifest, so the INI and SR/NR
+runtimes remain byte-identical. The assistant did not start Skyrim. The next
+required game action is a user-started V5.4 loaded-world test with NR enabled
+in DLSS Quality and NativeAA.
+
 ## 0.1.85 V5.4 native UI boundary candidate (2026-09-26)
 
 After the 0.1.84 reduced DLSS SR run, the user reported that UI blurs while

@@ -29,10 +29,11 @@ template<class T> T value(rk::Result<T> result) {
 }
 
 int wmain(int argc,wchar_t** argv) {
-    if(argc!=2) {
-        std::cerr<<"Usage: RazKolbasNrLiveBridge <exact _nvngx.dll>\n";
+    if(argc!=2&&argc!=3) {
+        std::cerr<<"Usage: RazKolbasNrLiveBridge <exact _nvngx.dll> [frame_delay_ms]\n";
         return 2;
     }
+    const auto frameDelay=argc==3?static_cast<DWORD>(std::stoul(argv[2])):0u;
     const auto corePath=fs::absolute(argv[1]);
     const auto core=LoadLibraryExW(corePath.c_str(),nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -105,6 +106,7 @@ int wmain(int argc,wchar_t** argv) {
         rk::NrStage stage;
         if(!value(stage.configure(settings)))stop("CONFIGURE_FALSE");
         constexpr unsigned frames=30;
+        std::uint64_t creationWaitCalls{};
         for(unsigned i=0;i<frames;++i) {
             if(i==10) {
                 settings.values["NeuralRendering.Style"]=std::int64_t{1};
@@ -113,8 +115,16 @@ int wmain(int argc,wchar_t** argv) {
                 if(value(stage.updateRuntime(settings)))stop("LIVE_UPDATE_NOT_IDEMPOTENT");
             }
             context->UpdateSubresource(frame.color(),0,nullptr,colors.data(),width*4,0);
-            if(!value(stage.process(device.Get(),context.Get(),frame,i==0)))
-                stop("PROCESS_FALSE");
+            bool processed{};
+            for(unsigned attempt=0;attempt<1000&&!processed;++attempt) {
+                processed=value(stage.process(device.Get(),context.Get(),frame,i==0));
+                if(!processed)Sleep(1);
+            }
+            if(!processed)stop("PROCESS_SATURATED");
+            if(i==0)creationWaitCalls=stage.cpuFenceWaitCalls();
+            else if(stage.cpuFenceWaitCalls()!=creationWaitCalls)
+                stop("CPU_WAIT_IN_EVALUATION");
+            if(frameDelay)Sleep(frameDelay);
         }
         const std::array<ID3D11Texture2D*,1> afterTarget{frame.color()};
         const auto after=value(rk::readbackCandidates(context.Get(),afterTarget));
@@ -129,6 +139,8 @@ int wmain(int argc,wchar_t** argv) {
         std::cout<<"NR_LIVE_BRIDGE_INPUT_SHA256="<<beforeHash
             <<"\nNR_LIVE_BRIDGE_OUTPUT_SHA256="<<afterHash
             <<"\nNR_LIVE_BRIDGE_FRAMES="<<frames
+            <<"\nNR_LIVE_BRIDGE_RING_SATURATED="<<stage.saturatedFrames()
+            <<"\nNR_LIVE_BRIDGE_CREATION_CPU_WAITS="<<creationWaitCalls
             <<"\nNR_LIVE_BRIDGE=PASS"<<std::endl;
     }
     FreeLibrary(core);

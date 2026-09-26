@@ -25,6 +25,8 @@ public:
     Result<bool> stop();
     bool enabled() const noexcept;
     std::uint64_t submittedFrames() const noexcept;
+    std::uint64_t saturatedFrames() const noexcept;
+    std::uint64_t cpuFenceWaitCalls() const noexcept;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

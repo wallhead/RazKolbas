@@ -622,14 +622,13 @@ void applyPendingNrRuntimeSettings(WorldState* state) noexcept {
         if(!std::get<bool>(applied))return;
         state->nrFailureLogged=false;
         const auto skin=update->get<Text>("NeuralRendering.SkinStructureStrength").value;
-        spdlog::info("Live Neural Rendering controls applied with history reset: enabled={}; style={}; intensity={}; tone={}; structure={}; skin={}; autoMask={}; uiCorrection={}",
+        spdlog::info("Live Neural Rendering controls applied with history reset: enabled={}; style={}; intensity={}; tone={}; structure={}; skin={}; autoMask={}; uiCorrection=off (native UI after NR/SR)",
             update->get<bool>("NeuralRendering.Enabled"),
             update->get<std::int64_t>("NeuralRendering.Style"),
             update->get<double>("NeuralRendering.Intensity"),
             update->get<double>("NeuralRendering.LocalToneStrength"),
             update->get<double>("NeuralRendering.LocalStructureStrength"),skin,
-            update->get<bool>("NeuralRendering.UseAutoMask"),
-            update->get<bool>("NeuralRendering.NativeUICorrection"));
+            update->get<bool>("NeuralRendering.UseAutoMask"));
     } catch(const std::exception& error) {
         try { spdlog::warn("Live Neural Rendering update failed open: {}",error.what()); }
         catch(...) {}

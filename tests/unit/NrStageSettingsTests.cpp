@@ -58,3 +58,16 @@ TEST_CASE("NR updates remain unavailable after startup configuration rejection",
     settings.values["NeuralRendering.Backend"]=rk::Choice{"Direct"};
     REQUIRE(std::holds_alternative<rk::Error>(stage.updateRuntime(settings)));
 }
+
+TEST_CASE("NR native UI correction request cannot change evaluation controls",
+    "[nr][settings]") {
+    auto settings=rk::defaultSettings();
+    settings.values["NeuralRendering.Enabled"]=true;
+    settings.values["NeuralRendering.NativeUICorrection"]=true;
+    rk::NrStage stage;
+    REQUIRE(std::holds_alternative<bool>(stage.configure(settings)));
+    settings.values["NeuralRendering.NativeUICorrection"]=false;
+    const auto changed=stage.updateRuntime(settings);
+    REQUIRE(std::holds_alternative<bool>(changed));
+    REQUIRE_FALSE(std::get<bool>(changed));
+}

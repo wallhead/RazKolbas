@@ -3,7 +3,30 @@
 #include "rk/PointerPatch.hpp"
 #include <thread>
 #include <atomic>
+#include <filesystem>
+#include <fstream>
 #include <Windows.h>
+
+TEST_CASE("File SHA-256 streams large inputs without changing their identity",
+    "[patch][file_hash]") {
+    std::vector<std::uint8_t> bytes(131077);
+    for(std::size_t i=0;i<bytes.size();++i)
+        bytes[i]=static_cast<std::uint8_t>((i*37u)&0xffu);
+    const auto path=std::filesystem::temp_directory_path()/
+        ("rk-file-hash-"+std::to_string(GetCurrentProcessId())+"-"+
+            std::to_string(GetTickCount64())+".bin");
+    {
+        std::ofstream output(path,std::ios::binary);
+        REQUIRE(output.good());
+        output.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+        REQUIRE(output.good());
+    }
+    const auto hashed=rk::sha256File(path);
+    std::filesystem::remove(path);
+    REQUIRE(std::holds_alternative<std::string>(hashed));
+    REQUIRE(std::get<std::string>(hashed)==rk::sha256(bytes));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::sha256File(path)));
+}
 
 TEST_CASE("Pointer rollback refuses a later owner and does not overwrite it", "[patch]") {
     int original{}, replacement{}, later{};

@@ -1,4 +1,5 @@
 #include "rk/NrStage.hpp"
+#include "rk/NrCommandRing.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include <nvsdk_ngx.h>
@@ -12,11 +13,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace rk {
 namespace {
@@ -31,7 +30,7 @@ struct NrRuntimeSettings {
     bool enabled{};
     unsigned style{};
     float intensity{1.0f},tone{1.0f},structure{1.0f},skin{-1.0f};
-    bool autoMask{},uiCorrection{};
+    bool autoMask{};
     bool operator==(const NrRuntimeSettings&) const noexcept=default;
 };
 
@@ -53,7 +52,6 @@ Result<NrRuntimeSettings> runtimeSettings(const Settings& settings) {
             return Error{ErrorCode::InvalidInput,"NR skin strength is invalid"};
     }
     result.autoMask=settings.get<bool>("NeuralRendering.UseAutoMask");
-    result.uiCorrection=settings.get<bool>("NeuralRendering.NativeUICorrection");
     if(style<0||style>7||!std::isfinite(result.intensity)||
        !std::isfinite(result.tone)||!std::isfinite(result.structure)||
        !std::isfinite(result.skin)||result.intensity<0.0f||result.intensity>2.0f||
@@ -137,15 +135,15 @@ fs::path moduleDirectory() {
     return length&&length<path.size()?fs::path(path.data()).parent_path():fs::path{};
 }
 Result<bool> exactNrRuntime(const fs::path& path) {
-    std::error_code error;
-    if(!fs::is_regular_file(path,error)||error)
+    std::error_code fileError;
+    if(!fs::is_regular_file(path,fileError)||fileError)
         return Error{ErrorCode::Unavailable,"Pinned fast-FP16 NR runtime is missing"};
-    const auto size=fs::file_size(path,error);
-    if(error||size!=165840496)
+    const auto size=fs::file_size(path,fileError);
+    if(fileError||size!=165840496)
         return Error{ErrorCode::Unavailable,"Fast-FP16 NR runtime size differs"};
-    std::ifstream input(path,std::ios::binary);
-    std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(input)),{});
-    if(sha256(bytes)!=nrHash)
+    const auto hashed=sha256File(path);
+    if(const auto error=std::get_if<Error>(&hashed))return *error;
+    if(std::get<std::string>(hashed)!=nrHash)
         return Error{ErrorCode::Conflict,"Fast-FP16 NR runtime hash differs"};
     return true;
 }
@@ -166,6 +164,10 @@ struct NrStage::Impl {
         ComPtr<ID3D11Texture2D> d11;
         ComPtr<ID3D12Resource> d12;
     } color,motion,depth,output;
+    struct CommandSlot {
+        ComPtr<ID3D12CommandAllocator> allocator;
+        ComPtr<ID3D12GraphicsCommandList> commands;
+    };
 
     bool configured{},initialized{},runtimeInitialized{},disabled{};
     bool retirementUncertain{};
@@ -175,7 +177,11 @@ struct NrStage::Impl {
     std::uint64_t runtimeGeneration{};
     bool runtimeResetPending{};
     UINT width{},height{};
-    std::uint64_t fenceValue{},submitted{};
+    std::uint64_t fenceValue{},submitted{},saturated{},cpuWaitCalls{};
+    std::uint64_t pendingOutputFence{},pendingConsumerFence{};
+    bool consumerRetirementUncertain{};
+    NrCommandRing commandRing;
+    std::array<CommandSlot,NrCommandRing::size> commandSlots;
     HMODULE nr{},core{};
     HANDLE runtimeFile{INVALID_HANDLE_VALUE};
     PointerPatch shim;
@@ -215,14 +221,16 @@ struct NrStage::Impl {
             return Error{ErrorCode::Unavailable,"Cannot open NR texture on D3D12 device"};
         return result;
     }
-    void barrier(ID3D12Resource* resource,D3D12_RESOURCE_STATES before,
+    void barrier(ID3D12GraphicsCommandList* list,ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES before,
         D3D12_RESOURCE_STATES after) {
         D3D12_RESOURCE_BARRIER value{};
         value.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         value.Transition={resource,D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,before,after};
-        commands->ResourceBarrier(1,&value);
+        list->ResourceBarrier(1,&value);
     }
     Result<bool> waitCpu(std::uint64_t value) {
+        ++cpuWaitCalls;
         if(fence12->GetCompletedValue()>=value)return true;
         const auto event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
         if(!event)return Error{ErrorCode::Unavailable,"Cannot create NR fence event"};
@@ -246,6 +254,46 @@ struct NrStage::Impl {
         retirementUncertain=std::holds_alternative<Error>(waited);
         return waited;
     }
+    Result<std::uint64_t> submit(CommandSlot& slot,std::size_t index) {
+        if(FAILED(slot.commands->Close()))
+            return Error{ErrorCode::Unavailable,"Cannot close NR evaluation commands"};
+        ID3D12CommandList* lists[]{slot.commands.Get()};
+        queue->ExecuteCommandLists(1,lists);
+        retirementUncertain=true;
+        pendingOutputFence=0;
+        const auto value=++fenceValue;
+        if(FAILED(queue->Signal(fence12.Get(),value)))
+            return Error{ErrorCode::DeviceRemoved,"Cannot signal NR evaluation completion"};
+        pendingOutputFence=value;
+        commandRing.markSubmitted(index,value);
+        return value;
+    }
+    Result<bool> drain() {
+        if(consumerRetirementUncertain)
+            return Error{ErrorCode::DeviceRemoved,
+                "Cannot prove NR D3D11 copyback retirement; resources retained"};
+        if(pendingConsumerFence) {
+            if(const auto result=waitCpu(pendingConsumerFence);
+               const auto error=std::get_if<Error>(&result))return *error;
+            pendingConsumerFence=0;
+            pendingOutputFence=0;
+            retirementUncertain=false;
+        }
+        if(retirementUncertain&&queue&&fence12) {
+            auto value=pendingOutputFence;
+            if(!value) {
+                value=++fenceValue;
+                if(FAILED(queue->Signal(fence12.Get(),value)))
+                    return Error{ErrorCode::DeviceRemoved,
+                        "Cannot prove NR queue retirement; resources retained"};
+            }
+            if(const auto result=waitCpu(value);
+               const auto error=std::get_if<Error>(&result))return *error;
+            pendingOutputFence=0;
+            retirementUncertain=false;
+        }
+        return true;
+    }
     Result<bool> createFeature() {
         auto* p=parameters;
         p->Set("ResourceAllocCallback",reinterpret_cast<void*>(&allocateNrResource));
@@ -265,6 +313,8 @@ struct NrStage::Impl {
         return submitAndWait();
     }
     Result<bool> rebuild(UINT newWidth,UINT newHeight) {
+        if(const auto drained=drain();const auto error=std::get_if<Error>(&drained))
+            return *error;
         if(feature) {
             const auto result=release(feature);
             if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result)))
@@ -309,6 +359,14 @@ struct NrStage::Impl {
             return Error{ErrorCode::Unavailable,"Cannot create NR queue or shared fence"};
         if(FAILED(commands->Close()))
             return Error{ErrorCode::Unavailable,"Cannot close initial NR command list"};
+        for(auto& slot:commandSlots) {
+            if(FAILED(device12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    IID_PPV_ARGS(&slot.allocator)))||
+               FAILED(device12->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    slot.allocator.Get(),nullptr,IID_PPV_ARGS(&slot.commands)))||
+               FAILED(slot.commands->Close()))
+                return Error{ErrorCode::Unavailable,"Cannot create NR evaluation command slot"};
+        }
         HANDLE fenceHandle{};
         const auto shared=fence11->CreateSharedHandle(nullptr,GENERIC_ALL,nullptr,&fenceHandle);
         if(FAILED(shared)||!fenceHandle)
@@ -475,6 +533,19 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
                 impl_->disabled=true;return *error;
             }
         }
+        if(FAILED(impl_->device12->GetDeviceRemovedReason())) {
+            impl_->disabled=true;
+            return Error{ErrorCode::DeviceRemoved,"NR D3D12 device was removed"};
+        }
+        const auto slotIndex=impl_->commandRing.acquire(
+            impl_->fence12->GetCompletedValue());
+        if(!slotIndex) {
+            ++impl_->saturated;
+            std::scoped_lock lock(impl_->runtimeMutex);
+            impl_->runtimeResetPending=true;
+            return false;
+        }
+        auto& slot=impl_->commandSlots[*slotIndex];
         context->CopyResource(impl_->color.d11.Get(),frame.color());
         context->CopyResource(impl_->motion.d11.Get(),frame.motion());
         context->CopyResource(impl_->depth.d11.Get(),frame.depth());
@@ -491,18 +562,18 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
             impl_->disabled=true;
             return Error{ErrorCode::DeviceRemoved,"NR input handoff failed"};
         }
-        if(FAILED(impl_->allocator->Reset())||
-           FAILED(impl_->commands->Reset(impl_->allocator.Get(),nullptr))) {
+        if(FAILED(slot.allocator->Reset())||
+           FAILED(slot.commands->Reset(slot.allocator.Get(),nullptr))) {
             impl_->disabled=true;
             return Error{ErrorCode::Unavailable,"NR command reset failed"};
         }
-        impl_->barrier(impl_->color.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
+        impl_->barrier(slot.commands.Get(),impl_->color.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        impl_->barrier(impl_->motion.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
+        impl_->barrier(slot.commands.Get(),impl_->motion.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        impl_->barrier(impl_->depth.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
+        impl_->barrier(slot.commands.Get(),impl_->depth.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        impl_->barrier(impl_->output.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
+        impl_->barrier(slot.commands.Get(),impl_->output.d12.Get(),D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         auto* p=impl_->parameters;
         p->Set("DLSSNR.Color",impl_->color.d12.Get());p->Set("DLSSNR.Output",impl_->output.d12.Get());
@@ -528,31 +599,41 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
         p->Set("DLSSNR.SkinStructureStrength",runtime.skin);
         p->Set("DLSSNR.UseAutoMask",runtime.autoMask?1:0);
         p->Set("DLSSNR.Style",runtime.style);
-        p->Set("DLSSNR.UICorrection",runtime.uiCorrection?1:0);
+        // UI is composed after NR/SR; no validated model UI/alpha resources
+        // are supplied to this exact-runtime evaluation contract.
+        p->Set("DLSSNR.UICorrection",0);
         p->Set("DLSS.Indicator.Invert.X.Axis",0);p->Set("DLSS.Indicator.Invert.Y.Axis",0);
-        const auto evaluateResult=impl_->evaluate(impl_->commands.Get(),impl_->feature,p,nullptr);
-        impl_->barrier(impl_->color.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        const auto evaluateResult=impl_->evaluate(slot.commands.Get(),impl_->feature,p,nullptr);
+        impl_->barrier(slot.commands.Get(),impl_->color.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_COMMON);
-        impl_->barrier(impl_->motion.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        impl_->barrier(slot.commands.Get(),impl_->motion.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_COMMON);
-        impl_->barrier(impl_->depth.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        impl_->barrier(slot.commands.Get(),impl_->depth.d12.Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_COMMON);
-        impl_->barrier(impl_->output.d12.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        impl_->barrier(slot.commands.Get(),impl_->output.d12.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_COMMON);
-        const auto retired=impl_->submitAndWait();
-        if(const auto error=std::get_if<Error>(&retired)) {
+        const auto submitted=impl_->submit(slot,*slotIndex);
+        if(const auto error=std::get_if<Error>(&submitted)) {
             impl_->disabled=true;return *error;
         }
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(evaluateResult))) {
             impl_->disabled=true;
             return Error{ErrorCode::Unavailable,"Fast-FP16 NR evaluation failed"};
         }
-        const auto outputReady=impl_->fenceValue;
+        const auto outputReady=std::get<std::uint64_t>(submitted);
         if(FAILED(impl_->context11->Wait(impl_->fence11.Get(),outputReady))) {
             impl_->disabled=true;
             return Error{ErrorCode::DeviceRemoved,"NR output handoff failed"};
         }
         context->CopyResource(frame.color(),impl_->output.d11.Get());
+        const auto consumerReady=++impl_->fenceValue;
+        if(FAILED(impl_->context11->Signal(impl_->fence11.Get(),consumerReady))) {
+            impl_->consumerRetirementUncertain=true;
+            impl_->disabled=true;
+            return Error{ErrorCode::DeviceRemoved,"NR output copyback signal failed"};
+        }
+        impl_->pendingConsumerFence=consumerReady;
+        impl_->context11->Flush();
         {
             std::scoped_lock lock(impl_->runtimeMutex);
             if(impl_->runtimeGeneration==runtimeGeneration)
@@ -575,14 +656,8 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
 }
 Result<bool> NrStage::stop() {
     if(!impl_)return true;
-    if(impl_->retirementUncertain&&impl_->queue&&impl_->fence12) {
-        const auto value=++impl_->fenceValue;
-        if(FAILED(impl_->queue->Signal(impl_->fence12.Get(),value)))
-            return Error{ErrorCode::DeviceRemoved,"Cannot prove NR queue retirement; resources retained"};
-        if(const auto drained=impl_->waitCpu(value);
-           const auto error=std::get_if<Error>(&drained))return *error;
-        impl_->retirementUncertain=false;
-    }
+    if(const auto drained=impl_->drain();
+       const auto error=std::get_if<Error>(&drained))return *error;
     Error first{};bool failed=false;
     if(impl_->feature&&impl_->release) {
         const auto result=impl_->release(impl_->feature);
@@ -623,4 +698,6 @@ bool NrStage::enabled() const noexcept {
     return impl_->runtime.enabled;
 }
 std::uint64_t NrStage::submittedFrames() const noexcept{return impl_?impl_->submitted:0;}
+std::uint64_t NrStage::saturatedFrames() const noexcept{return impl_?impl_->saturated:0;}
+std::uint64_t NrStage::cpuFenceWaitCalls() const noexcept{return impl_?impl_->cpuWaitCalls:0;}
 }

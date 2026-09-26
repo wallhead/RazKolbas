@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <fstream>
 #include <stdexcept>
 #include <limits>
 namespace rk {
@@ -19,6 +20,43 @@ std::string sha256(std::span<const std::uint8_t> bytes) {
     constexpr char digits[] = "0123456789abcdef";
     std::string result;
     for (const auto byte : hash) { result += digits[byte >> 4]; result += digits[byte & 15]; }
+    return result;
+}
+Result<std::string> sha256File(const std::filesystem::path& path) {
+    std::ifstream input(path,std::ios::binary);
+    if(!input)return Error{ErrorCode::Io,"Cannot open SHA-256 input file"};
+    struct Handles {
+        BCRYPT_ALG_HANDLE algorithm{};
+        BCRYPT_HASH_HANDLE hash{};
+        ~Handles() {
+            if(hash)BCryptDestroyHash(hash);
+            if(algorithm)BCryptCloseAlgorithmProvider(algorithm,0);
+        }
+    } handles;
+    if(BCryptOpenAlgorithmProvider(&handles.algorithm,BCRYPT_SHA256_ALGORITHM,
+            nullptr,0)<0||
+       BCryptCreateHash(handles.algorithm,&handles.hash,nullptr,0,nullptr,0,0)<0)
+        return Error{ErrorCode::Unavailable,"Cannot create streaming SHA-256 hash"};
+    std::array<std::uint8_t,64*1024> chunk{};
+    while(input) {
+        input.read(reinterpret_cast<char*>(chunk.data()),chunk.size());
+        const auto count=input.gcount();
+        if(count>0&&BCryptHashData(handles.hash,chunk.data(),
+                static_cast<ULONG>(count),0)<0)
+            return Error{ErrorCode::Unavailable,"Cannot update streaming SHA-256 hash"};
+    }
+    if(input.bad()||!input.eof())
+        return Error{ErrorCode::Io,"Cannot read SHA-256 input file"};
+    std::array<std::uint8_t,32> digest{};
+    if(BCryptFinishHash(handles.hash,digest.data(),
+            static_cast<ULONG>(digest.size()),0)<0)
+        return Error{ErrorCode::Unavailable,"Cannot finish streaming SHA-256 hash"};
+    constexpr char digits[]="0123456789abcdef";
+    std::string result;
+    result.reserve(64);
+    for(const auto byte:digest) {
+        result+=digits[byte>>4];result+=digits[byte&15];
+    }
     return result;
 }
 namespace {

@@ -2,6 +2,7 @@
 #include "rk/Result.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
@@ -9,6 +10,7 @@
 
 namespace rk {
 std::string sha256(std::span<const std::uint8_t> bytes);
+Result<std::string> sha256File(const std::filesystem::path& path);
 struct PatchDescriptor {
     std::string id;
     std::string purpose;
