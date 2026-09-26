@@ -1,5 +1,51 @@
 # Implementation checkpoint
 
+## 0.1.91 inventory auxiliary UI recovery candidate (2026-09-26)
+
+The user identified opening inventory as the trigger for delayed UI flicker
+in the installed 0.1.90 V5.4 run. The game log confirms the late native UI
+route faulted at frame 12783 and again after its bounded retry at frame
+13193. Both faults used the same newly bound reduced auxiliary in RTV slot 1,
+format `DXGI_FORMAT_R16G16_FLOAT` (34), one mip and 1707x960 extent. The
+depth identity matched the previously learned source. Early route traces
+had observed only two alternating auxiliary identities; the inventory
+target had a third identity. The retry could not help because 0.1.90 never
+created a native companion for this new source. DLSS/NR and Present kept
+working, but the late native UI route stayed on pre-Present publication.
+The captured log is preserved under ignored
+`artifacts/local/runtime-0.1.90-inventory-flicker-20260926/RazKolbas.log`
+(SHA-256 `71918bfb73e0b943ce126dffedd9ef1ad094ea5fd49b7717b6bdf092310417e4`).
+
+The 0.1.91 candidate accepts one extra supported reduced auxiliary observed
+in a two-target scene bind with the same known depth. It retains that view,
+allocates its matching display-size target at the next World pre-Present
+boundary outside the context callback, and resumes late UI routing two
+frames after the fault once allocation succeeds. Unsupported textures or a
+changed depth stay on the conservative fallback, and a repeated fault still
+stops further retries. The WARP test first reproduced a persistent fault
+for the third auxiliary; it now verifies the new native-size mapping, both
+original mappings, and the unsupported-texture cutoff. The candidate has
+not yet run in Skyrim; inventory flicker resolution is **NOT VERIFIED**.
+
+Debug and Release builds each passed all 42 CTest groups. The isolated V5.4
+package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.91-v54-inventory-ui.zip`
+(SHA-256 `b7605520e3ec353dfdcd748ffb0ef17be25cf2dcabf1eee729f5e38710109a00`).
+Its independently extracted five payloads match the manifest. Skyrim was
+closed before installation; the 0.1.90 immutable installed payloads matched
+their manifest, and the DLL, mutable INI and manifest were backed up under
+ignored `artifacts/local/v54-0.1.91-install-backup`. Only the DLL and
+manifest were replaced. All five installed payloads match the 0.1.91
+manifest. Installed DLL SHA-256 is
+`a20d3b27f7d1ea9b7afbb45ab5a17ba9666ba5e7a97fa0e22e93a482e71b991f`;
+the user's saved INI remains SHA-256
+`c0a6c63f4645051bd52930f09d370d412e1051c0e57fa03b96a99aa6c1fb8159`.
+The signed SR and community NR runtimes were not replaced. The assistant did
+not start Skyrim. The next required test is a user-started loaded-world
+session: open inventory, observe the HUD, and inspect the resulting log for
+one learned auxiliary, preparation, quick route resumption and no repeated
+contract fault.
+
 ## 0.1.90 bounded native UI route recovery candidate (2026-09-26)
 
 In the user-started 0.1.89 V5.4 run, the native UI route worked at first,

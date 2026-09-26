@@ -910,7 +910,7 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
         if(auto* ui=ownedUiRedirector()) {
           try {
             if(ui->resumeLatePassRouting(frame,state->ownedSceneGate.ready()))
-                spdlog::info("Owned native UI late route resumed at frame {} after scene admission and 120-frame cooldown",
+                spdlog::info("Owned native UI late route resumed at frame {} after compatibility recovery",
                     frame);
             if(frame<=12)ui->beginObservation(frame);
             if(frame>12&&state->ownedSceneGate.ready()&&
@@ -1578,7 +1578,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
 #ifdef RK_WITH_NGX
     if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World) {
         const auto frame=state->forwarded.load(std::memory_order_relaxed);
-        if(auto* ui=ownedUiRedirector())
+        if(auto* ui=ownedUiRedirector()) {
             if(auto observation=ui->finishObservation(frame)) {
                 try {
                     spdlog::info("Owned menu-to-Present bind trace frame {}: events={} dropped={} sampledDepthReads={} firstSampledDepthSlot={} otherSingletonReads={}",
@@ -1623,6 +1623,19 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                     }catch(...) {}
                 }
             }
+            if(ui->hasUnpreparedAuxiliary()) {
+                const auto prepared=ui->prepareObservedCompanions();
+                if(FAILED(prepared)) {
+                    if(frame%600==0) {
+                        try {spdlog::warn("Owned native UI auxiliary preparation frame {} failed: HRESULT=0x{:08x}",
+                            frame,static_cast<std::uint32_t>(prepared));}catch(...) {}
+                    }
+                } else if(!ui->hasUnpreparedAuxiliary()) {
+                    try {spdlog::info("Owned native UI auxiliary prepared at frame {} for a newly observed menu target",
+                        frame);}catch(...) {}
+                }
+            }
+        }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
             frame,OwnedPublicationBoundary::PrePresent);
     } else if(auto* closingDomain=activeOwnedSceneDomain();
@@ -1644,7 +1657,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 state->statusDlssDisabled.store(true,std::memory_order_release);
                 closingDomain->suspend();
             }
-            try {spdlog::warn("Owned native UI contract changed at frame {}; using pre-Present publication while a bounded late-route retry waits for scene admission",
+            try {spdlog::warn("Owned native UI contract changed at frame {}; using pre-Present publication until a compatible late-route retry",
                 frame);}catch(...) {}
         } else if(!closingDomain->closePublishedFrame(frame,
                       closingDomain->plan().generation)) {

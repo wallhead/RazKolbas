@@ -154,13 +154,13 @@ void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
         }
         if(!faultBefore&&state->redirect.compatibilityFault()) {
             const auto fault=state->redirect.compatibilityFaultInfo();
-            try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{} depthId=0x{:x} expectedDepthId=0x{:x} unknownTargetSlot={} unknownTargetId=0x{:x} unknownTargetFormat={} unknownTargetMips={}",
+            try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{} depthId=0x{:x} expectedDepthId=0x{:x} unknownTargetSlot={} unknownTargetId=0x{:x} unknownTargetFormat={} unknownTargetMips={} learnedAuxiliary={}",
                 static_cast<unsigned>(phaseBefore),worldBefore,GetCurrentThreadId(),
                 fault.targetCount,fault.sceneSlot,fault.hasDepth,
                 fault.depthWidth,fault.depthHeight,fault.depthId,fault.expectedDepthId,
                 fault.unknownTargetSlot,fault.unknownTargetId,
                 static_cast<unsigned>(fault.unknownTargetFormat),
-                fault.unknownTargetMips);} catch(...) {}
+                fault.unknownTargetMips,fault.learnedAuxiliary);} catch(...) {}
         }
     } else state->next.om(context,count,views,depth);
 }
