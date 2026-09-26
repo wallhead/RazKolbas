@@ -51,6 +51,60 @@ HRESULT createNativeAuxiliary(ID3D11Device* device,ID3D11RenderTargetView* sourc
     if(FAILED(hr))return hr;
     return device->CreateRenderTargetView(texture.Get(),&viewDesc,&result);
 }
+bool canPrepareNativeSampledAuxiliary(ID3D11RenderTargetView* source,
+    Extent render) noexcept {
+    if(!source||!render.valid())return false;
+    auto value=resource(source);
+    ComPtr<ID3D11Texture2D> texture;
+    if(!value||FAILED(value.As(&texture)))return false;
+    D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+    D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};source->GetDesc(&viewDesc);
+    return desc.Width==render.width&&desc.Height==render.height&&
+        desc.ArraySize==1&&desc.MipLevels==1&&desc.SampleDesc.Count==1&&
+        desc.Usage==D3D11_USAGE_DEFAULT&&
+        desc.Format==DXGI_FORMAT_R16G16_FLOAT&&
+        (desc.BindFlags&(D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE))==
+            (D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE)&&
+        viewDesc.ViewDimension==D3D11_RTV_DIMENSION_TEXTURE2D&&
+        viewDesc.Texture2D.MipSlice==0;
+}
+bool supportedSampledAuxiliaryView(ID3D11RenderTargetView* target,
+    ID3D11ShaderResourceView* sample) noexcept {
+    if(!target||!sample||
+       !sameObject(resource(target).Get(),resource(sample).Get()))return false;
+    D3D11_SHADER_RESOURCE_VIEW_DESC desc{};sample->GetDesc(&desc);
+    return desc.Format==DXGI_FORMAT_R16G16_FLOAT&&
+        desc.ViewDimension==D3D11_SRV_DIMENSION_TEXTURE2D&&
+        desc.Texture2D.MostDetailedMip==0&&desc.Texture2D.MipLevels==1;
+}
+HRESULT createNativeSampledAuxiliary(ID3D11Device* device,
+    ID3D11RenderTargetView* source,ID3D11ShaderResourceView* sample,
+    Extent render,Extent display,ComPtr<ID3D11RenderTargetView>& target,
+    ComPtr<ID3D11ShaderResourceView>& sampled) noexcept {
+    if(!device||!display.valid()||
+       !canPrepareNativeSampledAuxiliary(source,render)||
+       !supportedSampledAuxiliaryView(source,sample))return E_INVALIDARG;
+    auto sourceResource=resource(source);
+    ComPtr<ID3D11Texture2D> sourceTexture;
+    if(FAILED(sourceResource.As(&sourceTexture)))return E_INVALIDARG;
+    D3D11_TEXTURE2D_DESC textureDesc{};sourceTexture->GetDesc(&textureDesc);
+    D3D11_RENDER_TARGET_VIEW_DESC targetDesc{};source->GetDesc(&targetDesc);
+    D3D11_SHADER_RESOURCE_VIEW_DESC sampleDesc{};sample->GetDesc(&sampleDesc);
+    textureDesc.Width=display.width;textureDesc.Height=display.height;
+    textureDesc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    textureDesc.CPUAccessFlags=0;textureDesc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> texture;
+    auto hr=device->CreateTexture2D(&textureDesc,nullptr,&texture);
+    if(FAILED(hr))return hr;
+    ComPtr<ID3D11RenderTargetView> targetView;
+    hr=device->CreateRenderTargetView(texture.Get(),&targetDesc,&targetView);
+    if(FAILED(hr))return hr;
+    ComPtr<ID3D11ShaderResourceView> sampledView;
+    hr=device->CreateShaderResourceView(texture.Get(),&sampleDesc,&sampledView);
+    if(FAILED(hr))return hr;
+    target=std::move(targetView);sampled=std::move(sampledView);
+    return S_OK;
+}
 HRESULT createNativeDepth(ID3D11Device* device,ID3D11DepthStencilView* source,
     Extent display,ComPtr<ID3D11DepthStencilView>& result) noexcept {
     if(!device||!source||!display.valid())return E_INVALIDARG;
@@ -175,7 +229,7 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     generation_=route_.plan().generation;compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
-    latePassFaults_=0;latePassFaultFrame_=0;
+    latePassFaults_=0;latePassFaultFrame_=0;learnedSampledAuxiliaryOnFault_=false;
     observationLayout_=layout;
     return S_OK;
 }
@@ -320,8 +374,14 @@ HRESULT NativeUiRedirector::prepareObservedCompanions() noexcept {
     if(!device)return E_UNEXPECTED;
     for(auto& auxiliary:auxiliaries_) {
         if(!auxiliary.sourceView||auxiliary.nativeView)continue;
-        const auto hr=createNativeAuxiliary(device.Get(),auxiliary.sourceView.Get(),
-            route_.plan().display,auxiliary.nativeView);
+        if(auxiliary.requiresSampledView&&!auxiliary.sourceShaderView)continue;
+        const auto hr=auxiliary.requiresSampledView?
+            createNativeSampledAuxiliary(device.Get(),auxiliary.sourceView.Get(),
+                auxiliary.sourceShaderView.Get(),route_.plan().render,
+                route_.plan().display,auxiliary.nativeView,
+                auxiliary.nativeShaderView):
+            createNativeAuxiliary(device.Get(),auxiliary.sourceView.Get(),
+                route_.plan().display,auxiliary.nativeView);
         if(FAILED(hr))return hr;
     }
     if(depthSourceView_&&!nativeDepthView_) {
@@ -342,6 +402,13 @@ HRESULT NativeUiRedirector::prepareObservedCompanions() noexcept {
     }
     return companionsReady()?S_OK:S_FALSE;
 }
+bool NativeUiRedirector::hasUnpreparedAuxiliary() const noexcept {
+    for(const auto& auxiliary:auxiliaries_)
+        if(auxiliary.sourceView&&(!auxiliary.nativeView||
+           (auxiliary.requiresSampledView&&!auxiliary.nativeShaderView))&&
+           (!auxiliary.requiresSampledView||auxiliary.sourceShaderView))return true;
+    return false;
+}
 bool NativeUiRedirector::companionsReady() const noexcept {
     if(observationContractFault_||validRouteObservations_<2||
        !observedMrtDepth_||!observedSingleDepth_||
@@ -349,25 +416,37 @@ bool NativeUiRedirector::companionsReady() const noexcept {
        !nativeSampledDepthView_||!nativeSampledDepthClearView_)return false;
     unsigned auxiliaryCount{};
     for(const auto& item:auxiliaries_) {
-        if(item.sourceId&&!item.nativeView)return false;
+        if(item.sourceId&&(!item.nativeView||
+           (item.requiresSampledView&&
+            (!item.sourceShaderView||!item.nativeShaderView))))return false;
         if(item.sourceId)++auxiliaryCount;
     }
-    return auxiliaryCount==2;
+    return auxiliaryCount>=2&&auxiliaryCount<=3;
 }
 void NativeUiRedirector::suspendLatePassRouting(std::uint64_t frame) noexcept {
     latePassRoutingDisabled_=true;
+    learnedSampledAuxiliaryOnFault_=false;
+    for(const auto& auxiliary:auxiliaries_)
+        if(auxiliary.requiresSampledView&&auxiliary.sourceShaderView&&
+           reinterpret_cast<std::uintptr_t>(auxiliary.sourceId.Get())==
+               faultInfo_.unknownTargetId)
+            learnedSampledAuxiliaryOnFault_=true;
     compatibilityFault_=false;faultInfo_={};
     latePassFaultFrame_=frame;
     if(++latePassFaults_>1)latePassPermanentlyDisabled_=true;
 }
 bool NativeUiRedirector::resumeLatePassRouting(std::uint64_t frame,
     bool sceneReady) noexcept {
-    if(!latePassRoutingDisabled_||latePassPermanentlyDisabled_||!sceneReady||
+    if(!latePassRoutingDisabled_||latePassPermanentlyDisabled_||
        route_.phase()!=ScenePhase::World||route_.frame()!=frame||
        generation_!=route_.plan().generation||
-       frame<latePassFaultFrame_||frame-latePassFaultFrame_<120||
+       frame<latePassFaultFrame_||
+       (learnedSampledAuxiliaryOnFault_?
+           frame-latePassFaultFrame_<2:
+           (!sceneReady||frame-latePassFaultFrame_<120))||
        !companionsReady())return false;
     latePassRoutingDisabled_=false;
+    learnedSampledAuxiliaryOnFault_=false;
     return true;
 }
 std::optional<UiDepthViewContract> NativeUiRedirector::depthViewContract() const noexcept {
@@ -512,6 +591,20 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
                     faultInfo_.unknownTargetBindFlags=desc.BindFlags;
                     break;
                 }
+                // The inventory target is sampled later in the same frame.
+                // Learn both its RTV and exact SRV before admitting a native
+                // companion; redirecting only its writes hid the inventory.
+                if(count==2&&sceneSlot==0&&
+                   faultInfo_.unknownTargetSlot==1&&
+                   faultInfo_.depthId&&
+                   faultInfo_.depthId==faultInfo_.expectedDepthId&&
+                   canPrepareNativeSampledAuxiliary(views[1],route_.plan().render)) {
+                    rememberObservedCompanions(count,views,depth,sceneSlot);
+                    for(auto& auxiliary:auxiliaries_)
+                        if(reinterpret_cast<std::uintptr_t>(auxiliary.sourceId.Get())==
+                           faultInfo_.unknownTargetId&&!auxiliary.nativeView)
+                            auxiliary.requiresSampledView=true;
+                }
             }
             compatibilityFault_=true; // Unknown MRT/depth semantics.
         }
@@ -557,6 +650,13 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
                 ++faultInfo_.unknownTargetSrvReads;
             if(faultInfo_.unknownTargetFirstSrvSlot==~0u)
                 faultInfo_.unknownTargetFirstSrvSlot=start+i;
+            for(auto& auxiliary:auxiliaries_)
+                if(auxiliary.requiresSampledView&&
+                   reinterpret_cast<std::uintptr_t>(auxiliary.sourceId.Get())==
+                       faultInfo_.unknownTargetId&&
+                   supportedSampledAuxiliaryView(auxiliary.sourceView.Get(),views[i])&&
+                   !auxiliary.sourceShaderView)
+                    auxiliary.sourceShaderView=views[i];
         }
     }
     if(observing_&&context==context_.Get()&&count==1&&views&&views[0]&&
@@ -570,12 +670,31 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
                 observation_.firstSampledDepthSlot=start;
         } else ++observation_.otherSingletonReads;
     }
-    if(eligible(context)&&count==1&&views&&views[0]&&nativeSampledDepthView_) {
-        auto value=resource(views[0]);auto id=canonical(value.Get());
-        if(id&&depthSourceId_&&id.Get()==depthSourceId_.Get()) {
-            auto* replacement=nativeSampledDepthView_.Get();
-            next_.ps(context,start,1,&replacement);return;
+    if(eligible(context)&&views&&count&&
+       start<=D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT&&
+       count<=D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT-start) {
+        std::array<ID3D11ShaderResourceView*,
+            D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> replacements{};
+        bool changed=false;
+        for(UINT i=0;i<count;++i) {
+            replacements[i]=views[i];
+            if(!views[i])continue;
+            auto value=resource(views[i]);auto id=canonical(value.Get());
+            if(!id)continue;
+            if(count==1&&depthSourceId_&&id.Get()==depthSourceId_.Get()&&
+               nativeSampledDepthView_) {
+                replacements[i]=nativeSampledDepthView_.Get();changed=true;
+                continue;
+            }
+            for(const auto& auxiliary:auxiliaries_)
+                if(auxiliary.requiresSampledView&&auxiliary.nativeShaderView&&
+                   id.Get()==auxiliary.sourceId.Get()&&
+                   supportedSampledAuxiliaryView(auxiliary.sourceView.Get(),views[i])) {
+                    replacements[i]=auxiliary.nativeShaderView.Get();
+                    changed=true;break;
+                }
         }
+        if(changed) {next_.ps(context,start,count,replacements.data());return;}
     }
     next_.ps(context,start,count,views);
 }
@@ -585,7 +704,7 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
-    latePassFaults_=0;latePassFaultFrame_=0;
+    latePassFaults_=0;latePassFaultFrame_=0;learnedSampledAuxiliaryOnFault_=false;
     observationLayout_=UiObservationLayout::FourPairs;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
     validRouteObservations_=0;observationContractFault_=false;

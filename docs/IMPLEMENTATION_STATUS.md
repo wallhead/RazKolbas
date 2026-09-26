@@ -1,5 +1,46 @@
 # Implementation checkpoint
 
+## 0.1.93 inventory sampled-auxiliary routing candidate (2026-09-26)
+
+The user-started 0.1.92 run restored inventory visibility but opening it still
+flickered. At frame 11404, the unknown reduced RTV1 was `R16G16_FLOAT`,
+single-mip, with render-target and shader-resource bind flags (`0x28`). The
+same resource was requested as a pixel-shader input once on slot 2 before
+pre-Present. The pattern repeated at frame 14827 after the bounded route
+retry. This establishes that the 0.1.91 RTV-only redirection broke a
+write-then-sample path: the shader still read the original reduced texture.
+The 0.1.92 game log is retained only under ignored
+`artifacts/local/runtime-0.1.92-inventory-flicker-20260926/RazKolbas.log`
+(SHA-256 `1bd9dbf2bde6d9b7bf23f6b55860ec7d9aeef1d097e9bd76cf36b647dcd224c3`).
+
+The 0.1.93 candidate learns this exact third target and its observed SRV
+during the first fault, then allocates a display-size texture with paired RTV
+and SRV outside the context callback. Once both views exist, its late UI
+route maps writes and reads together. Admission is restricted to the observed
+single-mip `R16G16_FLOAT` shape, matching depth identity and sampled view;
+unsupported binds retain the existing fallback. The WARP integration test
+first failed against the missing companion API, then passed after checking
+both native RTV and SRV resource identity and the unsupported-target cutoff.
+Debug and Release builds and all 42 CTest groups passed. The isolated V5.4
+package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.93-v54-sampled-ui.zip`
+(SHA-256 `9139437211d718051ad8a0b5733a032f2ca0ebd200f389f3754a18dc745edfdc`).
+Independent extraction matched all five manifest payloads. With Skyrim
+closed, the previous immutable installed payloads matched their manifest;
+the mutable INI had changed during the user run (sharpening and NR settings),
+and its current hash matched the package's preserved copy. The previous
+DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.93-install-backup`, and the final package refresh
+was backed up under `artifacts/local/v54-0.1.93-final-install-backup`.
+Only the DLL and manifest were
+replaced. All five installed payloads match the new manifest; DLL SHA-256 is
+`6b5554f243aaaa1fa280892620b1164f2c9e4078d18345daa747db0a3e3938b6`,
+and the preserved user INI SHA-256 is
+`ac4963b15c4d86258919f6f194ba4489322e4622d0fe576ff660496a1bb6a941`.
+The signed SR and modified NR runtimes are unchanged. **Skyrim verification
+is pending**; inventory visibility and flicker must be checked in a
+user-started game session.
+
 ## 0.1.92 inventory source read diagnostic candidate (2026-09-26)
 
 The user-started 0.1.91 V5.4 run made the inventory disappear while other
@@ -32,8 +73,8 @@ DLL and manifest were replaced. All five installed payloads now match the
 new manifest; DLL SHA-256 is
 `79fafe3d4555d14c96aeb7b7558f0875713d17a831d3c9ac5d79af1a8eb29324`.
 The user INI and both NVIDIA runtimes retain their previous hashes.
-**Skyrim runtime verification is pending**; the user must start the game and
-open the inventory to reproduce and capture the source-read count.
+The user-started Skyrim run showed a visible but flickering inventory and
+recorded one matching slot-2 PS source bind at each of two route faults.
 
 ## 0.1.90 bounded native UI route recovery candidate (2026-09-26)
 

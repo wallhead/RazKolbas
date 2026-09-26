@@ -1578,7 +1578,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
 #ifdef RK_WITH_NGX
     if(auto* domain=activeOwnedSceneDomain();domain&&domain->phase()==ScenePhase::World) {
         const auto frame=state->forwarded.load(std::memory_order_relaxed);
-        if(auto* ui=ownedUiRedirector())
+        if(auto* ui=ownedUiRedirector()) {
             if(auto observation=ui->finishObservation(frame)) {
                 try {
                     spdlog::info("Owned menu-to-Present bind trace frame {}: events={} dropped={} sampledDepthReads={} firstSampledDepthSlot={} otherSingletonReads={}",
@@ -1623,6 +1623,18 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                     }catch(...) {}
                 }
             }
+            if(ui->hasUnpreparedAuxiliary()) {
+                const auto prepared=ui->prepareObservedCompanions();
+                if(FAILED(prepared)) {
+                    if(frame%600==0)
+                        try {spdlog::warn("Owned sampled UI auxiliary preparation frame {} failed: HRESULT=0x{:08x}",
+                            frame,static_cast<std::uint32_t>(prepared));}catch(...) {}
+                } else if(!ui->hasUnpreparedAuxiliary()) {
+                    try {spdlog::info("Owned sampled UI auxiliary RTV/SRV prepared at frame {} for inventory compositing",
+                        frame);}catch(...) {}
+                }
+            }
+        }
         processOwnedWorldFrame(state,reinterpret_cast<void*>(state->expectedRenderer),
             frame,OwnedPublicationBoundary::PrePresent);
     } else if(auto* closingDomain=activeOwnedSceneDomain();
@@ -1637,10 +1649,11 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 frame);}catch(...) {}
         } else if(ui->compatibilityFault()) {
             const auto fault=ui->compatibilityFaultInfo();
-            try {spdlog::info("Owned UI fault frame {} source target PS reads={} firstSlot={}; observation only",
+            try {spdlog::info("Owned UI fault frame {} source target PS reads={} firstSlot={} sampledCompanionCandidate={}",
                 frame,fault.unknownTargetSrvReads,
                 fault.unknownTargetFirstSrvSlot==~0u?-1:
-                    static_cast<int>(fault.unknownTargetFirstSrvSlot));}catch(...) {}
+                    static_cast<int>(fault.unknownTargetFirstSrvSlot),
+                ui->hasUnpreparedAuxiliary());}catch(...) {}
             ui->suspendLatePassRouting(frame);
             state->menuSceneGate.record(frame,std::nullopt,std::nullopt);
             if(!closingDomain->closePublishedFrame(frame,

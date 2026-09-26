@@ -86,6 +86,7 @@ public:
     // and depth resources learned by the read-only menu trace. Allocation is
     // kept outside the context callbacks.
     HRESULT prepareObservedCompanions() noexcept;
+    bool hasUnpreparedAuxiliary() const noexcept;
     bool companionsReady() const noexcept;
     std::optional<UiDepthViewContract> depthViewContract() const noexcept;
     bool latePassRoutingAvailable() const noexcept {
@@ -119,6 +120,8 @@ private:
         Microsoft::WRL::ComPtr<IUnknown> sourceId;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sourceView;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> nativeView;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sourceShaderView,nativeShaderView;
+        bool requiresSampledView{};
     };
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
@@ -137,6 +140,7 @@ private:
     bool latePassPermanentlyDisabled_{};
     unsigned latePassFaults_{};
     std::uint64_t latePassFaultFrame_{};
+    bool learnedSampledAuxiliaryOnFault_{};
     UiCompatibilityFault faultInfo_{};
     UiFrameObservation observation_{};
     bool observing_{},observeViewport_{};
