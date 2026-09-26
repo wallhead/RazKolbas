@@ -35,8 +35,9 @@ assistant did not launch Skyrim.
 
 Actual MO2 `MoveFileExW` behavior, successful menu Save, saved INI contents,
 reload persistence, and continued in-game NR/SR behavior are **NOT RUN** for
-0.1.87. The next step is a user-started V5.4 session: change one visible NR
-control, use Save, exit normally, and check the effective virtual INI,
+0.1.87. The next step is a user-started V5.4 session: change the NR Style
+slider by one step, release it to trigger automatic save, exit normally,
+and check the effective virtual INI,
 physical mod INI, MO2 overwrite, and next launch. A successful save may
 change the mutable INI hash from the static package manifest; later
 installers must preserve that user data.
