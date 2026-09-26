@@ -154,10 +154,13 @@ void STDMETHODCALLTYPE uiOmProxy(ID3D11DeviceContext* context,UINT count,
         }
         if(!faultBefore&&state->redirect.compatibilityFault()) {
             const auto fault=state->redirect.compatibilityFaultInfo();
-            try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{}",
+            try {spdlog::warn("Owned UI bind incompatible: phase={} worldForwarded={} thread={} targetCount={} sceneSlot={} depth={} depthExtent={}x{} depthId=0x{:x} expectedDepthId=0x{:x} unknownTargetSlot={} unknownTargetId=0x{:x} unknownTargetFormat={} unknownTargetMips={}",
                 static_cast<unsigned>(phaseBefore),worldBefore,GetCurrentThreadId(),
                 fault.targetCount,fault.sceneSlot,fault.hasDepth,
-                fault.depthWidth,fault.depthHeight);} catch(...) {}
+                fault.depthWidth,fault.depthHeight,fault.depthId,fault.expectedDepthId,
+                fault.unknownTargetSlot,fault.unknownTargetId,
+                static_cast<unsigned>(fault.unknownTargetFormat),
+                fault.unknownTargetMips);} catch(...) {}
         }
     } else state->next.om(context,count,views,depth);
 }

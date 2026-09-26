@@ -1,5 +1,45 @@
 # Implementation checkpoint
 
+## 0.1.90 bounded native UI route recovery candidate (2026-09-26)
+
+In the user-started 0.1.89 V5.4 run, the native UI route worked at first,
+then detected an incompatible two-target reduced scene/depth bind at frame
+24616. It permanently selected pre-Present publication after that frame.
+The user reported that UI flicker began after some time. This timing makes
+the route transition a concrete suspect, but the specific changed target
+and the visual cause are not yet proven. DLSS/NR submission continued and
+Present reported zero failures after the transition.
+
+The 0.1.90 candidate uses pre-Present publication after the first late-UI
+bind mismatch, waits at least 120 frames and for the owned scene admission
+gate, then allows one retry of the native UI route. A second mismatch leaves
+the pre-Present route selected. The existing companion resource mapping is
+unchanged; this candidate only recovers when the mismatch was transient.
+The one-time mismatch warning now records the unknown reduced target's
+identity, slot, format and mip count, plus actual and expected depth
+identities, so a repeat identifies which resource changed. The WARP native
+UI integration test first failed to compile against the missing retry API,
+then passed with a transient recovery and a repeated-fault cutoff. Debug
+and Release builds and all 42 CTest groups passed. The user has not yet run
+0.1.90 in Skyrim; flicker resolution is **NOT VERIFIED**.
+
+The isolated V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.90-v54-ui-recovery.zip`
+(SHA-256 `615aa74e735a26e70043f2f8e734c588fd35a35d4e08ed2ea17b6a371e7048c4`).
+It was independently extracted and its exact five manifest payloads passed
+hash verification. With Skyrim closed, the prior immutable installed files
+matched their 0.1.89 manifest. The installed DLL, mutable INI and manifest
+were backed up under ignored `artifacts/local/v54-0.1.90-install-backup`.
+Only the DLL and manifest were replaced, and every new installed payload
+matches the 0.1.90 manifest. The installed DLL SHA-256 is
+`c967accec6143a34a30d6a918117bdcd047ff0d85d0328476ecc2546ac3541b5`;
+the preserved user INI SHA-256 is
+`5dad2032781738e15b25be2f213a4426897bda6eba80722c3d321b0c503b2e8c`.
+The signed SR and community NR runtimes remain unchanged. The assistant did
+not start Skyrim. The next runtime check is a user-started loaded-world
+session long enough to see whether native UI routing stays active or resumes
+after a transient contract fault, while checking which HUD element flickers.
+
 ## 0.1.89 explicit pre-SR depth requirement (2026-09-26)
 
 An arbitrary pre-SR callback no longer selects the R32 depth-conversion
@@ -35,9 +75,22 @@ INI remains SHA-256
 `c0e655dd5c6da827f5c197e04613d280b928b180dbe29b1fb1280d11522b8220`
 with `NeuralRendering.Enabled=false` and `Style=2`; the signed SR and
 community NR runtimes remain byte-identical. The assistant did not start
-Skyrim. The next game action is a user-started V5.4 launch, enabling NR in
-the End menu to exercise the explicit R32 path, then inspecting logs and
-image continuity. No injected NGX failure is required for this test.
+Skyrim. The user then launched V5.4 and enabled NR in the End menu. The
+0.1.89 session (game PID 22640, start 11:06:42) logged at least 18,000 NR
+pre-SR submissions, Quality publication from 1707x960 to 2560x1440 at
+frame 38400, and Present HRESULT 0 with zero failed calls. The user first
+reported that the image seemed good, then clarified that the UI began
+flickering after some time. At frame 24616 the late native UI route logged
+an incompatible two-target scene/depth bind and permanently switched to
+pre-Present publication. That switch is a concrete suspect for the delayed
+flicker, not yet a proven cause. The only later warnings observed were the
+UI bind and route-change pair; early startup also logged an emergency spatial
+publication and expected admission-gate failures. The physical MO2 INI was
+saved with NR enabled; its hash changed during the live run, so the
+pre-launch hash above is a baseline, not the final saved hash. This confirms
+ordinary NR and SR submission stability but **does not pass visual UI
+continuity**. Injected NGX-failure recovery and reference image equivalence
+remain unverified.
 
 ## 0.1.88 NR evaluation recovery candidate (2026-09-26)
 

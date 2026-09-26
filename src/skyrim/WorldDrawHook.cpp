@@ -909,6 +909,9 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     if(state&&domain&&domain->phase()==ScenePhase::World) {
         if(auto* ui=ownedUiRedirector()) {
           try {
+            if(ui->resumeLatePassRouting(frame,state->ownedSceneGate.ready()))
+                spdlog::info("Owned native UI late route resumed at frame {} after scene admission and 120-frame cooldown",
+                    frame);
             if(frame<=12)ui->beginObservation(frame);
             if(frame>12&&state->ownedSceneGate.ready()&&
                ui->latePassRoutingAvailable()&&
@@ -1633,14 +1636,15 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
             try {spdlog::warn("Owned menu-boundary UI route suspended without its context hook at pre-Present frame {}",
                 frame);}catch(...) {}
         } else if(ui->compatibilityFault()) {
-            ui->disableLatePassRouting();
+            ui->suspendLatePassRouting(frame);
+            state->menuSceneGate.record(frame,std::nullopt,std::nullopt);
             if(!closingDomain->closePublishedFrame(frame,
                 closingDomain->plan().generation)) {
                 state->srDisabled=true;
                 state->statusDlssDisabled.store(true,std::memory_order_release);
                 closingDomain->suspend();
             }
-            try {spdlog::warn("Owned native UI contract changed at frame {}; continuing with stable pre-Present publication",
+            try {spdlog::warn("Owned native UI contract changed at frame {}; using pre-Present publication while a bounded late-route retry waits for scene admission",
                 frame);}catch(...) {}
         } else if(!closingDomain->closePublishedFrame(frame,
                       closingDomain->plan().generation)) {

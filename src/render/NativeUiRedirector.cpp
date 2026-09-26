@@ -174,6 +174,8 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     scene_=reducedScene;sceneId_=canonical(reducedScene);
     nativeId_=canonical(nativeColor.Get());nativeRtv_=nativeRtv;
     generation_=route_.plan().generation;compatibilityFault_=false;faultInfo_={};
+    latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
+    latePassFaults_=0;latePassFaultFrame_=0;
     observationLayout_=layout;
     return S_OK;
 }
@@ -352,6 +354,22 @@ bool NativeUiRedirector::companionsReady() const noexcept {
     }
     return auxiliaryCount==2;
 }
+void NativeUiRedirector::suspendLatePassRouting(std::uint64_t frame) noexcept {
+    latePassRoutingDisabled_=true;
+    compatibilityFault_=false;faultInfo_={};
+    latePassFaultFrame_=frame;
+    if(++latePassFaults_>1)latePassPermanentlyDisabled_=true;
+}
+bool NativeUiRedirector::resumeLatePassRouting(std::uint64_t frame,
+    bool sceneReady) noexcept {
+    if(!latePassRoutingDisabled_||latePassPermanentlyDisabled_||!sceneReady||
+       route_.phase()!=ScenePhase::World||route_.frame()!=frame||
+       generation_!=route_.plan().generation||
+       frame<latePassFaultFrame_||frame-latePassFaultFrame_<120||
+       !companionsReady())return false;
+    latePassRoutingDisabled_=false;
+    return true;
+}
 std::optional<UiDepthViewContract> NativeUiRedirector::depthViewContract() const noexcept {
     if(!depthSourceView_||!nativeDepthView_||!nativeSampledDepthClearView_)
         return std::nullopt;
@@ -467,13 +485,31 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
             if(!compatibilityFault_) {
                 faultInfo_={count,sceneSlot,depth!=nullptr,0,0};
                 if(depth) {
-                    auto value=resource(depth);
+                    auto value=resource(depth);auto id=canonical(value.Get());
+                    faultInfo_.depthId=reinterpret_cast<std::uintptr_t>(id.Get());
+                    faultInfo_.expectedDepthId=reinterpret_cast<std::uintptr_t>(
+                        depthSourceId_.Get());
                     ComPtr<ID3D11Texture2D> texture;
                     if(value&&SUCCEEDED(value.As(&texture))) {
                         D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
                         faultInfo_.depthWidth=desc.Width;
                         faultInfo_.depthHeight=desc.Height;
                     }
+                }
+                for(UINT i=0;i<count&&i<D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;++i) {
+                    if(i==sceneSlot||!views[i])continue;
+                    auto value=resource(views[i]);auto id=canonical(value.Get());
+                    if(!id||auxiliaryReplacement(id.Get()))continue;
+                    ComPtr<ID3D11Texture2D> texture;
+                    if(!value||FAILED(value.As(&texture)))continue;
+                    D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+                    if(desc.Width!=route_.plan().render.width||
+                       desc.Height!=route_.plan().render.height)continue;
+                    faultInfo_.unknownTargetId=reinterpret_cast<std::uintptr_t>(id.Get());
+                    faultInfo_.unknownTargetSlot=i;
+                    faultInfo_.unknownTargetMips=desc.MipLevels;
+                    faultInfo_.unknownTargetFormat=desc.Format;
+                    break;
                 }
             }
             compatibilityFault_=true; // Unknown MRT/depth semantics.
@@ -534,7 +570,8 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
         next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
-    latePassRoutingDisabled_=false;
+    latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
+    latePassFaults_=0;latePassFaultFrame_=0;
     observationLayout_=UiObservationLayout::FourPairs;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
     validRouteObservations_=0;observationContractFault_=false;

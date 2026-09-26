@@ -24,6 +24,9 @@ struct UiCompatibilityFault {
     UINT sceneSlot{};
     bool hasDepth{};
     UINT depthWidth{},depthHeight{};
+    std::uintptr_t unknownTargetId{},depthId{},expectedDepthId{};
+    UINT unknownTargetSlot{~0u},unknownTargetMips{};
+    DXGI_FORMAT unknownTargetFormat{DXGI_FORMAT_UNKNOWN};
 };
 enum class UiObservationKind { RenderTargets, Viewport };
 struct UiObservationEvent {
@@ -86,11 +89,14 @@ public:
     bool latePassRoutingAvailable() const noexcept {
         return !latePassRoutingDisabled_&&companionsReady();
     }
-    // Preserve the owned reduced-scene route but permanently stop translating
-    // late passes after a runtime contract mismatch. The controller then
-    // returns to its proven pre-Present publication path.
+    // A single transient late bind may occur during a loading transition.
+    // Fall back for that frame and allow one retry after 120 ready world frames.
+    // A repeated mismatch keeps the conservative pre-Present route.
+    void suspendLatePassRouting(std::uint64_t frame) noexcept;
+    bool resumeLatePassRouting(std::uint64_t frame,bool sceneReady) noexcept;
     void disableLatePassRouting() noexcept {
-        latePassRoutingDisabled_=true;compatibilityFault_=false;faultInfo_={};
+        latePassRoutingDisabled_=latePassPermanentlyDisabled_=true;
+        compatibilityFault_=false;faultInfo_={};
     }
     void onOMSetRenderTargets(ID3D11DeviceContext* context,UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept;
@@ -126,6 +132,9 @@ private:
     std::uint64_t generation_{};
     bool compatibilityFault_{};
     bool latePassRoutingDisabled_{};
+    bool latePassPermanentlyDisabled_{};
+    unsigned latePassFaults_{};
+    std::uint64_t latePassFaultFrame_{};
     UiCompatibilityFault faultInfo_{};
     UiFrameObservation observation_{};
     bool observing_{},observeViewport_{};
