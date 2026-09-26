@@ -275,8 +275,9 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
        GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)return E_UNEXPECTED;
     if(preserveReducedMenuPass_) {
-        // The inventory producer chain remained reduced through its final
-        // pass. Its colour was published before this deferred Scaleform draw.
+        // The menu producer chain remained reduced through its final pass.
+        // The caller may publish that scene or keep an existing native UI
+        // composite; this rebind must not modify native colour pixels.
         preserveReducedMenuPass_=false;
         bindNativeTarget(true);
         return S_FALSE;

@@ -1,5 +1,43 @@
 # Implementation checkpoint
 
+## 0.1.100 preserve the composed inventory (2026-09-27)
+
+The user-started 0.1.99 run captured frame 61644 after 30 consecutive
+`InventoryMenu` stack frames at
+`C:/Users/user/Documents/My Games/Skyrim Special Edition/SKSE/RazKolbasCaptures/inventory-boundary-21680-61644-31925187`.
+The **native-before-copy image visibly contains the inventory list and hero**.
+The reduced source contains the hero and world but no inventory list. The
+deferred reduced-scene copy removes the list from native colour; the
+native-after-copy, native-after-EndFrame and native-pre-Present hashes are
+identical (`e9e7f7fe01c121255c3f42aa5ed4a0281ceee472a5de1815242aa5c33a1e3512`).
+Thus the missing list in this frame is caused by RazKolbas's late copy,
+before Scaleform EndFrame or Present. The bind trace has 41 events and zero
+drops; it shows a native 2560x1440 target before the menu calls, a reduced
+1707x960 producer chain, and a native target again before EndFrame. The log
+is preserved only under ignored
+`artifacts/local/runtime-0.1.99-inventory-overwrite-20260927/RazKolbas.log`
+(SHA-256 `f67dbfddfff0f085318c993f006ad80aef541f00c2dd2e9e326ee1cec8aaf8de`).
+
+Source 0.1.100 skips that destructive copy only while `InventoryMenu` is on
+the live UI stack. It still rebinds native colour and display-size depth for
+deferred Scaleform, and leaves other menus' publication path unchanged. This
+preserves the already-composed inventory pixels seen in 0.1.99; whether the
+full inventory and hero look correct in the new build is **NOT RUN in Skyrim**.
+A WARP test confirms that rebind without publication leaves native pixels
+unchanged. The Release build passed all 42 CTest groups.
+
+The V5.4 MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.100-v54-inventory-preserve.zip`
+(SHA-256 `624e13ffabb7356881da6e050b060e7075aeb3b3d43b787b56cf75697ec193d9`).
+All five payload hashes and the manifest entry were independently checked
+inside the ZIP. The Release DLL SHA-256 is
+`66406a0df92d7f2b689984e1d7eaa9b97e69181f909a29feaf0532e770e44bd1`.
+With Skyrim closed, all five installed 0.1.99 payloads matched its manifest.
+The prior DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.100-install-backup`; only the DLL and manifest were
+replaced in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. All five installed
+payloads match the new manifest. The INI and SR/NR libraries did not change.
+
 ## 0.1.99 sustained-inventory diagnostic (2026-09-26)
 
 The user-started 0.1.98 run still had an invisible inventory, confirmed after

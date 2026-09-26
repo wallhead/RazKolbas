@@ -470,6 +470,33 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
         identity(native.Get()).Get());
     REQUIRE(viewExtent(boundDepth.Get()).width==display.width);
     REQUIRE_FALSE(redirect.compatibilityFault());
+    // Inventory UI can already be composed on native colour before the
+    // deferred boundary. Rebinding without publishing the reduced scene must
+    // leave those pixels intact.
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    REQUIRE(redirect.reducedMenuPassPending());
+    const float inventoryMarker[4]{1,0,1,1};
+    context->ClearRenderTargetView(nativeView.Get(),inventoryMarker);
+    REQUIRE(redirect.rebindForDeferredUiFlush(7)==S_FALSE);
+    REQUIRE_FALSE(redirect.reducedMenuPassPending());
+    D3D11_TEXTURE2D_DESC inventoryStageDesc{};
+    native->GetDesc(&inventoryStageDesc);
+    inventoryStageDesc.BindFlags=0;
+    inventoryStageDesc.Usage=D3D11_USAGE_STAGING;
+    inventoryStageDesc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    ComPtr<ID3D11Texture2D> inventoryStage;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&inventoryStageDesc,nullptr,
+        &inventoryStage)));
+    context->CopyResource(inventoryStage.Get(),native.Get());
+    D3D11_MAPPED_SUBRESOURCE inventoryMapped{};
+    REQUIRE(SUCCEEDED(context->Map(inventoryStage.Get(),0,D3D11_MAP_READ,0,
+        &inventoryMapped)));
+    const auto* inventoryPixel=static_cast<const unsigned char*>(
+        inventoryMapped.pData);
+    REQUIRE(inventoryPixel[0]==255);
+    REQUIRE(inventoryPixel[1]==0);
+    REQUIRE(inventoryPixel[2]==255);
+    context->Unmap(inventoryStage.Get(),0);
     desc.Format=DXGI_FORMAT_R16G16_FLOAT;
     desc.MipLevels=2;
     desc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;

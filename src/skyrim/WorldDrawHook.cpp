@@ -134,7 +134,7 @@ struct WorldState {
     bool nativeUiRouteActivated{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
-    std::uint64_t deferredMenuPublications{};
+    std::uint64_t deferredMenuPublications{},preservedInventoryComposites{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
     bool deferredMenuPublicationWarningLogged{};
@@ -1091,6 +1091,16 @@ void beforeDeferredUiFlush(void*) noexcept {
     if(!ui)return;
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     if(ui->reducedMenuPassPending()) {
+        if(inventoryMenuOnStack(state)) {
+            // A sustained inventory capture showed the list and preview on
+            // native colour before this boundary. Publishing the reduced
+            // scene here erased the list; keep the already-composed target.
+            state->menuBoundaryCaptureAttempted=true;
+            const auto count=++state->preservedInventoryComposites;
+            if(count==1||count%600==0)
+                spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
+                    frame,count);
+        } else {
         try {
             std::optional<WorldState::MenuBoundaryCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
@@ -1159,6 +1169,7 @@ void beforeDeferredUiFlush(void*) noexcept {
             state->deferredMenuPublicationWarningLogged=true;
             try {spdlog::warn("Deferred reduced menu scene publication threw at frame {}",
                 frame);}catch(...) {}
+        }
         }
     }
     const auto rebound=ui->rebindForDeferredUiFlush(frame);
