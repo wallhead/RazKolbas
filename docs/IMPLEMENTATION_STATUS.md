@@ -1,5 +1,44 @@
 # Implementation checkpoint
 
+## 0.1.89 explicit pre-SR depth requirement (2026-09-26)
+
+An arbitrary pre-SR callback no longer selects the R32 depth-conversion
+preparer just because it exists. `PreSrRequirements.requireR32Depth` is an
+explicit presenter contract, requested by the NR processor at both DLSS
+Quality and NativeAA registration sites. `SdrPreparationPolicy` can normalize
+a full-frame R24 depth source to R32 independently of crop selection. A
+real cropped depth region still requires the existing shader conversion,
+because D3D11 cannot partially copy the depth/stencil texture. Persistent
+slots now refresh converted depth only when R32 was requested; an unrelated
+callback uses ordinary source copies. The NR-configured route therefore
+keeps its previous R32 input format and ordering.
+
+The added native DLAA WARP case first failed to compile without the typed
+contract, then passed after implementation: an unrelated pre-SR callback saw
+R24 depth, while the existing NR-style case explicitly requested and saw
+R32. The focused presenter group passed nine cases and 1979 assertions.
+Debug and Release builds each passed all 42 CTest groups. The new typed
+preparation route has not yet been run in Skyrim or in a standalone NVIDIA
+replay; those outcomes are **NOT RUN**.
+
+The independently extracted V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.89-v54-depth-policy.zip`
+(SHA-256 `0eb0838e12a84c394defef9610b05864bdf6c8dee275e076844517fa6541f3b0`).
+Its five manifest payload hashes and file set passed verification. With
+Skyrim closed, the 0.1.88 immutable payloads matched their manifest; the
+DLL, mutable INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.89-install-backup`. Only DLL and manifest were
+replaced. Installed DLL SHA-256 is
+`38bd3fd861d03fefbb63963cfa596f3e1d7705ba5969791b7a8217cd52d0b588`;
+all five installed payload hashes match the new manifest. The user's saved
+INI remains SHA-256
+`c0e655dd5c6da827f5c197e04613d280b928b180dbe29b1fb1280d11522b8220`
+with `NeuralRendering.Enabled=false` and `Style=2`; the signed SR and
+community NR runtimes remain byte-identical. The assistant did not start
+Skyrim. The next game action is a user-started V5.4 launch, enabling NR in
+the End menu to exercise the explicit R32 path, then inspecting logs and
+image continuity. No injected NGX failure is required for this test.
+
 ## 0.1.88 NR evaluation recovery candidate (2026-09-26)
 
 The 0.1.87 menu-save retry remains **NOT RUN** in Skyrim; the user elected to
@@ -44,6 +83,23 @@ all five installed payload hashes match the new manifest. The INI and both
 vendor runtimes are byte-identical to the previous install. The assistant
 did not start Skyrim. The next required action is a user-started V5.4 run
 to check startup, NR off/on, image continuity, and menu-save persistence.
+
+The user-started V5.4 process (PID 21152) began at 10:44:40 with the
+installed 0.1.88 DLL hash. By the 10:51:27 checkpoint it was responsive,
+the log contained at least 2400 NR-before-SR submissions, and menu-boundary
+Quality publication reached frame 27000 with 9390 provider submissions,
+zero fallbacks in flight, and Present HRESULT 0/failed=0. The inspected
+session had zero warnings/errors. Live NR controls and history resets were
+logged, and NR was later switched off. The physical MO2 mod INI changed from
+SHA-256 `01ac5740d2b2708c525ff85edb766ab1754169147e91065e406d14238589ef44`
+to `c0e655dd5c6da827f5c197e04613d280b928b180dbe29b1fb1280d11522b8220`;
+it now contains `NeuralRendering.Enabled=false` and `Style=2`. This verifies
+that menu changes reached the physical INI in this session. Persistence
+through a subsequent launch and actual recovery from an NGX evaluation
+failure are **NOT RUN**. The user reported completion of the requested
+menu interaction, but did not provide a separate visual-quality report.
+The assistant's normal close request did not exit Skyrim, and Windows denied
+a process-stop request; the game was still running at this checkpoint.
 
 ## 0.1.87 MO2 INI-save retry candidate (2026-09-26)
 

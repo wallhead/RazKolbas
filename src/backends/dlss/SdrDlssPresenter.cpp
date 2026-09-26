@@ -196,10 +196,11 @@ Result<bool> SdrDlssPresenter::configureSharpness(bool enabled,float sharpness) 
     return true;
 }
 Result<bool> SdrDlssPresenter::configurePreSrProcessor(
-    PreSrProcessor processor) noexcept {
+    PreSrProcessor processor,PreSrRequirements requirements) noexcept {
     if(ngxStartAttempted_||initialized_||preparedGeneration_)
         return Error{ErrorCode::Conflict,"Cannot change pre-SR processing during an active feature"};
     preSrProcessor_=std::move(processor);
+    preSrRequirements_=requirements;
     return true;
 }
 
@@ -669,9 +670,11 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
     }
     if(!slot.frame) {
         const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
-        auto prepared=preSrProcessor_
-            ?prepareSdrSrInputsFromRegion(context,sources,
-                input.Width,input.Height,back.Width,back.Height)
+        auto prepared=preSrRequirements_.requireR32Depth
+            ?(reduced?prepareSdrSrInputsFromRegion(context,sources,
+                input.Width,input.Height,back.Width,back.Height):
+                prepareSdrSrInputsForDisplay(context,sources,
+                    back.Width,back.Height,{.normalizeDepthToR32=true}))
             :(reduced?prepareSdrSrInputsForDisplay(context,sources,
                 back.Width,back.Height):prepareSdrSrInputs(context,sources));
         if(const auto error=std::get_if<Error>(&prepared))return *error;
@@ -679,7 +682,7 @@ Result<bool> SdrDlssPresenter::renderFrame(ID3D11Device* device,
         const D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
         if(FAILED(device->CreateQuery(&query,&slot.completion)))
             return Error{ErrorCode::Unavailable,"SDR DLSS completion query unavailable"};
-    } else if(preSrProcessor_) {
+    } else if(preSrRequirements_.requireR32Depth) {
         const std::array<ID3D11Texture2D*,3> sources{scene,motion,depth};
         const auto refreshed=slot.frame->refreshConvertedDepth(context,sources);
         if(const auto error=std::get_if<Error>(&refreshed))return *error;

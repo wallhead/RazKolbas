@@ -399,7 +399,7 @@ TEST_CASE("Native DLAA render runs pre-SR processing before evaluation",
             frame.depth()->GetDesc(&depth);
             REQUIRE(depth.Format==DXGI_FORMAT_R32_FLOAT);
             return false; // NR failure must leave the original DLAA input usable.
-        });
+        },rk::PreSrRequirements{.requireR32Depth=true});
     REQUIRE(std::holds_alternative<bool>(configured));
     scene.context->OMSetRenderTargets(1,scene.displayView.GetAddressOf(),nullptr);
     const auto rendered=presenter.render(scene.device.Get(),scene.context.Get(),
@@ -415,4 +415,37 @@ TEST_CASE("Native DLAA render runs pre-SR processing before evaluation",
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     FAIL("Native DLAA pre-SR fixture did not retire");
+}
+
+TEST_CASE("A pre-SR callback alone does not force R32 depth conversion",
+    "[sdr_prepared_presenter][nr]") {
+    Scene scene;
+    rk::SdrDlssPresenter presenter{[](ID3D11DeviceContext* context,
+        const rk::PreparedSrInputs& frame,const rk::SrFrameMetadata&,
+        rk::NgxJitter,float,bool)->rk::Result<bool> {
+        context->CopyResource(frame.output(),frame.color());
+        return true;
+    }};
+    const auto configured=presenter.configurePreSrProcessor(
+        [](ID3D11Device*,ID3D11DeviceContext*,rk::PreparedSrInputs& frame,
+            const rk::SrFrameMetadata&,rk::NgxJitter,bool) {
+            D3D11_TEXTURE2D_DESC depth{};
+            frame.depth()->GetDesc(&depth);
+            REQUIRE(depth.Format==DXGI_FORMAT_R24G8_TYPELESS);
+            return false;
+        });
+    REQUIRE(std::holds_alternative<bool>(configured));
+    scene.context->OMSetRenderTargets(1,scene.displayView.GetAddressOf(),nullptr);
+    const auto rendered=presenter.render(scene.device.Get(),scene.context.Get(),
+        scene.display.Get(),scene.source[1].Get(),scene.source[2].Get(),{0,0});
+    REQUIRE(std::holds_alternative<bool>(rendered));
+    REQUIRE(std::get<bool>(rendered));
+    scene.context->Flush();
+    for(unsigned i=0;i<500;++i) {
+        const auto stopped=presenter.stop(scene.context.Get());
+        REQUIRE_FALSE(std::holds_alternative<rk::Error>(stopped));
+        if(std::get<bool>(stopped))return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    FAIL("Default-depth pre-SR fixture did not retire");
 }

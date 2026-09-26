@@ -33,6 +33,9 @@ struct SrEvaluationToken {
     std::uint64_t frameId{},generation{};
     unsigned slot{};
 };
+struct PreSrRequirements {
+    bool requireR32Depth{};
+};
 // Experimental SDR DLAA presenter. Caller holds the verified Skyrim renderer
 // lock and supplies one real HUD-free source frame per call. A busy resource
 // slot skips a frame, leaving Skyrim's native image intact.
@@ -47,7 +50,8 @@ public:
     Result<bool> configureQuality(UpscaleQuality quality) noexcept;
     Result<bool> configureModelPreset(std::string_view preset) noexcept;
     Result<bool> configureSharpness(bool enabled,float sharpness) noexcept;
-    Result<bool> configurePreSrProcessor(PreSrProcessor processor) noexcept;
+    Result<bool> configurePreSrProcessor(PreSrProcessor processor,
+        PreSrRequirements requirements={}) noexcept;
     // Query from the same NGX capability session that later creates/evaluates
     // the feature. Intended for the early factory boundary before a reduced
     // scene buffer is exposed to ENB/Skyrim.
@@ -123,6 +127,7 @@ private:
     std::vector<PreparedSrInputs> unfencedPrepared_;
     PreparedEvaluator preparedEvaluator_;
     PreSrProcessor preSrProcessor_;
+    PreSrRequirements preSrRequirements_;
     std::uint64_t preparedGeneration_{},lastPreparedAttemptFrameId_{};
     std::uint64_t lastSuccessfulEvaluationFrameId_{};
     std::uint64_t lastSuccessfulPublicationFrameId_{};

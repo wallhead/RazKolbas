@@ -157,7 +157,7 @@ ComPtr<ID3D11ComputeShader> cachedDepthCropShader(ID3D11Device* device) {
 Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,DXGI_FORMAT colorFormat,
     UINT outputWidth,UINT outputHeight,SrSourceRegion region={},
-    bool ownedScene=false) {
+    bool ownedScene=false,bool normalizeDepthToR32=false) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||sources.size()!=3)
         return Error{ErrorCode::InvalidInput,"SR preparation requires an immediate context and three textures"};
     ComPtr<ID3D11Device> device;
@@ -192,6 +192,7 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
        (!region.width&&(region.left||region.top)))
         return Error{ErrorCode::InvalidInput,"SR source region is incomplete"};
     const bool cropped=region.width!=0;
+    const bool normalizeDepth=cropped||normalizeDepthToR32;
     if(cropped&&(region.left>=descriptions[0].Width||
                  region.top>=descriptions[0].Height||
                  region.width>descriptions[0].Width-region.left||
@@ -224,7 +225,7 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
         auto d=descriptions[i];
         d.Width=renderWidth;d.Height=renderHeight;
         d.CPUAccessFlags=0;d.MiscFlags=0;
-        if(cropped&&i==2) {
+        if(normalizeDepth&&i==2) {
             d.Format=DXGI_FORMAT_R32_FLOAT;
             d.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_UNORDERED_ACCESS;
         }
@@ -245,7 +246,7 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
     ComPtr<ID3D11UnorderedAccessView> depthTarget;
     ComPtr<ID3D11Buffer> cropConstants;
     std::unique_ptr<D3D11StateScope> isolated;
-    if(cropped) {
+    if(normalizeDepth) {
         depthShader=cachedDepthCropShader(device.Get());
         if(!depthShader)
             return Error{ErrorCode::Unavailable,"Cannot prepare depth crop shader"};
@@ -284,9 +285,10 @@ Result<PreparedSrInputs> prepareInputs(ID3D11DeviceContext* context,
             const D3D11_BOX box{region.left,region.top,0,
                 region.left+renderWidth,region.top+renderHeight,1};
             context->CopySubresourceRegion(copies[i].Get(),0,0,0,0,sources[i],0,&box);
-        } else context->CopyResource(copies[i].Get(),sources[i]);
+        } else if(!(normalizeDepth&&i==2))
+            context->CopyResource(copies[i].Get(),sources[i]);
     }
-    if(cropped) {
+    if(normalizeDepth) {
         context->CSSetShader(depthShader.Get(),nullptr,0);
         context->CSSetShaderResources(0,1,depthView.GetAddressOf());
         context->CSSetUnorderedAccessViews(0,1,depthTarget.GetAddressOf(),nullptr);
@@ -315,11 +317,12 @@ Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
     return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,0,0);
 }
 Result<PreparedSrInputs> prepareSdrSrInputsForDisplay(ID3D11DeviceContext* context,
-    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight) {
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight,
+    SdrPreparationPolicy policy) {
     if(!outputWidth||!outputHeight)
         return Error{ErrorCode::InvalidInput,"SR display extent is zero"};
     return prepareInputs(context,sources,DXGI_FORMAT_R8G8B8A8_UNORM,
-        outputWidth,outputHeight);
+        outputWidth,outputHeight,{},false,policy.normalizeDepthToR32);
 }
 Result<PreparedSrInputs> prepareSdrSrInputsFromRegion(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources,UINT renderWidth,UINT renderHeight,

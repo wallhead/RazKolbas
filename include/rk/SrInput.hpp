@@ -12,6 +12,9 @@ struct SrSourceRegion {
     UINT left{},top{},width{},height{};
     bool operator==(const SrSourceRegion&) const noexcept=default;
 };
+struct SdrPreparationPolicy {
+    bool normalizeDepthToR32{};
+};
 // Owns one source frame's NGX-compatible resources. The caller must keep this
 // object alive until all queued GPU work that reads or writes it has retired.
 class PreparedSrInputs {
@@ -145,7 +148,8 @@ Result<PreparedSrInputs> prepareSrInputsForDisplay(ID3D11DeviceContext* context,
 Result<PreparedSrInputs> prepareSdrSrInputs(ID3D11DeviceContext* context,
     std::span<ID3D11Texture2D* const> sources);
 Result<PreparedSrInputs> prepareSdrSrInputsForDisplay(ID3D11DeviceContext* context,
-    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight);
+    std::span<ID3D11Texture2D* const> sources,UINT outputWidth,UINT outputHeight,
+    SdrPreparationPolicy policy={});
 // Extracts a caller-verified active world rectangle from matching full-size
 // SDR colour, motion and depth textures. Depth is converted to normalized
 // R32_FLOAT because D3D11 forbids partial depth-stencil copies. This does not

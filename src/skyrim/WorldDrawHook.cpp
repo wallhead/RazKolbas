@@ -2000,9 +2000,11 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
             }
             return false;
         };
-        if(const auto configured=pending->srPresenter.configurePreSrProcessor(processor);
+        if(const auto configured=pending->srPresenter.configurePreSrProcessor(
+            processor,{.requireR32Depth=true});
            const auto configureError=std::get_if<Error>(&configured))return *configureError;
-        if(const auto configured=pending->sdrPresenter.configurePreSrProcessor(processor);
+        if(const auto configured=pending->sdrPresenter.configurePreSrProcessor(
+            processor,{.requireR32Depth=true});
            const auto configureError=std::get_if<Error>(&configured))return *configureError;
         spdlog::info("Neural Rendering preprocessor armed before DLSS SR and DLAA: enabled={}; exact community runtime hash required",
             pending->nrStage.enabled());
