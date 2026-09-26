@@ -165,6 +165,9 @@ private:
     std::array<std::uintptr_t,48> faultTraceTargetIds_{};
     unsigned faultTraceTargetCount_{};
     bool faultTraceArmed_{true},faultTraceNextFrame_{},faultTracing_{};
+    // A menu motion MRT can start a reduced producer chain. Keep its scene
+    // writes reduced until that scene is sampled by an offscreen consumer.
+    bool preserveReducedMenuPass_{};
     bool observing_{},observeViewport_{};
     std::uint32_t completedObservations_{};
     std::uint32_t validRouteObservations_{};

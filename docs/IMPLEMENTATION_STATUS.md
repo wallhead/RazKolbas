@@ -1,5 +1,56 @@
 # Implementation checkpoint
 
+## 0.1.95 inventory producer-chain routing candidate (2026-09-26)
+
+The user-started 0.1.94 V5.4 inventory run reported that the UI and image
+became blurry and appeared to render at lower resolution. The read-only
+trace at frame 15297 captured 35 events with no drops. A matching reduced
+1707x960 `R16G16_FLOAT` RTV1 was bound beside the reduced main colour and
+depth, then read at PS slot 2. The reduced main colour was later read at PS
+slot 0 while a separate offscreen colour target was bound. That offscreen
+target was later sampled at PS slot 0 after returning to the main colour.
+No native-sized colour target appeared among the traced OM binds. The
+native UI route had been suspended at frame 15296 after the motion-format
+MRT mismatch; after another retry it faulted again at frame 15940. Later
+pre-Present publications used 1707x960 input and 2560x1440 output with
+spatial fallback and no further provider submissions. This explains the
+observed lower-resolution UI path, though it does not measure subjective
+sharpness. The log is preserved only under ignored
+`artifacts/local/runtime-0.1.94-inventory-blurry-20260926/RazKolbas.log`
+(SHA-256 `708d9ae76fca04ec3974ac1f67357d77a35e9bc09dbd77c56627c178d53268d9`).
+The assistant closed the game after the trace; no Skyrim process remains.
+
+Source 0.1.95 recognizes only the observed two-target scene/motion/depth
+shape: reduced main colour, one-mip `R16G16_FLOAT` RTV1 with exact `0x28`
+RTV/SRV flags, and the known original depth. It preserves that reduced
+producer chain, including its depth SRV, until the reduced main colour is
+sampled into an offscreen target. Subsequent main-scene binds can then use
+the existing native UI route. If that scene read never occurs, the exact
+deferred Scaleform boundary restores native colour/depth for text and logs
+the incomplete chain. Other incompatible targets retain the previous
+conservative fault path. This is a targeted **candidate**, not a proven
+visual fix or a claim that the hero preview is native-sized.
+
+The WARP integration case failed against 0.1.94 before the change, then
+passed with reduced producer, original depth read, offscreen scene sample,
+native return, and incomplete-chain Scaleform fallback assertions. Debug
+and Release builds and all 42 CTest groups passed. **Skyrim runtime
+verification is pending.** The isolated V5.4 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.95-v54-inventory-chain.zip`
+(SHA-256 `c8d956d6ee6ba1a7ee0097a706eef66ad541323a02aafcab3788e6091d406dff`).
+Independent extraction matched the exact five manifest payloads. With
+Skyrim closed, immutable 0.1.94 installed payloads matched their manifest;
+the 0.1.95 package also matched the preserved INI and both runtimes. The
+prior DLL, INI and manifest were backed up under ignored
+`artifacts/local/v54-0.1.95-install-backup`; only the DLL and manifest were
+replaced. All five installed payloads match the 0.1.95 manifest. Installed
+DLL SHA-256 is
+`3d94c8cfecb72186628d4a8a484675aa158552a078f30ec6c35a097006156d45`;
+the preserved INI SHA-256 is
+`ac4963b15c4d86258919f6f194ba4489322e4622d0fe576ff660496a1bb6a941`.
+The signed SR and community NR runtimes are unchanged. The assistant did
+not start Skyrim.
+
 ## Supplied inventory/hero RE audit 19 (2026-09-26)
 
 The user supplied `PureDark_Inventory_Hero_RE_19.zip`. Its exact-DLL byte

@@ -420,6 +420,57 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE(nativeViewport.Width==display.width);
     REQUIRE(nativeViewport.Height==display.height);
     REQUIRE_FALSE(redirect.compatibilityFault());
+    // Inventory first binds the reduced main colour with a motion-format
+    // attachment, then samples the reduced colour into another target before
+    // returning to main composition. Keep that producer chain intact and
+    // resume native routing only after its scene read.
+    auto motionDesc=desc;
+    motionDesc.Format=DXGI_FORMAT_R16G16_FLOAT;
+    motionDesc.MipLevels=1;
+    motionDesc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> menuMotion;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&motionDesc,nullptr,&menuMotion)));
+    ComPtr<ID3D11RenderTargetView> menuMotionView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(menuMotion.Get(),nullptr,
+        &menuMotionView)));
+    reducedTargets[1]=menuMotionView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    REQUIRE_FALSE(redirect.compatibilityFault());
+    bound.Reset();boundDepth.Reset();
+    context->OMGetRenderTargets(1,bound.GetAddressOf(),boundDepth.GetAddressOf());
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(scene.texture()).Get());
+    REQUIRE(identity(viewResource(boundDepth.Get()).Get()).Get()==
+        identity(depth.Get()).Get());
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+    bound.Reset();context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(scene.texture()).Get());
+    redirect.onPSSetShaderResources(context.Get(),3,1,&sampledDepth);
+    boundDepthSrv.Reset();context->PSGetShaderResources(3,1,&boundDepthSrv);
+    REQUIRE(identity(viewResource(boundDepthSrv.Get()).Get()).Get()==
+        identity(depth.Get()).Get());
+    auto* offscreen=auxiliaryView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),1,&offscreen,nullptr);
+    ComPtr<ID3D11ShaderResourceView> sceneShaderView;
+    REQUIRE(SUCCEEDED(device->CreateShaderResourceView(scene.texture(),nullptr,
+        &sceneShaderView)));
+    auto* sceneShaderRaw=sceneShaderView.Get();
+    redirect.onPSSetShaderResources(context.Get(),0,1,&sceneShaderRaw);
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,depthView.Get());
+    bound.Reset();context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(native.Get()).Get());
+    // If no offscreen consumer reads the scene, the deferred Scaleform
+    // boundary still restores a native colour/depth target for text.
+    redirect.onOMSetRenderTargets(context.Get(),2,reducedTargets.data(),depthView.Get());
+    REQUIRE(redirect.rebindForDeferredUiFlush(7)==S_FALSE);
+    bound.Reset();boundDepth.Reset();
+    context->OMGetRenderTargets(1,bound.GetAddressOf(),boundDepth.GetAddressOf());
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==
+        identity(native.Get()).Get());
+    REQUIRE(viewExtent(boundDepth.Get()).width==display.width);
+    REQUIRE_FALSE(redirect.compatibilityFault());
     desc.Format=DXGI_FORMAT_R16G16_FLOAT;
     desc.MipLevels=2;
     desc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;

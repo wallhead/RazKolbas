@@ -41,6 +41,22 @@ UiFaultTraceResource traceResource(ID3D11View* view) noexcept {
     }
     return result;
 }
+bool isMenuMotionAttachment(ID3D11RenderTargetView* view,
+    Extent render) noexcept {
+    if(!view||!render.valid())return false;
+    auto value=resource(view);
+    ComPtr<ID3D11Texture2D> texture;
+    if(!value||FAILED(value.As(&texture)))return false;
+    D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+    D3D11_RENDER_TARGET_VIEW_DESC rtv{};view->GetDesc(&rtv);
+    return desc.Width==render.width&&desc.Height==render.height&&
+        desc.Format==DXGI_FORMAT_R16G16_FLOAT&&desc.MipLevels==1&&
+        desc.ArraySize==1&&desc.SampleDesc.Count==1&&
+        desc.Usage==D3D11_USAGE_DEFAULT&&
+        desc.BindFlags==(D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE)&&
+        rtv.ViewDimension==D3D11_RTV_DIMENSION_TEXTURE2D&&
+        rtv.Texture2D.MipSlice==0;
+}
 HRESULT createNativeAuxiliary(ID3D11Device* device,ID3D11RenderTargetView* source,
     Extent display,ComPtr<ID3D11RenderTargetView>& result) noexcept {
     if(!device||!source||!display.valid())return E_INVALIDARG;
@@ -189,6 +205,7 @@ HRESULT NativeUiRedirector::configure(ID3D11DeviceContext* context,DWORD renderT
     latePassFaults_=0;latePassFaultFrame_=0;
     faultTrace_={};faultTraceTargetIds_={};faultTraceTargetCount_=0;
     faultTraceArmed_=true;faultTraceNextFrame_=faultTracing_=false;
+    preserveReducedMenuPass_=false;
     observationLayout_=layout;
     return S_OK;
 }
@@ -234,6 +251,7 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!context_||GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        !route_.enterUi(frame,generation_,true))return E_UNEXPECTED;
+    preserveReducedMenuPass_=false;
     if(companionsReady()) {
         constexpr float clear[4]{};
         for(const auto& auxiliary:auxiliaries_)
@@ -256,6 +274,13 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
     if(!context_||!nativeRtv_||!companionsReady()||
        GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)return E_UNEXPECTED;
+    if(preserveReducedMenuPass_) {
+        // The usual scene-as-SRV completion was absent. Keep deferred
+        // Scaleform text native even if the private reduced pass is incomplete.
+        preserveReducedMenuPass_=false;
+        bindNativeTarget(true);
+        return S_FALSE;
+    }
     std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
         rawTargets{};
     context_->OMGetRenderTargets(static_cast<UINT>(rawTargets.size()),
@@ -495,6 +520,20 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
             if(id&&id.Get()==sceneId_.Get()) {sceneIncoming=true;sceneSlot=i;}
         }
         if(sceneIncoming) {
+            if(preserveReducedMenuPass_) {
+                next_.om(context,count,views,depth);
+                return;
+            }
+            if(count==2&&sceneSlot==0&&depth&&views[1]&&
+               isMenuMotionAttachment(views[1],route_.plan().render)) {
+                auto depthValue=resource(depth);
+                auto depthId=canonical(depthValue.Get());
+                if(depthId&&depthId.Get()==depthSourceId_.Get()) {
+                    preserveReducedMenuPass_=true;
+                    next_.om(context,count,views,depth);
+                    return;
+                }
+            }
             std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
                 replacements{};
             bool compatible=count<=replacements.size();
@@ -640,6 +679,22 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
                 faultInfo_.unknownTargetFirstSrvSlot=start+i;
         }
     }
+    if(preserveReducedMenuPass_&&eligible(context)&&views&&count&&
+       start<D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT&&
+       count<=D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT-start) {
+        bool sceneRead=false;
+        for(UINT i=0;i<count;++i) {
+            auto value=resource(views[i]);auto id=canonical(value.Get());
+            if(id&&id.Get()==sceneId_.Get()) {sceneRead=true;break;}
+        }
+        if(sceneRead) {
+            ComPtr<ID3D11RenderTargetView> bound;
+            context->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
+            auto value=resource(bound.Get());auto id=canonical(value.Get());
+            if(id&&id.Get()!=sceneId_.Get()&&id.Get()!=nativeId_.Get())
+                preserveReducedMenuPass_=false;
+        }
+    }
     if(observing_&&context==context_.Get()&&count==1&&views&&views[0]&&
        GetCurrentThreadId()==(route_.renderThread()?route_.renderThread():thread_)) {
         auto value=resource(views[0]);
@@ -651,7 +706,8 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
                 observation_.firstSampledDepthSlot=start;
         } else ++observation_.otherSingletonReads;
     }
-    if(eligible(context)&&count==1&&views&&views[0]&&nativeSampledDepthView_) {
+    if(!preserveReducedMenuPass_&&eligible(context)&&count==1&&views&&
+       views[0]&&nativeSampledDepthView_) {
         auto value=resource(views[0]);auto id=canonical(value.Get());
         if(id&&depthSourceId_&&id.Get()==depthSourceId_.Get()) {
             auto* replacement=nativeSampledDepthView_.Get();
@@ -669,6 +725,7 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     latePassFaults_=0;latePassFaultFrame_=0;
     faultTrace_={};faultTraceTargetIds_={};faultTraceTargetCount_=0;
     faultTraceArmed_=true;faultTraceNextFrame_=faultTracing_=false;
+    preserveReducedMenuPass_=false;
     observationLayout_=UiObservationLayout::FourPairs;
     observation_={};observing_=observeViewport_=false;completedObservations_=0;
     validRouteObservations_=0;observationContractFault_=false;

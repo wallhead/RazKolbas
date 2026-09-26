@@ -125,6 +125,7 @@ struct WorldState {
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     bool deferredUiFlushWarningLogged{};
+    bool deferredUiFlushMotionWarningLogged{};
     bool uiDepthViewContractLogged{};
     bool nativePresenterStoppedForSr{};
     UINT srWidth{},srHeight{};
@@ -999,6 +1000,11 @@ void beforeDeferredUiFlush(void*) noexcept {
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     const auto rebound=ui->rebindForDeferredUiFlush(frame);
     if(SUCCEEDED(rebound)) {
+        if(rebound==S_FALSE&&!state->deferredUiFlushMotionWarningLogged) {
+            state->deferredUiFlushMotionWarningLogged=true;
+            try {spdlog::warn("Deferred Scaleform UI flush frame {} restored native colour after an unfinished reduced menu pass",
+                frame);}catch(...) {}
+        }
         const auto count=++state->deferredUiFlushRebinds;
         if(count==1||count%600==0) {
             try {spdlog::info("Deferred Scaleform UI flush frame {} reasserted native colour and full-size depth/stencil; count={}",
