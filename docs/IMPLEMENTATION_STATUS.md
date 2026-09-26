@@ -1,5 +1,15 @@
 # Implementation checkpoint
 
+## Supplied inventory/hero RE audit 19 (2026-09-26)
+
+The user supplied `PureDark_Inventory_Hero_RE_19.zip`. Its exact-DLL byte
+spans match the local reference, and independent Capstone/Ghidra checks
+corroborate the narrow depth-only late PS substitution and the viewport
+mapper's lack of an RTV identity check. See
+`docs/re/INVENTORY_HERO_RE19_AUDIT.md`. This reinforces the 0.1.94 trace
+strategy but does not identify the inventory/hero target. No source or
+installed payload changed; actual-game trace verification remains pending.
+
 ## 0.1.94 bounded inventory bind-trace candidate (2026-09-26)
 
 The user-started 0.1.93 V5.4 run reported an invisible inventory and a
