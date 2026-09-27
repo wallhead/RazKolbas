@@ -1,20 +1,26 @@
 # Implementation checkpoint
 
-## 0.1.109 native HUD dimension-window candidate (2026-09-27)
+## 0.1.110 HUD movie viewport probe installed (2026-09-28)
 
-The owner-started 0.1.108 Quality run measured all HUD draw targets and
-raster state at native 2560x1440 while both Skyrim dimension pairs remained
-at the 1707x960 scene size. Only world HUD bars and compass were reported
-blurry; title, inventory, magic, and End menu were sharp. A 0.1.109 candidate
-now scopes native values for those two dimension pairs to world-HUD
-`PostDisplay` and Scaleform `EndFrame`, restoring the reduced values before
-world rendering resumes. Release build and 45/45 CTest groups pass. Actual
-game visual validation of this candidate is **NOT RUN**. The 0.1.109 DLL
-SHA-256 `a812a40531b50bd0b6e7eb9d381a596a091bb4840a034c81da84dbfbf11b6ca3`
-was installed in the V5.4 MO2 mod with all eight manifest payload hashes
-verified; the game-updated INI and previous plugin are backed up under ignored
-`artifacts/local/v54-0.1.109-hud-dimensions-backup`. The trace and
-candidate boundaries are recorded in
+The owner confirmed that 0.1.109 did not sharpen the DLSS Quality HUD bars or
+compass. Its log proves that both graphics dimension pairs were native during
+the deferred Scaleform flush and were restored afterward; that candidate is
+reverted and its patch record retired. The 0.1.108 trace also showed a native
+2560x1440 colour target, depth target, viewport and scissor at the flush, while
+both graphics dimension pairs were 1707x960. Neither observation establishes
+the HUD movie's own viewport or cached raster size.
+
+Version 0.1.110 restores the 0.1.108 draw path and adds a one-time, read-only
+snapshot of each active Scaleform movie's viewport on the first post-DLSS
+world HUD frame. Release build and 44/44 CTest groups passed. The DLL SHA-256
+`b0896479f486092d0cbfdd2a38bd818c1e5aa38eb7f61cff5739322d1ce9840b`
+was installed into V5.4 MO2 `RazKolbas` after Skyrim closed. The previous
+plugin, INI and manifest are backed up under ignored
+`artifacts/local/v54-0.1.110-hud-movie-probe-backup`; all eight installed
+manifest payload hashes match. The user's INI and vendor runtimes were
+preserved. **0.1.110 game viewport trace and HUD visual repair: NOT RUN.** The
+next step is one owner-started DLSS Quality world run and examination of the
+`HUD movie viewport` log entries. See
 `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
 
 ## 0.1.108 DLSS Quality HUD diagnostic installed (2026-09-27)

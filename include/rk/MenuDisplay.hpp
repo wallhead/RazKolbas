@@ -12,8 +12,6 @@ public:
     Result<bool> configure(MenuDisplayFn original,MenuDisplayFn beforeOriginal);
     void dispatch(void* first,std::uint32_t second,std::uint32_t third,
         std::uint32_t fourth) noexcept;
-    void dispatchOriginal(void* first,std::uint32_t second,std::uint32_t third,
-        std::uint32_t fourth) noexcept;
 private:
     std::mutex configureMutex_;
     std::atomic<MenuDisplayFn> original_{nullptr};

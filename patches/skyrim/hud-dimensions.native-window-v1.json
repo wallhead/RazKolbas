@@ -1,6 +1,6 @@
 {
   "id": "skyrim1170.hud-dimensions.native-window-v1",
-  "status": "EXPERIMENTAL_GAME_VISUAL_TEST_PENDING",
+  "status": "RETIRED_AFTER_GAME_VISUAL_TEST",
   "shipping_enabled": false,
   "purpose": "Present native display dimensions to the shared world-HUD Scaleform producer while the scene remains reduced for DLSS Quality",
   "target": {
@@ -28,5 +28,5 @@
     "tests/unit/NativeHudDimensionsTests.cpp",
     "tests/unit/MenuDisplayTests.cpp"
   ],
-  "game_runtime": "NOT RUN for this candidate"
+  "game_runtime": "0.1.109 on 2026-09-27: native values observed during Scaleform EndFrame and reduced values restored afterward; owner reports HUD still blurry. Candidate reverted in 0.1.110."
 }

@@ -19,7 +19,6 @@
 #include "rk/RendererBootstrap.hpp"
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/NativeUiRedirector.hpp"
-#include "rk/NativeHudDimensions.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/NrStage.hpp"
@@ -149,8 +148,7 @@ struct WorldState {
     std::uint64_t deferredUiFlushRebinds{};
     std::uint64_t hudUiTraceFrame{};
     unsigned hudUiTraceCount{};
-    std::uint64_t hudDimensionWindows{};
-    bool hudDimensionConflictLogged{};
+    bool hudMovieViewportsLogged{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
         preservedMagicComposites{},preservedMainMenuComposites{},
         magicMovieReplays{},cursorReplays{};
@@ -663,49 +661,45 @@ void logHudUiBoundary(WorldState* state,std::uint64_t frame,
         dimensions[0],dimensions[1],dimensions[2],dimensions[3],haveDimensions);
     }catch(...) {}
 }
-struct HudDimensionTarget {
-    volatile std::uint32_t* pairs{};
-    Extent render{},display{};
-};
-HudDimensionTarget hudDimensionTarget(WorldState* state) noexcept {
-    if(!state||!state->jitterCamera||
+void logHudMovieViewports(WorldState* state,std::uint64_t frame) noexcept {
+    if(!state||state->hudMovieViewportsLogged||
        state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
+       !namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)||
        inventoryMenuOnStack(state)||magicMenuOnStack(state)||
-       titleMenuOnStack(state))return {};
-    auto* domain=activeOwnedSceneDomain();
-    if(!domain||domain->phase()!=ScenePhase::NativeUi||
-       domain->renderThread()!=GetCurrentThreadId()||
-       domain->frame()!=state->forwarded.load(std::memory_order_relaxed))return {};
-    const auto address=state->jitterCamera+0x24;
-    MEMORY_BASIC_INFORMATION memory{};
-    if(!VirtualQuery(reinterpret_cast<const void*>(address),&memory,
-           sizeof(memory))||memory.State!=MEM_COMMIT)return {};
-    constexpr DWORD writable=PAGE_READWRITE|PAGE_WRITECOPY|
-        PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY;
-    if(!(memory.Protect&writable)||
-       (memory.Protect&(PAGE_GUARD|PAGE_NOACCESS))||
-       address<reinterpret_cast<std::uintptr_t>(memory.BaseAddress)||
-       address+4*sizeof(std::uint32_t)>
-           reinterpret_cast<std::uintptr_t>(memory.BaseAddress)+memory.RegionSize)
-        return {};
-    return {reinterpret_cast<volatile std::uint32_t*>(address),
-        domain->plan().render,domain->plan().display};
-}
-void finishHudDimensionWindow(WorldState* state,
-    NativeHudDimensions& window) noexcept {
-    if(!window.active())return;
-    const auto clean=window.restore();
-    if(state) {
-        const auto count=++state->hudDimensionWindows;
-        if(count==1||count%600==0) {
-            try {spdlog::info("HUD native dimension window completed: count={} restored={}",
-                count,clean);}catch(...) {}
-        }
-        if(!clean&&!state->hudDimensionConflictLogged) {
-            state->hudDimensionConflictLogged=true;
-            try {spdlog::warn("HUD dimension window saw another writer; restored only unchanged native fields");}catch(...) {}
-        }
+       titleMenuOnStack(state))return;
+    RE::UI* ui{};
+    if(!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return;
+    state->hudMovieViewportsLogged=true;
+    unsigned logged{};
+    for(unsigned ordinal=0;ordinal<ui->menuStack.size()&&ordinal<32;++ordinal) {
+        auto* item=ui->menuStack[ordinal].get();
+        if(!item||!item->uiMovie)continue;
+        // CommonLib declares GViewport constructors but does not link their
+        // implementations. This output-only ABI record has the same layout.
+        struct ViewportRecord {
+            std::int32_t bufferWidth,bufferHeight,left,top,width,height;
+            std::int32_t scissorLeft,scissorTop,scissorWidth,scissorHeight;
+            float scale,aspectRatio;
+            std::uint32_t flags,padding;
+        };
+        static_assert(sizeof(ViewportRecord)==sizeof(RE::GViewport));
+        alignas(RE::GViewport) std::byte buffer[sizeof(RE::GViewport)]{};
+        item->uiMovie->GetViewport(reinterpret_cast<RE::GViewport*>(buffer));
+        ViewportRecord viewport{};
+        std::memcpy(&viewport,buffer,sizeof(viewport));
+        const auto [identity,name]=menuAtOrdinal(state,ordinal);
+        try {spdlog::info("HUD movie viewport frame {} ordinal {} menu={} id=0x{:x} buffer={}x{} rect=({}, {}, {}x{}) scissor=({}, {}, {}x{}) scale={} aspect={} flags=0x{:x}",
+            frame,ordinal,name,identity,viewport.bufferWidth,viewport.bufferHeight,
+            viewport.left,viewport.top,viewport.width,viewport.height,
+            viewport.scissorLeft,viewport.scissorTop,
+            viewport.scissorWidth,viewport.scissorHeight,
+            viewport.scale,viewport.aspectRatio,
+            viewport.flags);}catch(...) {}
+        ++logged;
     }
+    try {spdlog::info("HUD movie viewport snapshot complete: frame={} movies={}; read-only",
+        frame,logged);}catch(...) {}
 }
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
@@ -1234,17 +1228,7 @@ void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
     std::uint32_t fourth) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
-    // Publish the reduced world before presenting native dimensions to the
-    // deferred HUD producer. Forward the exact original call afterward.
-    beforeMenuDisplay(first,second,third,fourth);
-#ifdef RK_WITH_NGX
-    const auto target=hudDimensionTarget(state);
-    NativeHudDimensions window(target.pairs,target.render,target.display);
-#endif
-    state->menuForwarder.dispatchOriginal(first,second,third,fourth);
-#ifdef RK_WITH_NGX
-    finishHudDimensionWindow(state,window);
-#endif
+    state->menuForwarder.dispatch(first,second,third,fourth);
     logInventoryBinding(state,state->forwarded.load(std::memory_order_relaxed),
         "after-menu-prep-before-PostDisplay");
 }
@@ -1381,6 +1365,7 @@ void beforeDeferredUiFlush(void*) noexcept {
         logHudUiBoundary(state,frame,"before-native-rebind");
     }
     const auto rebound=ui->rebindForDeferredUiFlush(frame);
+    if(SUCCEEDED(rebound))logHudMovieViewports(state,frame);
     logHudUiBoundary(state,frame,"before-Scaleform-EndFrame");
     if(SUCCEEDED(rebound)) {
         if(rebound==S_FALSE&&!state->deferredUiFlushMotionWarningLogged) {
@@ -1515,13 +1500,8 @@ void beforeDeferredUiFlush(void*) noexcept {
 void deferredUiFlushProxy(void* renderer) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
-#ifdef RK_WITH_NGX
-    const auto target=hudDimensionTarget(state);
-    NativeHudDimensions window(target.pairs,target.render,target.display);
-#endif
     state->deferredUiFlushForwarder.dispatch(renderer);
 #ifdef RK_WITH_NGX
-    finishHudDimensionWindow(state,window);
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     logHudUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logInventoryBinding(state,frame,"after-EndFrame");

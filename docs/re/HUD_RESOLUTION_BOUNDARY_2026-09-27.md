@@ -1,5 +1,36 @@
 # DLSS Quality HUD resolution boundary: evidence before a shared fix
 
+## 0.1.108–0.1.110 follow-up (2026-09-28)
+
+The owner-started 0.1.108 run logged three post-DLSS world frames (16319–16321)
+at the common Scaleform `EndFrame`. RTV0, DSV, viewport and scissor were all
+2560x1440, while both graphics-state dimension pairs remained 1707x960. The
+owned 1707x960 SR input in the recent same-frame capture held only the world;
+the final 2560x1440 image contained the bars and compass. This locates the
+affected HUD after SR but does not establish where its pixels were generated.
+
+The 0.1.109 experiment temporarily presented 2560x1440 in both graphics
+dimension pairs while the world HUD producer ran, then restored 1707x960.
+Its log at frames 8766–8768 confirmed native values during the Scaleform
+flush and reduced values afterward, with restoration succeeding through the
+run. The owner still reported blurry HUD bars and compass. This falsifies the
+simple hypothesis that those two dimension pairs at the late flush are the
+sole cause. The experiment is reverted in 0.1.110; its descriptor is marked
+retired. Inventory/magic/title/End menu visibility remains distinct from the
+HUD blur, so replaying the inventory movie without finding the HUD producer's
+source size would merely replay the same soft HUD pixels.
+
+Version 0.1.110 adds a one-time read-only `GFxMovieView::GetViewport` snapshot
+for each active menu on the first post-DLSS world HUD frame. It records movie
+buffer, rect, scissor, scale and flags, alongside the existing target trace.
+It makes no UI state changes. Release build and all 44 CTest groups pass; the
+installed DLL and eight manifest entries were verified. **The 0.1.110 game
+trace and a universal HUD fix are NOT RUN.** The next owner-started Quality
+run should determine whether HUD movie viewport geometry remains reduced
+while inventory uses native geometry. If so, trace the viewport's producer and
+update that earlier boundary; if native, inspect HUD render-texture and
+asset raster dimensions before changing the composition path.
+
 The owner reports that health bars and the compass in DLSS Quality look
 rendered at a lower resolution, without flicker. They request a fix for all
 affected UI elements through the shared UI path. This is distinct from the
@@ -80,38 +111,3 @@ INI, and manifest are backed up under ignored
 owner-started Skyrim session; inspect the three `HUD native UI boundary`
 triplets and compare the affected HUD and menu categories before altering
 UI render behavior.
-
-## Owner-started 0.1.108 Quality run, PID 3160
-
-The owner confirmed that only the world HUD bars and compass are blurry;
-title, inventory, magic, and the End menu look sharp. The exact 0.1.108 DLL
-loaded. At frames 16319-16321, the three bounded trace triplets all showed
-RTV0, DSV, viewport, and scissor at 2560x1440 while *both* Skyrim graphics
-dimension pairs stayed 1707x960 before rebind, before Scaleform `EndFrame`,
-and after it. DLSS had begun submitting; later the exact RTX 40 NR runtime
-loaded and pre-SR submissions completed. The same-frame stage capture
-`owned-sr-stages-3160-16319-114647375` again has no HUD in its 1707x960
-prepared input but bars, compass, icons, and HUD text in the 2560x1440 final
-image. The inventory cursor and magic movie replay captures also completed.
-These observations point to reduced UI dimension metadata at an otherwise
-native HUD draw, not to a reduced render target or a DLSS-fed HUD image.
-
-The 0.1.109 candidate temporarily writes native width/height to both game
-dimension pairs only around world-HUD `PostDisplay` and shared Scaleform
-`EndFrame` forwarding. It requires the known game module, native UI phase,
-owner render thread, exact reduced pair values, a writable data page, and
-active DLSS SR. It skips inventory, magic and title. Each field is restored
-only while it still has the value written by RazKolbas; another writer's
-change is preserved and logged. This is an experimental rendering fix, not
-visual proof. The dimension-window restoration and fail-closed cases passed
-in the 0.1.109 unit tests; all 45 CTest groups passed.
-
-The Release 0.1.109 DLL SHA-256 is
-`a812a40531b50bd0b6e7eb9d381a596a091bb4840a034c81da84dbfbf11b6ca3`.
-It was installed into the existing V5.4 MO2 mod after Skyrim exited. The
-owner's INI was preserved, and all eight installed manifest files matched
-their new hashes. The prior plugin, INI, and manifest are backed up under
-ignored `artifacts/local/v54-0.1.109-hud-dimensions-backup`. A user-started
-Quality run must verify whether the HUD bars and compass actually sharpen,
-whether inventory/magic/title remain clear, and whether the window restores
-the reduced values without a writer conflict.

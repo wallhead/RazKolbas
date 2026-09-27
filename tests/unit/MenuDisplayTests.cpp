@@ -59,16 +59,3 @@ TEST_CASE("Menu-display forwarding survives an instrumentation exception",
     REQUIRE(beforeCalls==1);
     REQUIRE(originalCalls==1);
 }
-
-TEST_CASE("Menu-display original can be forwarded after a separately owned boundary",
-    "[patch][menu_display]") {
-    rk::MenuDisplayForwarder forwarder;
-    beforeCalls=originalCalls=0;
-    REQUIRE(std::get<bool>(forwarder.configure(&original,&before)));
-    forwarder.dispatchOriginal(nullptr,4,3,2);
-    REQUIRE(beforeCalls==0);
-    REQUIRE(originalCalls==1);
-    REQUIRE(seenSecond==4);
-    REQUIRE(seenThird==3);
-    REQUIRE(seenFourth==2);
-}

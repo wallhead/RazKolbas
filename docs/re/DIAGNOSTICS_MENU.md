@@ -1,5 +1,22 @@
 # End-key diagnostics menu — source checkpoint 0.1.23
 
+## F1 launcher cursor interaction observed on 2026-09-28
+
+The owner reports that opening RisaAllInOneMenu with F1 hides its cursor,
+and Alt+Tab restores it. The supplied source archive
+`SourceCode RisaAllInOneMenu 183829 5.3 2026-09-24T01-30Z xDLPwGCgn.zip`
+(SHA-256 `94c5dbcb9cb6c6c3859075995a4612dc02e1bc85c8f16a99b3eccec651fba641`)
+shows that Risa draws a cursor in its own `ImGuiMCP` context, confines the OS
+cursor to Skyrim's client rect while its launcher is open, and releases that
+confinement on focus loss. RazKolbas uses a separate ImGui context for End.
+The installed `RisaAllInOneMenu.log` identifies version 5.2, so the supplied
+5.3 source is a reference rather than a byte-exact map of the loaded DLL.
+The current RazKolbas log has End-menu mouse samples outside the 2560x1440
+backbuffer (for example x=4052), so that software cursor can also be offscreen
+when the pointer is on another monitor. These are distinct cursor owners;
+the source and logs do not yet prove which owner hides the F1 cursor. **No
+Risa or RazKolbas cursor change has been runtime validated for this report.**
+
 The verified ENB swap-chain Present callback now offers a read-only Dear ImGui
 panel. End toggles it on a rising key edge while Skyrim owns the foreground
 window. The panel uses the most recent world frame's effective submission
