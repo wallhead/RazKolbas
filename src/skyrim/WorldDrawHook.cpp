@@ -146,6 +146,8 @@ struct WorldState {
     bool nativeUiRouteActivated{},coldTitleUiRouteLogged{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
+    std::uint64_t hudUiTraceFrame{};
+    unsigned hudUiTraceCount{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
         preservedMagicComposites{},preservedMainMenuComposites{},
         magicMovieReplays{},cursorReplays{};
@@ -624,6 +626,38 @@ void logInventoryBinding(WorldState* state,std::uint64_t frame,
         b.id,static_cast<unsigned>(b.format),b.width,b.height,
         d.id,static_cast<unsigned>(d.format),d.width,d.height,
         viewCount,viewCount?viewport.Width:0,viewCount?viewport.Height:0);
+    }catch(...) {}
+}
+void logHudUiBoundary(WorldState* state,std::uint64_t frame,
+    std::string_view phase) noexcept {
+    if(!state||state->hudUiTraceFrame!=frame)return;
+    auto* context=reinterpret_cast<ID3D11DeviceContext*>(
+        state->createdContext.load(std::memory_order_relaxed));
+    if(!context)return;
+    ID3D11RenderTargetView* rawColor{};
+    ID3D11DepthStencilView* rawDepth{};
+    context->OMGetRenderTargets(1,&rawColor,&rawDepth);
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> color;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth;
+    color.Attach(rawColor);depth.Attach(rawDepth);
+    const auto target=boundUiView(color.Get());
+    const auto stencil=boundUiView(depth.Get());
+    UINT viewportCount=1,scissorCount=1;
+    D3D11_VIEWPORT viewport{};
+    D3D11_RECT scissor{};
+    context->RSGetViewports(&viewportCount,&viewport);
+    context->RSGetScissorRects(&scissorCount,&scissor);
+    std::array<std::uint32_t,4> dimensions{};
+    const bool haveDimensions=state->jitterCamera&&
+        read(state->jitterCamera+0x24,dimensions.data(),sizeof(dimensions));
+    try {spdlog::info("HUD native UI boundary frame {} {}: RTV0={}x{} format={} DSV={}x{} viewport={}x{} origin=({}, {}) scissor=({}, {}, {}, {}) graphicsPairs={}x{}/{}x{} valid={}",
+        frame,phase,target.width,target.height,static_cast<unsigned>(target.format),
+        stencil.width,stencil.height,
+        viewportCount?viewport.Width:0,viewportCount?viewport.Height:0,
+        viewportCount?viewport.TopLeftX:0,viewportCount?viewport.TopLeftY:0,
+        scissorCount?scissor.left:0,scissorCount?scissor.top:0,
+        scissorCount?scissor.right:0,scissorCount?scissor.bottom:0,
+        dimensions[0],dimensions[1],dimensions[2],dimensions[3],haveDimensions);
     }catch(...) {}
 }
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
@@ -1281,7 +1315,16 @@ void beforeDeferredUiFlush(void*) noexcept {
         }
         }
     }
+    if(state->srPresenter.submittedFrames()>0&&
+       state->hudUiTraceCount<3&&
+       !inventoryMenuOnStack(state)&&!magicMenuOnStack(state)&&
+       !titleMenuOnStack(state)) {
+        state->hudUiTraceFrame=frame;
+        ++state->hudUiTraceCount;
+        logHudUiBoundary(state,frame,"before-native-rebind");
+    }
     const auto rebound=ui->rebindForDeferredUiFlush(frame);
+    logHudUiBoundary(state,frame,"before-Scaleform-EndFrame");
     if(SUCCEEDED(rebound)) {
         if(rebound==S_FALSE&&!state->deferredUiFlushMotionWarningLogged) {
             state->deferredUiFlushMotionWarningLogged=true;
@@ -1418,6 +1461,7 @@ void deferredUiFlushProxy(void* renderer) noexcept {
     state->deferredUiFlushForwarder.dispatch(renderer);
 #ifdef RK_WITH_NGX
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    logHudUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logInventoryBinding(state,frame,"after-EndFrame");
     if(state->cursorReplayCapture&&
        state->cursorReplayCapture->frame==frame&&

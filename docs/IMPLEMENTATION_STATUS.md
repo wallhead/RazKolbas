@@ -1,15 +1,25 @@
 # Implementation checkpoint
 
-## DLSS Quality HUD clarity investigation (2026-09-27)
+## 0.1.108 DLSS Quality HUD diagnostic installed (2026-09-27)
 
-The owner reports health bars and compass look lower-resolution, without
-flicker, and requests a shared fix across UI elements. Two manifest-verified
-captures place HUD differently: 0.1.84 had visible HUD in the reduced DLSS
-input, while one 0.1.106 frame had no HUD in that input and showed HUD only
-in the final native composition. The current 0.1.107 Quality run has not
-started, so neither mechanism is yet proven for this report. The installed
-INI is prepared for that run; no UI code or installed DLL was changed for
-this investigation. See `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
+The owner reports that DLAA has no HUD blur, while DLSS Quality makes health
+bars and the compass look lower-resolution. In the user-started 0.1.107
+Quality run, the manifest-verified frame-14640 capture had no HUD in its
+1707x960 DLSS input; the final 2560x1440 image had bars, compass, icons and
+text. The currently affected frame therefore places the HUD after DLSS, but
+the actual UI raster dimensions remain unmeasured. The RTX 40
+`ada-fastfp16` NR runtime and DLSS SR both submitted successfully. The
+read-only live process probe was denied by Windows access control.
+
+Version 0.1.108 adds only a three-frame trace around the common Scaleform
+`EndFrame`, recording colour/depth target, viewport, scissor, and both game
+dimension pairs. Release build and 44/44 CTest groups passed. The DLL SHA-256
+`503de1aa5a8b2d071d3be67f53c514439f3194efec4757e269c832a6693a9c22`
+was installed into the existing V5.4 MO2 mod after Skyrim closed, with all
+eight manifest hashes verified. The owner's game-updated Quality/NR INI was
+preserved. **0.1.108 runtime trace, full UI-category check, and universal
+rendering fix: NOT RUN.** See
+`docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
 
 ## 0.1.107 Skyrim RTX 40 NR + DLAA verification (2026-09-27)
 
