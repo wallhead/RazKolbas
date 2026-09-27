@@ -1,6 +1,7 @@
 #include "rk/NrStage.hpp"
 #include "rk/NrCommandRing.hpp"
 #include "rk/NrEvaluationRecovery.hpp"
+#include "rk/NrRuntimeSelection.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include "rk/PointerPatch.hpp"
 #include <nvsdk_ngx.h>
@@ -17,15 +18,16 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rk {
 namespace {
 using Microsoft::WRL::ComPtr;
 namespace fs=std::filesystem;
-constexpr std::string_view nrHash=
-    "91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7";
 std::atomic<ID3D12Device*> allocationDevice{};
 std::atomic<HMODULE> callerIdentityModule{};
+std::atomic<const NrRuntimeProfile*> processRuntimeProfile{};
+std::mutex processNrStartupMutex;
 
 struct NrRuntimeSettings {
     bool enabled{};
@@ -135,19 +137,6 @@ fs::path moduleDirectory() {
     const auto length=GetModuleFileNameW(self,path.data(),static_cast<DWORD>(path.size()));
     return length&&length<path.size()?fs::path(path.data()).parent_path():fs::path{};
 }
-Result<bool> exactNrRuntime(const fs::path& path) {
-    std::error_code fileError;
-    if(!fs::is_regular_file(path,fileError)||fileError)
-        return Error{ErrorCode::Unavailable,"Pinned fast-FP16 NR runtime is missing"};
-    const auto size=fs::file_size(path,fileError);
-    if(fileError||size!=165840496)
-        return Error{ErrorCode::Unavailable,"Fast-FP16 NR runtime size differs"};
-    const auto hashed=sha256File(path);
-    if(const auto error=std::get_if<Error>(&hashed))return *error;
-    if(std::get<std::string>(hashed)!=nrHash)
-        return Error{ErrorCode::Conflict,"Fast-FP16 NR runtime hash differs"};
-    return true;
-}
 }
 
 struct NrStage::Impl {
@@ -175,6 +164,16 @@ struct NrStage::Impl {
     unsigned preset{},passes{1};
     mutable std::mutex runtimeMutex;
     NrRuntimeSettings runtime;
+    std::string runtimeProfile{"Auto"};
+    bool allowExperimentalRuntime{};
+    const NrRuntimeProfile* selectedProfile{};
+    std::string selectionReason;
+    mutable std::mutex statusMutex;
+    NrRuntimeStatus status;
+    void setPhase(NrRuntimePhase phase) {
+        std::scoped_lock lock(statusMutex);
+        status.phase=phase;
+    }
     std::uint64_t runtimeGeneration{};
     bool runtimeResetPending{};
     UINT width{},height{};
@@ -182,6 +181,7 @@ struct NrStage::Impl {
     NrPendingFences pendingFences;
     NrEvaluationRecovery evaluationRecovery;
     bool consumerRetirementUncertain{};
+    bool teardownQuarantined{};
     NrCommandRing commandRing;
     std::array<CommandSlot,NrCommandRing::size> commandSlots;
     HMODULE nr{},core{};
@@ -309,8 +309,11 @@ struct NrStage::Impl {
         p->Set("CreationNodeMask",1u);p->Set("VisibilityNodeMask",1u);
         const auto result=create(commands.Get(),0x12,p,&feature);
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))||!feature)
-            return Error{ErrorCode::Unavailable,"Fast-FP16 NR feature creation failed"};
-        return submitAndWait();
+            return Error{ErrorCode::Unavailable,
+                "Selected NR feature creation failed: code="+std::to_string(result)};
+        const auto completed=submitAndWait();
+        if(std::holds_alternative<bool>(completed))setPhase(NrRuntimePhase::FeatureCreated);
+        return completed;
     }
     Result<bool> rebuild(UINT newWidth,UINT newHeight) {
         if(const auto drained=drain();const auto error=std::get_if<Error>(&drained))
@@ -340,15 +343,38 @@ struct NrStage::Impl {
         return createFeature();
     }
     Result<bool> start(ID3D11Device* device,ID3D11DeviceContext* context) {
+        std::scoped_lock startupLock(processNrStartupMutex);
         if(FAILED(device->QueryInterface(IID_PPV_ARGS(&device11)))||
            FAILED(context->QueryInterface(IID_PPV_ARGS(&context11))))
             return Error{ErrorCode::Unsupported,"D3D11 fence interfaces are unavailable"};
         ComPtr<IDXGIDevice> dxgiDevice;ComPtr<IDXGIAdapter> adapter;
+        ComPtr<IDXGIAdapter1> adapter1;
+        DXGI_ADAPTER_DESC1 adapterDesc{};
         if(FAILED(device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))||
            FAILED(dxgiDevice->GetAdapter(&adapter))||
-           FAILED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
+           FAILED(adapter.As(&adapter1))||
+           FAILED(adapter1->GetDesc1(&adapterDesc)))
+            return Error{ErrorCode::Unsupported,"Cannot identify renderer NR adapter"};
+        const NrAdapterIdentity identity{adapterDesc.VendorId,adapterDesc.DeviceId,
+            (adapterDesc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)!=0};
+        {
+            std::scoped_lock lock(statusMutex);
+            status.vendorId=adapterDesc.VendorId;
+            status.deviceId=adapterDesc.DeviceId;
+            status.subsystemId=adapterDesc.SubSysId;
+            status.luidLow=adapterDesc.AdapterLuid.LowPart;
+            status.luidHigh=adapterDesc.AdapterLuid.HighPart;
+        }
+        if(classifyNrGpu(identity)==NrGpuFamily::Unsupported)
+            return Error{ErrorCode::Unsupported,
+                "Neural Rendering supports only reviewed NVIDIA GeForce RTX adapters; AMD, Intel and unknown GPUs are unsupported"};
+        if(FAILED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
                IID_PPV_ARGS(&device12))))
             return Error{ErrorCode::Unsupported,"Cannot create same-adapter NR D3D12 device"};
+        const auto d12Luid=device12->GetAdapterLuid();
+        if(!sameNrLuid({adapterDesc.AdapterLuid.LowPart,adapterDesc.AdapterLuid.HighPart},
+                       {d12Luid.LowPart,d12Luid.HighPart}))
+            return Error{ErrorCode::Conflict,"NR D3D12 adapter LUID differs from renderer"};
         const D3D12_COMMAND_QUEUE_DESC queueDesc{};
         if(FAILED(device12->CreateCommandQueue(&queueDesc,IID_PPV_ARGS(&queue)))||
            FAILED(device12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -375,40 +401,94 @@ struct NrStage::Impl {
         CloseHandle(fenceHandle);
         if(FAILED(opened))return Error{ErrorCode::Unavailable,"Cannot open NR interop fence"};
 
-        const auto directory=moduleDirectory();
-        const auto runtimePath=directory/L"RazKolbasRuntime"/L"nvngx_dlssnr.dll";
-        if(const auto checked=exactNrRuntime(runtimePath);
-           const auto error=std::get_if<Error>(&checked))return *error;
+        const auto runtimeRoot=moduleDirectory()/L"RazKolbasRuntime";
+        std::vector<NrRuntimeArtifact> inventory;
+        inventory.reserve(nrRuntimeCatalog().size());
+        for(const auto& profile:nrRuntimeCatalog()) {
+            if(runtimeProfile!="Auto"&&profile.id!=runtimeProfile)continue;
+            if(runtimeProfile=="Auto"&&profile.validation!=NrValidation::Validated)
+                continue;
+            const auto candidate=nrRuntimePath(runtimeRoot,profile);
+            if(const auto path=std::get_if<fs::path>(&candidate)) {
+                const auto checked=verifyNrRuntimeFile(*path,profile);
+                inventory.push_back({profile.id,
+                    fs::exists(*path),std::holds_alternative<bool>(checked)});
+            }
+        }
+        const auto choice=selectNrRuntime(nrRuntimeCatalog(),inventory,identity,runtimeProfile,
+            allowExperimentalRuntime);
+        selectionReason=choice.reason;
+        if(!choice.profile)return Error{ErrorCode::Unsupported,choice.reason};
+        selectedProfile=choice.profile;
+        {
+            std::scoped_lock lock(statusMutex);
+            status.effectiveProfile=selectedProfile->id;
+            status.sha256=selectedProfile->sha256;
+            status.reason=choice.reason;
+            status.phase=NrRuntimePhase::Selected;
+        }
+        const auto current=processRuntimeProfile.load(std::memory_order_acquire);
+        if(current&&current!=selectedProfile)
+            return Error{ErrorCode::Conflict,"Another NR runtime identity was used in this process"};
+        const auto chosen=nrRuntimePath(runtimeRoot,*selectedProfile);
+        if(const auto error=std::get_if<Error>(&chosen))return *error;
+        const auto runtimePath=std::get<fs::path>(chosen);
+        {
+            std::scoped_lock lock(statusMutex);
+            status.path=runtimePath.string();
+        }
         runtimeFile=CreateFileW(runtimePath.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,
             OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
         if(runtimeFile==INVALID_HANDLE_VALUE)
-            return Error{ErrorCode::Unavailable,"Cannot lock fast-FP16 NR runtime"};
+            return Error{ErrorCode::Unavailable,"Cannot lock selected NR runtime"};
+        if(const auto checked=verifyNrRuntimeHandle(runtimeFile,*selectedProfile);
+           const auto error=std::get_if<Error>(&checked))return *error;
+        if(GetModuleHandleW(L"nvngx_dlssnr.dll"))
+            return Error{ErrorCode::Conflict,
+                "Another NR DLL is already loaded; refusing to reuse its module"};
         nr=LoadLibraryExW(runtimePath.c_str(),nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if(!nr)return Error{ErrorCode::Unavailable,"Cannot load fast-FP16 NR runtime"};
+        if(!nr)return Error{ErrorCode::Unavailable,
+            "Cannot load selected NR runtime: Win32="+std::to_string(GetLastError())};
+        std::array<wchar_t,32768> loadedPath{};
+        const auto loadedLength=GetModuleFileNameW(nr,loadedPath.data(),
+            static_cast<DWORD>(loadedPath.size()));
+        if(!loadedLength||loadedLength>=loadedPath.size()||
+           !sameNrFile(runtimeFile,fs::path(loadedPath.data())))
+            return Error{ErrorCode::Conflict,
+                "Loaded NR module differs from the locked verified file"};
+        setPhase(NrRuntimePhase::Loaded);
+        const NrRuntimeProfile* expected=nullptr;
+        if(!processRuntimeProfile.compare_exchange_strong(expected,selectedProfile,
+            std::memory_order_acq_rel)&&expected!=selectedProfile)
+            return Error{ErrorCode::Conflict,"NR runtime identity raced with another stage"};
         init=reinterpret_cast<Init>(GetProcAddress(nr,"NVSDK_NGX_D3D12_Init_Ext"));
         shutdown=reinterpret_cast<Shutdown>(GetProcAddress(nr,"NVSDK_NGX_D3D12_Shutdown1"));
         create=reinterpret_cast<Create>(GetProcAddress(nr,"NVSDK_NGX_D3D12_CreateFeature"));
         evaluate=reinterpret_cast<Evaluate>(GetProcAddress(nr,"NVSDK_NGX_D3D12_EvaluateFeature"));
         release=reinterpret_cast<Release>(GetProcAddress(nr,"NVSDK_NGX_D3D12_ReleaseFeature"));
-        core=GetModuleHandleW(L"_nvngx.dll");if(!core)core=GetModuleHandleW(L"nvngx.dll");
+        if(!GetModuleHandleExW(0,L"_nvngx.dll",&core))
+            GetModuleHandleExW(0,L"nvngx.dll",&core);
         allocate=core?reinterpret_cast<Allocate>(GetProcAddress(core,
             "NVSDK_NGX_D3D12_AllocateParameters")):nullptr;
         destroy=core?reinterpret_cast<Destroy>(GetProcAddress(core,
             "NVSDK_NGX_D3D12_DestroyParameters")):nullptr;
         if(!init||!shutdown||!create||!evaluate||!release||!allocate||!destroy)
             return Error{ErrorCode::Unavailable,"NR or D3D12 driver-core export is missing"};
-        auto* slot=findModuleNameImport(nr);
-        HMODULE callerModule{};
-        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&callerNameProxy),&callerModule))
-            return Error{ErrorCode::Unavailable,"Cannot identify NR caller module"};
-        callerIdentityModule.store(callerModule,std::memory_order_relaxed);
-        const auto original=reinterpret_cast<void*>(GetProcAddress(
-            GetModuleHandleW(L"kernel32.dll"),"GetModuleFileNameW"));
-        if(const auto patched=shim.apply(slot,original,reinterpret_cast<void*>(&callerNameProxy));
-           const auto error=std::get_if<Error>(&patched))return *error;
+        if(selectedProfile->callerIdentityShim) {
+            auto* slot=findModuleNameImport(nr);
+            HMODULE callerModule{};
+            if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(&callerNameProxy),&callerModule))
+                return Error{ErrorCode::Unavailable,"Cannot identify NR caller module"};
+            callerIdentityModule.store(callerModule,std::memory_order_relaxed);
+            const auto original=reinterpret_cast<void*>(GetProcAddress(
+                GetModuleHandleW(L"kernel32.dll"),"GetModuleFileNameW"));
+            if(const auto patched=shim.apply(slot,original,
+                reinterpret_cast<void*>(&callerNameProxy));
+               const auto error=std::get_if<Error>(&patched))return *error;
+        }
         std::error_code filesystemError;
         const auto data=fs::temp_directory_path(filesystemError)/L"RazKolbasNrData";
         if(filesystemError)return Error{ErrorCode::Io,"Cannot locate NR data directory"};
@@ -417,8 +497,10 @@ struct NrStage::Impl {
         allocationDevice.store(device12.Get(),std::memory_order_release);
         const auto initResult=init(0x0876232cULL,data.c_str(),device12.Get(),0x15,nullptr);
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(initResult)))
-            return Error{ErrorCode::Unavailable,"Fast-FP16 NR Init_Ext failed"};
+            return Error{ErrorCode::Unavailable,
+                "Selected NR Init_Ext failed: code="+std::to_string(initResult)};
         runtimeInitialized=true;
+        setPhase(NrRuntimePhase::Initialized);
         const auto allocated=allocate(&parameters);
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(allocated))||!parameters)
             return Error{ErrorCode::Unavailable,"NR parameters are unavailable"};
@@ -454,6 +536,14 @@ Result<bool> NrStage::configure(const Settings& settings) {
     {
         std::scoped_lock lock(impl_->runtimeMutex);
         impl_->runtime=runtime;
+        impl_->runtimeProfile=settings.get<Choice>(
+            "NeuralRendering.RuntimeProfile").value;
+        {
+            std::scoped_lock statusLock(impl_->statusMutex);
+            impl_->status.requestedProfile=impl_->runtimeProfile;
+        }
+        impl_->allowExperimentalRuntime=settings.get<bool>(
+            "NeuralRendering.AllowExperimentalRuntime");
         ++impl_->runtimeGeneration;
         impl_->runtimeResetPending=runtime.enabled;
         impl_->configured=true;
@@ -463,6 +553,11 @@ Result<bool> NrStage::configure(const Settings& settings) {
 Result<bool> NrStage::updateRuntime(const Settings& settings) {
     if(!impl_->configured)
         return Error{ErrorCode::Conflict,"NR stage was not configured at startup"};
+    if(settings.get<Choice>("NeuralRendering.RuntimeProfile").value!=
+           impl_->runtimeProfile||
+       settings.get<bool>("NeuralRendering.AllowExperimentalRuntime")!=
+           impl_->allowExperimentalRuntime)
+        return Error{ErrorCode::Conflict,"NR runtime profile change requires Skyrim restart"};
     const auto decoded=runtimeSettings(settings);
     if(const auto error=std::get_if<Error>(&decoded))return *error;
     const auto next=std::get<NrRuntimeSettings>(decoded);
@@ -503,7 +598,14 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
         if(!impl_->initialized) {
             const auto started=impl_->start(device,context);
             if(const auto error=std::get_if<Error>(&started)) {
-                const auto copy=*error;stop();impl_->disabled=true;return copy;
+                const auto copy=*error;stop();impl_->disabled=true;
+                {
+                    std::scoped_lock lock(impl_->statusMutex);
+                    impl_->status.reason=copy.message;
+                    impl_->status.phase=impl_->retirementUncertain?
+                        NrRuntimePhase::RetainedAfterFailure:NrRuntimePhase::Off;
+                }
+                return copy;
             }
         }
         D3D11_TEXTURE2D_DESC colorDesc{},motionDesc{},depthDesc{};
@@ -638,10 +740,12 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
             if(action==NrEvaluationAction::Disable) {
                 impl_->disabled=true;
                 return Error{ErrorCode::Unavailable,
-                    "Fast-FP16 NR evaluation failed on three consecutive frames"};
+                    "NR evaluation failed on three consecutive frames: code="+
+                    std::to_string(evaluateResult)};
             }
             return Error{ErrorCode::Unavailable,
-                "Fast-FP16 NR evaluation failed; original colour retained, reset pending"};
+                "NR evaluation failed; original colour retained, reset pending: code="+
+                std::to_string(evaluateResult)};
         }
         const auto outputReady=std::get<std::uint64_t>(submitted);
         if(FAILED(impl_->context11->Wait(impl_->fence11.Get(),outputReady))) {
@@ -663,6 +767,7 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
                 impl_->runtimeResetPending=false;
         }
         impl_->evaluationRecovery.succeeded();
+        impl_->setPhase(NrRuntimePhase::EvaluationSubmitted);
         ++impl_->submitted;return true;
     } catch(const std::exception& error) {
         impl_->disabled=true;
@@ -680,41 +785,64 @@ Result<bool> NrStage::process(ID3D11Device* device,ID3D11DeviceContext* context,
 }
 Result<bool> NrStage::stop() {
     if(!impl_)return true;
+    if(impl_->teardownQuarantined)
+        return Error{ErrorCode::Unavailable,
+            "NR teardown previously failed; runtime retained until process exit"};
+    const auto retain=[this](Error error)->Result<bool> {
+        impl_->teardownQuarantined=true;
+        impl_->retirementUncertain=true;
+        std::scoped_lock lock(impl_->statusMutex);
+        impl_->status.phase=NrRuntimePhase::RetainedAfterFailure;
+        impl_->status.reason=error.message;
+        return error;
+    };
     if(const auto drained=impl_->drain();
-       const auto error=std::get_if<Error>(&drained))return *error;
-    Error first{};bool failed=false;
+       const auto error=std::get_if<Error>(&drained))return retain(*error);
     if(impl_->feature&&impl_->release) {
         const auto result=impl_->release(impl_->feature);
         if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))) {
-            first={ErrorCode::Unavailable,"NR feature release failed"};failed=true;
+            return retain({ErrorCode::Unavailable,
+                "NR feature release failed; runtime retained: code="+
+                std::to_string(result)});
         }
     }
     impl_->feature=nullptr;
     if(impl_->parameters&&impl_->destroy) {
         const auto result=impl_->destroy(impl_->parameters);
-        if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))&&!failed) {
-            first={ErrorCode::Unavailable,"NR parameter destruction failed"};failed=true;
+        if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))) {
+            return retain({ErrorCode::Unavailable,
+                "NR parameter destruction failed; runtime retained: code="+
+                std::to_string(result)});
         }
     }
     impl_->parameters=nullptr;
     if(impl_->runtimeInitialized&&impl_->shutdown) {
         const auto result=impl_->shutdown(impl_->device12.Get());
-        if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))&&!failed) {
-            first={ErrorCode::Unavailable,"NR shutdown failed"};failed=true;
+        if(NVSDK_NGX_FAILED(static_cast<NVSDK_NGX_Result>(result))) {
+            return retain({ErrorCode::Unavailable,
+                "NR shutdown failed; runtime retained: code="+
+                std::to_string(result)});
         }
+    }
+    if(const auto restored=impl_->shim.restore();
+       const auto error=std::get_if<Error>(&restored)) {
+        return retain({error->code,
+            "NR caller shim restoration failed; runtime retained"});
     }
     impl_->initialized=false;impl_->runtimeInitialized=false;
     allocationDevice.store(nullptr,std::memory_order_release);
-    if(const auto restored=impl_->shim.restore();
-       std::holds_alternative<Error>(restored)&&!failed) {
-        first=std::get<Error>(restored);failed=true;
-    }
     callerIdentityModule.store(nullptr,std::memory_order_relaxed);
     if(impl_->nr){FreeLibrary(impl_->nr);impl_->nr=nullptr;}
+    if(impl_->core){FreeLibrary(impl_->core);impl_->core=nullptr;}
     if(impl_->runtimeFile!=INVALID_HANDLE_VALUE) {
         CloseHandle(impl_->runtimeFile);impl_->runtimeFile=INVALID_HANDLE_VALUE;
     }
-    return failed?Result<bool>{first}:Result<bool>{true};
+    {
+        std::scoped_lock lock(impl_->statusMutex);
+        impl_->status.phase=NrRuntimePhase::Off;
+        impl_->status.effectiveProfile.clear();
+    }
+    return true;
 }
 bool NrStage::enabled() const noexcept {
     if(!impl_||impl_->disabled)return false;
@@ -724,4 +852,9 @@ bool NrStage::enabled() const noexcept {
 std::uint64_t NrStage::submittedFrames() const noexcept{return impl_?impl_->submitted:0;}
 std::uint64_t NrStage::saturatedFrames() const noexcept{return impl_?impl_->saturated:0;}
 std::uint64_t NrStage::cpuFenceWaitCalls() const noexcept{return impl_?impl_->cpuWaitCalls:0;}
+NrRuntimeStatus NrStage::runtimeStatus() const {
+    if(!impl_)return {};
+    std::scoped_lock lock(impl_->statusMutex);
+    return impl_->status;
+}
 }

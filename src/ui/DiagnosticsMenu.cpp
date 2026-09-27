@@ -232,14 +232,34 @@ void drawUpscalingTab(MenuState& state,const DiagnosticsSnapshot& status,
     ImGui::Spacing();
     drawControls(state,status);
 }
-void drawNeuralRenderingTab(MenuState& state) {
+const char* nrPhaseLabel(NrRuntimePhase phase) noexcept {
+    switch(phase) {
+    case NrRuntimePhase::Selected:return "selected";
+    case NrRuntimePhase::Loaded:return "loaded";
+    case NrRuntimePhase::Initialized:return "initialized";
+    case NrRuntimePhase::FeatureCreated:return "feature created";
+    case NrRuntimePhase::EvaluationSubmitted:return "evaluation submitted";
+    case NrRuntimePhase::RetainedAfterFailure:return "retained after failure";
+    default:return "off";
+    }
+}
+void drawNeuralRenderingTab(MenuState& state,const DiagnosticsSnapshot& status) {
     if(!state.controlsConfigured)return;
     static constexpr MenuChoice presets[]{
         {"Auto","Auto (preset 0)"},{"Default","Default (preset 0)"},
         {"Shipping","Shipping (preset 1)"}};
     static constexpr MenuChoice resolves[]{
         {"Auto","Auto"},{"Residual","Residual"},{"Ratio","Ratio / OkLab"}};
-    auto queueRuntime=[&] { state.pendingNrRuntime=state.requestedSettings; };
+    static constexpr MenuChoice runtimeProfiles[]{
+        {"Auto","Auto (validated only)"},
+        {"legacy-fastfp16","Legacy fast-FP16"},
+        {"plain-fp16-20-30","RTX 20/30 plain-FP16 (experimental)"},
+        {"ada-fastfp16","RTX 40 fast-FP16 (experimental)"},
+        {"nvidia-50","RTX 50 NVIDIA (experimental)"}};
+    auto queueRuntime=[&] {
+        state.pendingNrRuntime=nrLiveSettingsForSession(
+            state.requestedSettings,state.activeSettings);
+    };
     auto save=[&](bool live=false) {
         if(live)queueRuntime();
         state.settingsDirty=true;
@@ -256,10 +276,41 @@ void drawNeuralRenderingTab(MenuState& state) {
     };
 
     ImGui::TextWrapped("Pipeline: HUD-free scene -> Neural Rendering -> DLSS SR -> optional frame generation -> native UI");
-    ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
-        "NR runtime: experimental exact-build direct path.");
+    ImGui::TextDisabled("NR runtime: exact-hash direct path; AMD and Intel unsupported.");
     ImGui::TextDisabled("Evaluation controls apply live and reset NR history. Network preset requires restart.");
     ImGui::Separator();
+    ImGui::SetNextItemWidth(310.0f);
+    if(choiceControl("Runtime Profile","NeuralRendering.RuntimeProfile",
+        runtimeProfiles,state))save();
+    bool experimental=state.requestedSettings.get<bool>(
+        "NeuralRendering.AllowExperimentalRuntime");
+    if(ImGui::Checkbox("Allow explicit experimental NR runtime",&experimental)) {
+        state.requestedSettings.values["NeuralRendering.AllowExperimentalRuntime"]=
+            experimental;
+        save();
+    }
+    const auto& requestedProfile=state.requestedSettings.get<Choice>(
+        "NeuralRendering.RuntimeProfile").value;
+    const auto& activeProfile=state.activeSettings.get<Choice>(
+        "NeuralRendering.RuntimeProfile").value;
+    const bool pendingProfile=requestedProfile!=activeProfile||
+        experimental!=state.activeSettings.get<bool>(
+            "NeuralRendering.AllowExperimentalRuntime");
+    if(pendingProfile)ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
+        "NR runtime choice saved - restart Skyrim to apply");
+    if(status.nrStatusAvailable) {
+        ImGui::Text("Active session: %s / %s",
+            status.nrRuntime.effectiveProfile.empty()?"none":
+                status.nrRuntime.effectiveProfile.c_str(),
+            nrPhaseLabel(status.nrRuntime.phase));
+        if(status.nrRuntime.vendorId)
+            ImGui::TextDisabled("Renderer GPU: vendor %04X device %04X LUID %08X:%08X",
+                status.nrRuntime.vendorId,status.nrRuntime.deviceId,
+                static_cast<unsigned>(status.nrRuntime.luidHigh),
+                status.nrRuntime.luidLow);
+        if(!status.nrRuntime.reason.empty())
+            ImGui::TextWrapped("NR selection: %s",status.nrRuntime.reason.c_str());
+    }
     bool enabled=state.requestedSettings.get<bool>("NeuralRendering.Enabled");
     if(ImGui::Checkbox("Enable Neural Rendering",&enabled)) {
         state.requestedSettings.values["NeuralRendering.Enabled"]=enabled;save(true);
@@ -381,7 +432,7 @@ void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
                 ImGui::EndTabItem();
             }
             if(ImGui::BeginTabItem("Neural Rendering")) {
-                drawNeuralRenderingTab(state);
+                drawNeuralRenderingTab(state,status);
                 ImGui::EndTabItem();
             }
             if(ImGui::BeginTabItem("Diagnostics")) {

@@ -1,5 +1,37 @@
 # Implementation checkpoint
 
+## 0.1.107 GPU-aware NR runtime selection source candidate (2026-09-27)
+
+The owner reports that the installed 0.1.106 UI is visually fixed. This is
+the owner's game observation; the assistant did not launch Skyrim or inspect
+a corresponding new log. The 0.1.106 installed files remain unchanged.
+
+Source now selects NR artifacts from an exact-hash profile catalog using the
+actual renderer adapter's NVIDIA GeForce RTX PCI ID and a same-LUID D3D12
+check. AMD, Intel, software and unreviewed IDs are unsupported for NR. Auto
+keeps the legacy runtime on the reviewed RTX 4080 SUPER profile; three newly
+supplied DLLs are explicit experimental candidates. Runtime choice is
+restart-bound, and the End menu distinguishes requested/effective profile and
+load/evaluation stage. A local side-by-side MO2 package was staged in
+ignored `artifacts/local` and installed into the V5.4 MO2 mod while Skyrim
+was closed. The existing INI and previously working SR and legacy NR DLLs
+were preserved; all eight installed manifest payload hashes match. The
+previous plugin and manifest are backed up in ignored
+`artifacts/local/v54-0.1.107-install-backup`. Installed plugin SHA-256:
+`bccbeda2ae2fd2fff064e8b45b83bf1790f19fa535c6cd1ed05e7bc18726b05a`.
+The second review's sticky-teardown and pending-profile/live-control fixes
+are included. See
+`docs/NR_RUNTIME_SELECTION.md` for artifact identities and hardware scope.
+
+The Release plugin/harness build succeeded and all 44 CTest groups passed.
+The existing legacy and supplied 40-series NR DLLs each completed 30 frames
+in separate standalone RTX 4080 SUPER processes with nonconstant changed
+output; the 40-series DLL required its own caller-identity shim. The 20/30
+and 50 DLLs have only static identity/export checks: compatible hardware
+tests **NOT RUN**. The new source build's Skyrim/ENB/ReShade runtime and
+visual tests **NOT RUN**. No FG implementation or FG runtime test was done
+in this NR change.
+
 ## DLSS Frame Generation RE25 architecture checkpoint (2026-09-27)
 
 The owner's `AIO_DLSS_FrameGen_RE_25.zip` was audited as reference evidence.

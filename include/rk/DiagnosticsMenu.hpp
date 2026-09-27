@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include "rk/Settings.hpp"
+#include "rk/NrStage.hpp"
 
 namespace rk {
 enum class DisplayMode : std::uint8_t { Native, Dlaa, DlssSr, SpatialFallback };
@@ -20,6 +21,8 @@ struct DiagnosticsSnapshot {
     bool dlssDisabled{},skyrimTaaActive{true},engineDrsKnown{},dlaaSuspendedByDrs{};
     bool srRequested{},srSourceReady{},ownedSceneActive{};
     float postSharpness{};
+    NrRuntimeStatus nrRuntime;
+    bool nrStatusAvailable{};
 };
 
 struct SharpeningUpdate {

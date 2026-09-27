@@ -2064,6 +2064,10 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
 #ifdef RK_WITH_NGX
     snapshot.srRequested=state->srRequested;
     snapshot.srSourceReady=state->srSourceVerified.load(std::memory_order_acquire);
+    try {
+        snapshot.nrRuntime=state->nrStage.runtimeStatus();
+        snapshot.nrStatusAvailable=true;
+    } catch(...) {}
 #endif
     snapshot.worldFrames=state->forwarded.load(std::memory_order_relaxed);
     snapshot.dlssFrames=state->statusDlssFrames.load(std::memory_order_relaxed);
@@ -2656,6 +2660,14 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
             if(std::get<bool>(processed)) {
                 *failureLogged=false;
                 const auto count=stage->submittedFrames();
+                if(count==1) {
+                    const auto runtime=stage->runtimeStatus();
+                    spdlog::info("Neural Rendering runtime: requested={} effective={} phase={} vendor=0x{:04x} device=0x{:04x} LUID={:08x}:{:08x} path={} sha256={} contract=direct-nr-310.8-v1",
+                        runtime.requestedProfile,runtime.effectiveProfile,
+                        static_cast<int>(runtime.phase),runtime.vendorId,
+                        runtime.deviceId,static_cast<std::uint32_t>(runtime.luidHigh),
+                        runtime.luidLow,runtime.path,runtime.sha256);
+                }
                 if(count<=3||count%600==0)
                     spdlog::info("Neural Rendering pre-SR submission {} completed for frame {}",
                         count,metadata.frameId);
@@ -2669,8 +2681,10 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         if(const auto configured=pending->sdrPresenter.configurePreSrProcessor(
             processor,{.requireR32Depth=true});
            const auto configureError=std::get_if<Error>(&configured))return *configureError;
-        spdlog::info("Neural Rendering preprocessor armed before DLSS SR and DLAA: enabled={}; exact community runtime hash required",
-            pending->nrStage.enabled());
+        spdlog::info("Neural Rendering preprocessor armed before DLSS SR and DLAA: enabled={}; requested runtime={}; experimental={}; exact catalog identity required",
+            pending->nrStage.enabled(),
+            settings.get<Choice>("NeuralRendering.RuntimeProfile").value,
+            settings.get<bool>("NeuralRendering.AllowExperimentalRuntime"));
     }
     pending->srRequested=(provider=="Auto"||provider=="DLSS")&&
         *quality!=UpscaleQuality::NativeAA;

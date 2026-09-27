@@ -3,13 +3,14 @@ param(
     [ValidateSet('win-dev','win-release')][string]$Preset = 'win-release',
     [string]$NvidiaSrRuntime,
     [string]$NvidiaNrRuntime,
+    [hashtable]$NrRuntimeProfiles = @{},
     [string]$IniSource
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $configuration = if ($Preset -eq 'win-dev') { 'Debug' } else { 'Release' }
 $hasSrRuntime = -not [string]::IsNullOrWhiteSpace($NvidiaSrRuntime)
-$hasNrRuntime = -not [string]::IsNullOrWhiteSpace($NvidiaNrRuntime)
+$hasNrRuntime = -not [string]::IsNullOrWhiteSpace($NvidiaNrRuntime) -or $NrRuntimeProfiles.Count -gt 0
 if ($hasNrRuntime -and -not $hasSrRuntime) {
     throw 'The current pre-SR NR bridge requires the pinned SR runtime in the same package'
 }
@@ -42,6 +43,29 @@ if ($NvidiaNrRuntime) {
         throw 'DLSS-NR runtime does not have the expected modified NVIDIA provenance'
     }
 }
+$nrCatalog = @{
+    'plain-fp16-20-30' = @{ size=309671536; hash='6dac1b40f0c87af84a8177b18c741e84fb0c914f204c9d87d95916b665ba3af8'; signature='HashMismatch' }
+    'ada-fastfp16' = @{ size=165840496; hash='e67dee209320cdafe0e93e45675d7aa34323a53acc57a72b2e40a181581c989a'; signature='HashMismatch' }
+    'nvidia-50' = @{ size=165840496; hash='e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e'; signature='Valid' }
+}
+foreach ($profileId in $NrRuntimeProfiles.Keys) {
+    if (-not $nrCatalog.ContainsKey($profileId)) { throw "Unknown NR runtime profile: $profileId" }
+    $source = [IO.Path]::GetFullPath([string]$NrRuntimeProfiles[$profileId])
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "NR runtime missing: $profileId" }
+    $expected = $nrCatalog[$profileId]
+    $item = Get-Item -LiteralPath $source
+    $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($item.Length -ne $expected.size -or $hash -ne $expected.hash) {
+        throw "NR runtime identity differs: $profileId"
+    }
+    if ($item.VersionInfo.FileVersion -ne '310,8,0,0') { throw "NR runtime version differs: $profileId" }
+    $signature = Get-AuthenticodeSignature -LiteralPath $source
+    if ([string]$signature.Status -ne $expected.signature -or
+        -not $signature.SignerCertificate -or
+        $signature.SignerCertificate.Subject -notmatch 'NVIDIA Corporation') {
+        throw "NR runtime provenance differs: $profileId"
+    }
+}
 $plugins = Join-Path $destinationPath 'SKSE/Plugins'
 New-Item -ItemType Directory -Path $plugins -Force | Out-Null
 Copy-Item -LiteralPath $binary -Destination (Join-Path $plugins 'RazKolbas.dll')
@@ -56,6 +80,11 @@ if ($NvidiaNrRuntime) {
     New-Item -ItemType Directory -Path $runtimeTarget -Force | Out-Null
     Copy-Item -LiteralPath $nrRuntimeFile -Destination (Join-Path $runtimeTarget 'nvngx_dlssnr.dll')
 }
+foreach ($profileId in $NrRuntimeProfiles.Keys) {
+    $runtimeTarget = Join-Path $plugins "RazKolbasRuntime/NR/$profileId"
+    New-Item -ItemType Directory -Path $runtimeTarget -Force | Out-Null
+    Copy-Item -LiteralPath ([IO.Path]::GetFullPath([string]$NrRuntimeProfiles[$profileId])) -Destination (Join-Path $runtimeTarget 'nvngx_dlssnr.dll')
+}
 $imguiNotice = Join-Path $root 'licenses/DearImGui-MIT.txt'
 if (-not (Test-Path -LiteralPath $imguiNotice -PathType Leaf)) { throw 'Dear ImGui MIT notice is missing' }
 $licenses = Join-Path $destinationPath 'LICENSES'
@@ -66,6 +95,6 @@ $files = @(Get-ChildItem -LiteralPath $destinationPath -File -Recurse | ForEach-
     if (-not $_.FullName.StartsWith($destinationPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Staged file escaped destination' }
     @{ path=$_.FullName.Substring($destinationPrefix.Length).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-@{ product='RazKolbas'; status=$(if ($NvidiaNrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR_NR' } elseif ($NvidiaSrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
+@{ product='RazKolbas'; status=$(if ($hasNrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR_NR' } elseif ($NvidiaSrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destinationPath 'install-manifest.json') -Encoding utf8
 Write-Output $destinationPath

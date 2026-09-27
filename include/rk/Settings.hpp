@@ -36,6 +36,7 @@ Result<bool> saveIni(const std::filesystem::path& path, const Settings& settings
 Result<bool> validateSettings(const Settings& settings);
 enum class ChangeCategory { Live, Recreate, RestartRequired };
 ChangeCategory classifyChange(const Settings& before, const Settings& after);
+Settings nrLiveSettingsForSession(const Settings& requested,const Settings& active);
 struct SettingsSnapshot { Settings requested; std::uint64_t generation{}; };
 class SettingsTransaction {
 public:

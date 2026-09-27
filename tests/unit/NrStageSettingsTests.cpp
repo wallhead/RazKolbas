@@ -71,3 +71,28 @@ TEST_CASE("NR native UI correction request cannot change evaluation controls",
     REQUIRE(std::holds_alternative<bool>(changed));
     REQUIRE_FALSE(std::get<bool>(changed));
 }
+TEST_CASE("NR runtime profile cannot hot-swap while settings remain live",
+    "[nr][settings][nr_runtime_selection]") {
+    auto settings=rk::defaultSettings();
+    settings.values["NeuralRendering.Enabled"]=true;
+    rk::NrStage stage;
+    REQUIRE(std::holds_alternative<bool>(stage.configure(settings)));
+    settings.values["NeuralRendering.RuntimeProfile"]=rk::Choice{"ada-fastfp16"};
+    REQUIRE(std::holds_alternative<rk::Error>(stage.updateRuntime(settings)));
+    settings.values["NeuralRendering.RuntimeProfile"]=rk::Choice{"Auto"};
+    settings.values["NeuralRendering.AllowExperimentalRuntime"]=true;
+    REQUIRE(std::holds_alternative<rk::Error>(stage.updateRuntime(settings)));
+}
+TEST_CASE("NR status distinguishes configured request from an unloaded runtime",
+    "[nr][settings][nr_runtime_selection]") {
+    auto settings=rk::defaultSettings();
+    settings.values["NeuralRendering.Enabled"]=true;
+    settings.values["NeuralRendering.RuntimeProfile"]=rk::Choice{"ada-fastfp16"};
+    settings.values["NeuralRendering.AllowExperimentalRuntime"]=true;
+    rk::NrStage stage;
+    REQUIRE(std::holds_alternative<bool>(stage.configure(settings)));
+    const auto status=stage.runtimeStatus();
+    REQUIRE(status.requestedProfile=="ada-fastfp16");
+    REQUIRE(status.effectiveProfile.empty());
+    REQUIRE(status.phase==rk::NrRuntimePhase::Off);
+}

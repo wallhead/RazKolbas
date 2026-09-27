@@ -110,6 +110,36 @@ TEST_CASE("Neural rendering settings match the before-SR community runtime contr
     REQUIRE(std::holds_alternative<rk::Settings>(
         rk::parseIni("[NeuralRendering]\nInputResolutionScale=0.25\n")));
 }
+TEST_CASE("NR runtime profile is a restart-bound choice independent of backend",
+    "[config][nr_runtime_selection]") {
+    const auto parsed=rk::parseIni(
+        "[NeuralRendering]\nRuntimeProfile=ada-fastfp16\n"
+        "AllowExperimentalRuntime=true\nBackend=Direct\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& settings=std::get<rk::Settings>(parsed);
+    REQUIRE(settings.get<rk::Choice>("NeuralRendering.RuntimeProfile").value==
+        "ada-fastfp16");
+    REQUIRE(settings.get<bool>("NeuralRendering.AllowExperimentalRuntime"));
+    REQUIRE(rk::classifyChange(rk::defaultSettings(),settings)==
+        rk::ChangeCategory::RestartRequired);
+    REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni(
+        "[NeuralRendering]\nRuntimeProfile=unknown\n")));
+}
+TEST_CASE("Pending NR profile does not block current-session evaluation controls",
+    "[config][nr_runtime_selection]") {
+    auto active=rk::defaultSettings();
+    active.values["NeuralRendering.Enabled"]=true;
+    auto requested=active;
+    requested.values["NeuralRendering.RuntimeProfile"]=rk::Choice{"ada-fastfp16"};
+    requested.values["NeuralRendering.AllowExperimentalRuntime"]=true;
+    requested.values["NeuralRendering.Style"]=std::int64_t{4};
+    const auto live=rk::nrLiveSettingsForSession(requested,active);
+    REQUIRE(live.get<rk::Choice>("NeuralRendering.RuntimeProfile").value=="Auto");
+    REQUIRE_FALSE(live.get<bool>("NeuralRendering.AllowExperimentalRuntime"));
+    REQUIRE(live.get<std::int64_t>("NeuralRendering.Style")==4);
+    REQUIRE(requested.get<rk::Choice>("NeuralRendering.RuntimeProfile").value==
+        "ada-fastfp16");
+}
 TEST_CASE("Failed replacement preserves last-good state; restart remains pending", "[config]") {
     rk::SettingsTransaction transaction;
     auto before = transaction.snapshot();

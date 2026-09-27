@@ -29,11 +29,20 @@ template<class T> T value(rk::Result<T> result) {
 }
 
 int wmain(int argc,wchar_t** argv) {
-    if(argc!=2&&argc!=3) {
-        std::cerr<<"Usage: RazKolbasNrLiveBridge <exact _nvngx.dll> [frame_delay_ms]\n";
+    if(argc<2||argc>4) {
+        std::cerr<<"Usage: RazKolbasNrLiveBridge <exact _nvngx.dll> [profile_id] [frame_delay_ms]\n";
         return 2;
     }
-    const auto frameDelay=argc==3?static_cast<DWORD>(std::stoul(argv[2])):0u;
+    const bool oldDelay=argc==3&&std::wstring_view(argv[2]).find_first_not_of(
+        L"0123456789")==std::wstring_view::npos;
+    const std::wstring profile=argc>=3&&!oldDelay?argv[2]:L"Auto";
+    std::string profileId;
+    for(const auto character:profile) {
+        if(character>0x7f)stop("PROFILE_NON_ASCII");
+        profileId.push_back(static_cast<char>(character));
+    }
+    const auto frameDelay=argc==4?static_cast<DWORD>(std::stoul(argv[3])):
+        oldDelay?static_cast<DWORD>(std::stoul(argv[2])):0u;
     const auto corePath=fs::absolute(argv[1]);
     const auto core=LoadLibraryExW(corePath.c_str(),nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -102,6 +111,8 @@ int wmain(int argc,wchar_t** argv) {
     auto settings=rk::defaultSettings();
     settings.values["NeuralRendering.Enabled"]=true;
     settings.values["NeuralRendering.Preset"]=rk::Choice{"Shipping"};
+    settings.values["NeuralRendering.RuntimeProfile"]=rk::Choice{profileId};
+    settings.values["NeuralRendering.AllowExperimentalRuntime"]=profile!=L"Auto";
     {
         rk::NrStage stage;
         if(!value(stage.configure(settings)))stop("CONFIGURE_FALSE");
@@ -136,6 +147,7 @@ int wmain(int argc,wchar_t** argv) {
         if(stage.submittedFrames()!=frames)stop("SUBMISSION_COUNT");
         if(!value(stage.stop()))stop("STOP_FALSE");
         std::wcout<<L"NR_LIVE_BRIDGE_ADAPTER="<<adapterDesc.Description<<L'\n';
+        std::wcout<<L"NR_LIVE_BRIDGE_PROFILE="<<profile<<L'\n';
         std::cout<<"NR_LIVE_BRIDGE_INPUT_SHA256="<<beforeHash
             <<"\nNR_LIVE_BRIDGE_OUTPUT_SHA256="<<afterHash
             <<"\nNR_LIVE_BRIDGE_FRAMES="<<frames

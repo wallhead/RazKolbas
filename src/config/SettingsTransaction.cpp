@@ -1,7 +1,15 @@
 #include "rk/Settings.hpp"
 namespace rk {
+Settings nrLiveSettingsForSession(const Settings& requested,const Settings& active) {
+    Settings live=requested;
+    for(const auto key:{"NeuralRendering.RuntimeProfile",
+                        "NeuralRendering.AllowExperimentalRuntime"})
+        live.values.at(key)=active.values.at(key);
+    return live;
+}
 ChangeCategory classifyChange(const Settings& before, const Settings& after) {
     for (const auto key : {"General.Presentation", "General.SafeMode",
+        "NeuralRendering.RuntimeProfile", "NeuralRendering.AllowExperimentalRuntime",
         "Diagnostics.CaptureHotkey", "Diagnostics.SpatialBaselineOnly",
         "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches",
         "Patching.DisabledPatchIds"})

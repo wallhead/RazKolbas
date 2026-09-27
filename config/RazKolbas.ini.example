@@ -55,6 +55,10 @@ UIComposition = Auto
 Enabled = false
 ; Auto selects only an implemented, validated NR provider contract.
 Backend = Auto
+; RuntimeProfile is startup-only. Auto selects only a validated exact build.
+; Candidates require both an explicit ID and AllowExperimentalRuntime=true.
+RuntimeProfile = Auto
+AllowExperimentalRuntime = false
 ; NR is applied to the HUD-free scene before DLSS SR and future FG.
 Position = BeforeSR
 ; Auto/Default use preset 0. Shipping uses the only shipped weight-table preset 1.
