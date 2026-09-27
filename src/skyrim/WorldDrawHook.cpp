@@ -141,7 +141,7 @@ struct WorldState {
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
-        cursorReplays{};
+        preservedMagicComposites{},cursorReplays{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
     bool deferredMenuPublicationWarningLogged{};
@@ -535,19 +535,25 @@ std::pair<std::uintptr_t,std::string> menuAtOrdinal(
             reinterpret_cast<std::uintptr_t>(menu),name.c_str()};
     return {reinterpret_cast<std::uintptr_t>(menu),"unregistered"};
 }
-bool inventoryMenuOnStack(const WorldState* state) {
+bool namedMenuOnStack(const WorldState* state,std::string_view menuName) {
     RE::UI* ui{};
     if(!state||!state->uiSingletonCell||
        !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return false;
     for(auto& [name,entry]:ui->menuMap) {
-        if(std::string_view(name.c_str())!="InventoryMenu")continue;
-        auto* inventory=entry.menu.get();
-        if(!inventory)return false;
+        if(std::string_view(name.c_str())!=menuName)continue;
+        auto* menu=entry.menu.get();
+        if(!menu)return false;
         for(const auto& stacked:ui->menuStack)
-            if(stacked.get()==inventory)return true;
+            if(stacked.get()==menu)return true;
         return false;
     }
     return false;
+}
+bool inventoryMenuOnStack(const WorldState* state) {
+    return namedMenuOnStack(state,RE::InventoryMenu::MENU_NAME);
+}
+bool magicMenuOnStack(const WorldState* state) {
+    return namedMenuOnStack(state,RE::MagicMenu::MENU_NAME);
 }
 RE::IMenu* cursorMenuOnStack(const WorldState* state) {
     RE::UI* ui{};
@@ -1111,18 +1117,32 @@ void beforeDeferredUiFlush(void*) noexcept {
     auto* ui=ownedUiRedirector();
     if(!ui)return;
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    bool preservedNativeMenuComposite=false;
     bool preservedInventoryComposite=false;
+    bool preservedMagicComposite=false;
     if(ui->reducedMenuPassPending()) {
-        if(inventoryMenuOnStack(state)) {
+        preservedInventoryComposite=inventoryMenuOnStack(state);
+        preservedMagicComposite=!preservedInventoryComposite&&magicMenuOnStack(state);
+        if(preservedInventoryComposite||preservedMagicComposite) {
             // A sustained inventory capture showed the list and preview on
-            // native colour before this boundary. Publishing the reduced
-            // scene here erased the list; keep the already-composed target.
-            state->menuBoundaryCaptureAttempted=true;
-            preservedInventoryComposite=true;
-            const auto count=++state->preservedInventoryComposites;
-            if(count==1||count%600==0)
-                spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
-                    frame,count);
+            // native colour before this boundary. MagicMenu is also a custom
+            // rendered item menu, and the live run reports it blurry while
+            // inventory is clear. Keep its native composite for this bounded
+            // candidate instead of replacing it with the reduced scene.
+            if(preservedInventoryComposite)
+                state->menuBoundaryCaptureAttempted=true;
+            preservedNativeMenuComposite=true;
+            if(preservedInventoryComposite) {
+                const auto count=++state->preservedInventoryComposites;
+                if(count==1||count%600==0)
+                    spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
+                        frame,count);
+            } else {
+                const auto count=++state->preservedMagicComposites;
+                if(count==1||count%600==0)
+                    spdlog::info("Magic frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
+                        frame,count);
+            }
         } else {
         try {
             std::optional<WorldState::MenuBoundaryCapture> capture;
@@ -1212,11 +1232,11 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {spdlog::warn("Deferred Scaleform UI flush frame {} could not reassert native depth/stencil; HRESULT=0x{:08x}",
             frame,static_cast<std::uint32_t>(rebound));}catch(...) {}
     }
-    if(preservedInventoryComposite&&SUCCEEDED(rebound)) {
+    if(preservedNativeMenuComposite&&SUCCEEDED(rebound)) {
         if(auto* cursor=cursorMenuOnStack(state);cursor&&cursor->uiMovie) {
             std::optional<WorldState::CursorReplayCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
-            if(!state->cursorReplayCaptureAttempted&&
+            if(preservedInventoryComposite&&!state->cursorReplayCaptureAttempted&&
                state->inventoryMenuStableFrames==30) {
                 state->cursorReplayCaptureAttempted=true;
                 const auto device=state->createdDevice.load(std::memory_order_relaxed);
@@ -1243,12 +1263,12 @@ void beforeDeferredUiFlush(void*) noexcept {
             }
             const auto count=++state->cursorReplays;
             if(count==1||count%600==0)
-                spdlog::info("Inventory frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
-                    frame,count);
+                spdlog::info("{} frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
+                    preservedInventoryComposite?"Inventory":"Magic",frame,count);
             try {cursor->PostDisplay();}
             catch(...) {
-                try {spdlog::warn("Inventory frame {} Cursor Menu replay threw",
-                    frame);}catch(...) {}
+                try {spdlog::warn("{} frame {} Cursor Menu replay threw",
+                    preservedInventoryComposite?"Inventory":"Magic",frame);}catch(...) {}
             }
             if(capture&&captureTarget) {
                 const std::array<ID3D11Texture2D*,1> source{
@@ -1265,8 +1285,8 @@ void beforeDeferredUiFlush(void*) noexcept {
             }
         } else if(!state->cursorReplayMissingLogged) {
             state->cursorReplayMissingLogged=true;
-            try {spdlog::warn("Inventory frame {} Cursor Menu is not available for native replay",
-                frame);}catch(...) {}
+            try {spdlog::warn("{} frame {} Cursor Menu is not available for native replay",
+                preservedInventoryComposite?"Inventory":"Magic",frame);}catch(...) {}
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");

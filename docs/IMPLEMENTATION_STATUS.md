@@ -1,5 +1,24 @@
 # Implementation checkpoint
 
+## 0.1.102 inventory result and 0.1.103 MagicMenu candidate (2026-09-27)
+
+The owner reports inventory is good in the user-started 0.1.102 run and
+MagicMenu remains blurry. A bounded capture confirms the Skyrim cursor replay
+changed a small native pixel region and survived EndFrame. A read-only live
+probe during MagicMenu sampled both game dimension pairs at 1707x960 while
+RazKolbas output was 2560x1440; the dimension-writer CALL relayed into
+UnderwaterNG.dll. These facts do not establish the effective glyph draw size
+or prove which owner wrote the dimensions. See
+`docs/re/LIVE_NATIVE_UI_2026-09-27.md`.
+
+The MagicMenu-specific native-composite preservation/cursor-replay candidate
+is built as 0.1.103. Release build and 43 CTest groups passed; the MO2 ZIP
+and all five manifest payloads passed independent hashes. **0.1.103 is not
+yet installed or runtime-tested** because 0.1.102 remains loaded in Skyrim.
+The next action is to exit the game, install the verified candidate without
+replacing the user's INI or runtime libraries, then let the owner test MagicMenu
+clarity/cursor and check that inventory remains good.
+
 ## AIO native UI RE24 local cross-check (2026-09-27)
 
 The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_24.zip` as
