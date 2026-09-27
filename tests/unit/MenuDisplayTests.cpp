@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/MenuDisplay.hpp"
+#include "rk/HudMovieViewport.hpp"
 
 namespace {
 unsigned beforeCalls{},originalCalls{};
@@ -39,6 +40,30 @@ TEST_CASE("Menu-display forwarding preserves four arguments and runs the boundar
     REQUIRE(seenSecond==0x11223344);
     REQUIRE(seenThird==0x55667788);
     REQUIRE(seenFourth==0x99aabbcc);
+}
+
+TEST_CASE("Full reduced HUD movie viewport maps to native while unrelated viewports stay unchanged",
+    "[hud_movie_viewport]") {
+    const rk::HudMovieViewport reduced{1707,960,0,0,1707,960,0,0,0,0,1.0f,1.0f,0,0};
+    const auto native=rk::nativeHudMovieViewport(reduced,{1707,960},{2560,1440});
+    REQUIRE(native);
+    CHECK(native->bufferWidth==2560);
+    CHECK(native->bufferHeight==1440);
+    CHECK(native->width==2560);
+    CHECK(native->height==1440);
+    CHECK(native->flags==reduced.flags);
+    CHECK(native->scale==reduced.scale);
+    CHECK(rk::sameHudMovieViewport(*native,*native));
+    CHECK_FALSE(rk::sameHudMovieViewport(*native,reduced));
+
+    auto partial=reduced;
+    partial.width=800;
+    CHECK_FALSE(rk::nativeHudMovieViewport(partial,{1707,960},{2560,1440}));
+    auto scissored=reduced;
+    scissored.flags=4;
+    CHECK_FALSE(rk::nativeHudMovieViewport(scissored,{1707,960},{2560,1440}));
+    CHECK_FALSE(rk::nativeHudMovieViewport(reduced,{1707,960},{1707,960}));
+    CHECK_FALSE(rk::nativeHudMovieViewport(reduced,{1707,960},{1200,1440}));
 }
 
 TEST_CASE("Menu-display forwarding owner is immutable after activation",

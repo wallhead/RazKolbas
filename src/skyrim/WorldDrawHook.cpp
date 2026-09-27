@@ -19,6 +19,7 @@
 #include "rk/RendererBootstrap.hpp"
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/HudMovieViewport.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
 #include "rk/NrStage.hpp"
@@ -43,6 +44,13 @@
 
 namespace rk {
 namespace {
+static_assert(sizeof(HudMovieViewport)==sizeof(RE::GViewport));
+struct HudMovieViewportRestore {
+    RE::IMenu* menu{};
+    RE::GFxMovieView* movie{};
+    HudMovieViewport original{};
+    HudMovieViewport applied{};
+};
 struct WorldState {
     WorldDrawForwarder forwarder;
     MenuDisplayForwarder menuForwarder;
@@ -149,6 +157,10 @@ struct WorldState {
     std::uint64_t hudUiTraceFrame{};
     unsigned hudUiTraceCount{};
     bool hudMovieViewportsLogged{};
+    std::array<HudMovieViewportRestore,32> hudViewportRestores;
+    std::uint64_t hudViewportFrame{},hudViewportWindows{};
+    unsigned hudViewportRestoreCount{};
+    bool hudViewportConflictLogged{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
         preservedMagicComposites{},preservedMainMenuComposites{},
         magicMovieReplays{},cursorReplays{};
@@ -661,6 +673,121 @@ void logHudUiBoundary(WorldState* state,std::uint64_t frame,
         dimensions[0],dimensions[1],dimensions[2],dimensions[3],haveDimensions);
     }catch(...) {}
 }
+HudMovieViewport hudViewportRecord(const RE::GViewport& viewport) noexcept {
+    return {viewport.bufferWidth,viewport.bufferHeight,
+        viewport.left,viewport.top,viewport.width,viewport.height,
+        viewport.scissorLeft,viewport.scissorTop,
+        viewport.scissorWidth,viewport.scissorHeight,
+        viewport.scale,viewport.aspectRatio,
+        viewport.flags.underlying(),viewport.pad34};
+}
+void setHudMovieViewport(RE::GFxMovieView* movie,
+    const HudMovieViewport& record) noexcept {
+    RE::GViewport viewport;
+    viewport.bufferWidth=record.bufferWidth;
+    viewport.bufferHeight=record.bufferHeight;
+    viewport.left=record.left;
+    viewport.top=record.top;
+    viewport.width=record.width;
+    viewport.height=record.height;
+    viewport.scissorLeft=record.scissorLeft;
+    viewport.scissorTop=record.scissorTop;
+    viewport.scissorWidth=record.scissorWidth;
+    viewport.scissorHeight=record.scissorHeight;
+    viewport.scale=record.scale;
+    viewport.aspectRatio=record.aspectRatio;
+    viewport.flags=static_cast<RE::GViewport::Flag>(record.flags);
+    viewport.pad34=record.padding;
+    movie->SetViewport(viewport);
+}
+HudMovieViewport getHudMovieViewport(RE::GFxMovieView* movie) noexcept {
+    RE::GViewport viewport;
+    movie->GetViewport(&viewport);
+    return hudViewportRecord(viewport);
+}
+void finishNativeHudMovieViewportWindow(WorldState* state) noexcept {
+    if(!state||!state->hudViewportRestoreCount)return;
+    RE::UI* ui{};
+    if(state->uiSingletonCell)
+        read(state->uiSingletonCell,&ui,sizeof(ui));
+    unsigned restored{},conflicts{};
+    for(unsigned index=0;index<state->hudViewportRestoreCount;++index) {
+        auto& entry=state->hudViewportRestores[index];
+        bool stillOwned=false;
+        if(ui)for(const auto& stacked:ui->menuStack)
+            if(stacked.get()==entry.menu&&entry.menu->uiMovie.get()==entry.movie) {
+                stillOwned=true;
+                break;
+            }
+        if(stillOwned) {
+            auto* movie=entry.movie;
+            if(sameHudMovieViewport(getHudMovieViewport(movie),entry.applied)) {
+                setHudMovieViewport(movie,entry.original);
+                ++restored;
+            } else ++conflicts;
+        } else ++conflicts;
+        entry={};
+    }
+    const auto count=++state->hudViewportWindows;
+    if(count==1||count%600==0||
+       (conflicts&&!state->hudViewportConflictLogged)) {
+        try {spdlog::info("Native HUD movie viewport window frame {}: adjusted={} restored={} conflicts={} windows={}",
+            state->hudViewportFrame,state->hudViewportRestoreCount,
+            restored,conflicts,count);}catch(...) {}
+    }
+    if(conflicts&&!state->hudViewportConflictLogged) {
+        state->hudViewportConflictLogged=true;
+        try {spdlog::warn("HUD movie viewport changed by another owner; skipped restoration of the changed movie");}catch(...) {}
+    }
+    state->hudViewportRestoreCount=0;
+}
+void beginNativeHudMovieViewportWindow(WorldState* state,
+    std::uint64_t frame) noexcept {
+    if(!state)return;
+    if(state->hudViewportFrame==frame)return;
+    finishNativeHudMovieViewportWindow(state);
+    if(state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
+       !namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)||
+       inventoryMenuOnStack(state)||magicMenuOnStack(state)||
+       titleMenuOnStack(state))return;
+    auto* domain=activeOwnedSceneDomain();
+    if(!domain||domain->phase()!=ScenePhase::NativeUi||
+       domain->frame()!=frame||domain->renderThread()!=GetCurrentThreadId())return;
+    RE::UI* ui{};
+    if(!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return;
+    state->hudViewportFrame=frame;
+    const auto render=domain->plan().render;
+    const auto display=domain->plan().display;
+    for(unsigned ordinal=0;ordinal<ui->menuStack.size()&&ordinal<32;++ordinal) {
+        auto* item=ui->menuStack[ordinal].get();
+        if(!item||!item->uiMovie)continue;
+        auto* movie=item->uiMovie.get();
+        const auto original=getHudMovieViewport(movie);
+        const auto native=nativeHudMovieViewport(original,render,display);
+        if(!native)continue;
+        setHudMovieViewport(movie,*native);
+        const auto applied=getHudMovieViewport(movie);
+        if(applied.bufferWidth!=static_cast<std::int32_t>(display.width)||
+           applied.bufferHeight!=static_cast<std::int32_t>(display.height)||
+           applied.width!=static_cast<std::int32_t>(display.width)||
+           applied.height!=static_cast<std::int32_t>(display.height)) {
+            setHudMovieViewport(movie,original);
+            continue;
+        }
+        auto& entry=state->hudViewportRestores[state->hudViewportRestoreCount++];
+        entry.menu=item;
+        entry.movie=movie;
+        entry.original=original;
+        entry.applied=applied;
+        if(state->hudViewportWindows==0) {
+            const auto [identity,name]=menuAtOrdinal(state,ordinal);
+            try {spdlog::info("Native HUD movie viewport frame {} ordinal {} menu={} id=0x{:x} {}x{} -> {}x{}",
+                frame,ordinal,name,identity,original.width,original.height,
+                applied.width,applied.height);}catch(...) {}
+        }
+    }
+}
 void logHudMovieViewports(WorldState* state,std::uint64_t frame) noexcept {
     if(!state||state->hudMovieViewportsLogged||
        state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
@@ -675,19 +802,7 @@ void logHudMovieViewports(WorldState* state,std::uint64_t frame) noexcept {
     for(unsigned ordinal=0;ordinal<ui->menuStack.size()&&ordinal<32;++ordinal) {
         auto* item=ui->menuStack[ordinal].get();
         if(!item||!item->uiMovie)continue;
-        // CommonLib declares GViewport constructors but does not link their
-        // implementations. This output-only ABI record has the same layout.
-        struct ViewportRecord {
-            std::int32_t bufferWidth,bufferHeight,left,top,width,height;
-            std::int32_t scissorLeft,scissorTop,scissorWidth,scissorHeight;
-            float scale,aspectRatio;
-            std::uint32_t flags,padding;
-        };
-        static_assert(sizeof(ViewportRecord)==sizeof(RE::GViewport));
-        alignas(RE::GViewport) std::byte buffer[sizeof(RE::GViewport)]{};
-        item->uiMovie->GetViewport(reinterpret_cast<RE::GViewport*>(buffer));
-        ViewportRecord viewport{};
-        std::memcpy(&viewport,buffer,sizeof(viewport));
+        const auto viewport=getHudMovieViewport(item->uiMovie.get());
         const auto [identity,name]=menuAtOrdinal(state,ordinal);
         try {spdlog::info("HUD movie viewport frame {} ordinal {} menu={} id=0x{:x} buffer={}x{} rect=({}, {}, {}x{}) scissor=({}, {}, {}x{}) scale={} aspect={} flags=0x{:x}",
             frame,ordinal,name,identity,viewport.bufferWidth,viewport.bufferHeight,
@@ -1222,6 +1337,7 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                 error.what());}catch(...) {}
         } catch(...) {}
     }
+    beginNativeHudMovieViewportWindow(state,frame);
 #endif
 }
 void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
@@ -1502,6 +1618,7 @@ void deferredUiFlushProxy(void* renderer) noexcept {
     if(!state)std::terminate();
     state->deferredUiFlushForwarder.dispatch(renderer);
 #ifdef RK_WITH_NGX
+    finishNativeHudMovieViewportWindow(state);
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     logHudUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logInventoryBinding(state,frame,"after-EndFrame");

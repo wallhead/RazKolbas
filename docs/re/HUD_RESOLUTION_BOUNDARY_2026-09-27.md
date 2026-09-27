@@ -1,5 +1,29 @@
 # DLSS Quality HUD resolution boundary: evidence before a shared fix
 
+## 0.1.110 game viewport finding and 0.1.111 candidate
+
+The owner started the installed 0.1.110 build and loaded a world with a
+1707x960 DLSS render extent. The game-updated INI and live startup log identify
+the requested preset as Balanced with a manual scale of 0.666667; this was
+not a pure Quality-preset run. At frame 8315 (2026-09-28 00:28:34), the
+read-only Scaleform snapshot
+recorded 14 active movie viewports. Every recorded movie, including `HUD Menu`,
+`TrueHUD`, `SkyParkour`, and the widget movies, reported buffer and rectangle
+1707x960. At the same boundary, RTV0, DSV, D3D11 viewport and scissor were all
+2560x1440. The movie viewport is the reduced-size producer state missing from
+the prior D3D11 and graphics-dimension traces. This is a concrete reason why
+replaying already-composed inventory pixels cannot sharpen the HUD by itself.
+
+Source 0.1.111 now presents a native 2560x1440 viewport to each full-screen
+reduced movie on the world-HUD stack immediately before its `PostDisplay`,
+and restores the exact prior movie viewport after Scaleform `EndFrame` if no
+other owner has changed it. It skips title, inventory and magic contexts,
+partial/scissored movies, non-DLSS frames and any frame without the verified
+native UI phase. It does not change world render dimensions or the DLSS input.
+The pure viewport policy was first observed failing, then passed; the Release
+build passes all 45 CTest groups. **0.1.111 Skyrim visual and restoration
+verification are NOT RUN.**
+
 ## 0.1.108–0.1.110 follow-up (2026-09-28)
 
 The owner-started 0.1.108 run logged three post-DLSS world frames (16319–16321)
@@ -24,12 +48,9 @@ Version 0.1.110 adds a one-time read-only `GFxMovieView::GetViewport` snapshot
 for each active menu on the first post-DLSS world HUD frame. It records movie
 buffer, rect, scissor, scale and flags, alongside the existing target trace.
 It makes no UI state changes. Release build and all 44 CTest groups pass; the
-installed DLL and eight manifest entries were verified. **The 0.1.110 game
-trace and a universal HUD fix are NOT RUN.** The next owner-started Quality
-run should determine whether HUD movie viewport geometry remains reduced
-while inventory uses native geometry. If so, trace the viewport's producer and
-update that earlier boundary; if native, inspect HUD render-texture and
-asset raster dimensions before changing the composition path.
+installed DLL and eight manifest entries were verified. The owner-started
+game trace above confirmed reduced HUD movie viewport geometry. A universal
+HUD fix remained **NOT RUN** in 0.1.110.
 
 The owner reports that health bars and the compass in DLSS Quality look
 rendered at a lower resolution, without flicker. They request a fix for all

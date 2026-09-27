@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## 0.1.111 native world-HUD movie viewport candidate (2026-09-28)
+
+The owner-started 0.1.110 game trace found all 14 active HUD/widget movie
+viewports at 1707x960 while the Scaleform D3D11 target, depth, viewport and
+scissor were 2560x1440. Its live startup log requested Balanced with a manual
+0.666667 scale. This isolates the remaining HUD blur boundary from
+the already-fixed inventory path. Source 0.1.111 now changes only full reduced
+movie viewports in DLSS world-HUD frames to native dimensions before
+`PostDisplay`, then restores their recorded values after Scaleform `EndFrame`
+when still owned. It leaves title, inventory, magic and partial/scissored
+movies alone. The viewport policy failed its focused test before implementation;
+Release build and 45/45 CTest groups pass afterward. The DLL SHA-256
+`9d6106cede8cf49c42c37e7da04604c76e845f965767b0eabab4b9f92818dc43`
+was installed into V5.4 MO2 after Skyrim closed; all eight manifest payloads
+match. The game-updated INI was preserved and its new hash recorded. The
+previous DLL, INI and manifest are backed up under ignored
+`artifacts/local/v54-0.1.111-hud-viewport-backup`. **Skyrim visual result,
+restoration trace and cursor interaction: NOT RUN** for 0.1.111. See
+`docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
+
 ## 0.1.110 HUD movie viewport probe installed (2026-09-28)
 
 The owner confirmed that 0.1.109 did not sharpen the DLSS Quality HUD bars or
@@ -18,9 +38,9 @@ was installed into V5.4 MO2 `RazKolbas` after Skyrim closed. The previous
 plugin, INI and manifest are backed up under ignored
 `artifacts/local/v54-0.1.110-hud-movie-probe-backup`; all eight installed
 manifest payload hashes match. The user's INI and vendor runtimes were
-preserved. **0.1.110 game viewport trace and HUD visual repair: NOT RUN.** The
-next step is one owner-started DLSS Quality world run and examination of the
-`HUD movie viewport` log entries. See
+preserved. The owner-started frame-8315 trace confirmed 14 reduced movie
+viewports despite the native D3D11 target. **0.1.110 was diagnostic; HUD
+visual repair: NOT RUN.** See
 `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
 
 ## 0.1.108 DLSS Quality HUD diagnostic installed (2026-09-27)
