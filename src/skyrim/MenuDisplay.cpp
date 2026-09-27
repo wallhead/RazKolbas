@@ -25,4 +25,10 @@ void MenuDisplayForwarder::dispatch(void* first,std::uint32_t second,
     }
     original(first,second,third,fourth);
 }
+void MenuDisplayForwarder::dispatchOriginal(void* first,std::uint32_t second,
+    std::uint32_t third,std::uint32_t fourth) noexcept {
+    const auto original=original_.load(std::memory_order_acquire);
+    if(!original)std::terminate();
+    original(first,second,third,fourth);
+}
 }

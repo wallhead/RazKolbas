@@ -80,3 +80,38 @@ INI, and manifest are backed up under ignored
 owner-started Skyrim session; inspect the three `HUD native UI boundary`
 triplets and compare the affected HUD and menu categories before altering
 UI render behavior.
+
+## Owner-started 0.1.108 Quality run, PID 3160
+
+The owner confirmed that only the world HUD bars and compass are blurry;
+title, inventory, magic, and the End menu look sharp. The exact 0.1.108 DLL
+loaded. At frames 16319-16321, the three bounded trace triplets all showed
+RTV0, DSV, viewport, and scissor at 2560x1440 while *both* Skyrim graphics
+dimension pairs stayed 1707x960 before rebind, before Scaleform `EndFrame`,
+and after it. DLSS had begun submitting; later the exact RTX 40 NR runtime
+loaded and pre-SR submissions completed. The same-frame stage capture
+`owned-sr-stages-3160-16319-114647375` again has no HUD in its 1707x960
+prepared input but bars, compass, icons, and HUD text in the 2560x1440 final
+image. The inventory cursor and magic movie replay captures also completed.
+These observations point to reduced UI dimension metadata at an otherwise
+native HUD draw, not to a reduced render target or a DLSS-fed HUD image.
+
+The 0.1.109 candidate temporarily writes native width/height to both game
+dimension pairs only around world-HUD `PostDisplay` and shared Scaleform
+`EndFrame` forwarding. It requires the known game module, native UI phase,
+owner render thread, exact reduced pair values, a writable data page, and
+active DLSS SR. It skips inventory, magic and title. Each field is restored
+only while it still has the value written by RazKolbas; another writer's
+change is preserved and logged. This is an experimental rendering fix, not
+visual proof. The dimension-window restoration and fail-closed cases passed
+in the 0.1.109 unit tests; all 45 CTest groups passed.
+
+The Release 0.1.109 DLL SHA-256 is
+`a812a40531b50bd0b6e7eb9d381a596a091bb4840a034c81da84dbfbf11b6ca3`.
+It was installed into the existing V5.4 MO2 mod after Skyrim exited. The
+owner's INI was preserved, and all eight installed manifest files matched
+their new hashes. The prior plugin, INI, and manifest are backed up under
+ignored `artifacts/local/v54-0.1.109-hud-dimensions-backup`. A user-started
+Quality run must verify whether the HUD bars and compass actually sharpen,
+whether inventory/magic/title remain clear, and whether the window restores
+the reduced values without a writer conflict.
