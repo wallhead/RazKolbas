@@ -97,8 +97,10 @@ struct WorldState {
         std::uint64_t frame{};
         std::vector<ProbeImage> images;
         bool afterEndFrameCaptured{};
+        bool magic{};
     };
     bool menuBoundaryCaptureAttempted{};
+    bool magicBoundaryCaptureAttempted{};
     std::optional<MenuBoundaryCapture> menuBoundaryCapture;
     struct CursorReplayCapture {
         std::uint64_t frame{};
@@ -108,6 +110,8 @@ struct WorldState {
     std::optional<CursorReplayCapture> cursorReplayCapture;
     std::uint64_t inventoryMenuLastFrame{},inventoryTraceFrame{};
     unsigned inventoryMenuStableFrames{},inventoryTraceWindowFrames{};
+    std::uint64_t magicMenuLastFrame{};
+    unsigned magicMenuStableFrames{};
     struct CompletedOutput {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> image;
         UINT width{},height{};
@@ -1030,6 +1034,17 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                 state->inventoryMenuStableFrames=0;
                 state->inventoryMenuLastFrame=frame;
             }
+            if(magicMenuOnStack(state)) {
+                if(frame!=state->magicMenuLastFrame) {
+                    state->magicMenuStableFrames=
+                        frame==state->magicMenuLastFrame+1?
+                            std::min(state->magicMenuStableFrames+1,30u):1u;
+                    state->magicMenuLastFrame=frame;
+                }
+            } else {
+                state->magicMenuStableFrames=0;
+                state->magicMenuLastFrame=frame;
+            }
             if(ui->resumeLatePassRouting(frame,state->ownedSceneGate.ready()))
                 spdlog::info("Owned native UI late route resumed at frame {} after scene admission and 120-frame cooldown",
                     frame);
@@ -1146,20 +1161,15 @@ void beforeDeferredUiFlush(void*) noexcept {
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     bool preservedNativeMenuComposite=false;
     bool preservedInventoryComposite=false;
-    bool preservedMagicComposite=false;
     bool preservedMainMenuComposite=false;
     if(ui->reducedMenuPassPending()) {
         preservedInventoryComposite=inventoryMenuOnStack(state);
-        preservedMagicComposite=!preservedInventoryComposite&&magicMenuOnStack(state);
         preservedMainMenuComposite=!preservedInventoryComposite&&
-            !preservedMagicComposite&&titleMenuOnStack(state);
-        if(preservedInventoryComposite||preservedMagicComposite||
-           preservedMainMenuComposite) {
-            // A sustained inventory capture showed the list and preview on
-            // native colour before this boundary. MagicMenu is also a custom
-            // rendered item menu, and the live run reports it blurry while
-            // inventory is clear. Keep its native composite for this bounded
-            // candidate instead of replacing it with the reduced scene.
+            titleMenuOnStack(state);
+        if(preservedInventoryComposite||preservedMainMenuComposite) {
+            // Inventory and the cold title retain their verified native
+            // composite. MagicMenu needs its reduced scene publication: the
+            // user observed an invisible magic panel when we skipped it.
             if(preservedInventoryComposite)
                 state->menuBoundaryCaptureAttempted=true;
             preservedNativeMenuComposite=true;
@@ -1167,11 +1177,6 @@ void beforeDeferredUiFlush(void*) noexcept {
                 const auto count=++state->preservedInventoryComposites;
                 if(count==1||count%600==0)
                     spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
-                        frame,count);
-            } else if(preservedMagicComposite) {
-                const auto count=++state->preservedMagicComposites;
-                if(count==1||count%600==0)
-                    spdlog::info("Magic frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
                         frame,count);
             } else {
                 const auto count=++state->preservedMainMenuComposites;
@@ -1183,9 +1188,15 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {
             std::optional<WorldState::MenuBoundaryCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
-            if(!state->menuBoundaryCaptureAttempted&&
-               state->inventoryTraceFrame==frame) {
-                state->menuBoundaryCaptureAttempted=true;
+            const bool captureMagic=magicMenuOnStack(state)&&
+                state->magicMenuStableFrames==30&&
+                !state->magicBoundaryCaptureAttempted;
+            const bool captureInventory=!state->menuBoundaryCaptureAttempted&&
+                state->inventoryTraceFrame==frame;
+            if(captureMagic||captureInventory) {
+                if(captureMagic)state->magicBoundaryCaptureAttempted=true;
+                else state->menuBoundaryCaptureAttempted=true;
+                const char* captureName=captureMagic?"Magic":"Inventory";
                 const auto device=state->createdDevice.load(std::memory_order_relaxed);
                 const auto context=state->createdContext.load(std::memory_order_relaxed);
                 const auto swap=state->createdSwap.load(std::memory_order_relaxed);
@@ -1203,12 +1214,12 @@ void beforeDeferredUiFlush(void*) noexcept {
                             sources,24*1024*1024);
                         if(auto* images=std::get_if<std::vector<ProbeImage>>(&before))
                             capture.emplace(WorldState::MenuBoundaryCapture{
-                                frame,std::move(*images)});
+                                frame,std::move(*images),false,captureMagic});
                         else
-                            spdlog::warn("Inventory boundary capture before copy unavailable: {}",
+                            spdlog::warn("{} boundary capture before copy unavailable: {}",captureName,
                                 std::get<Error>(before).message);
                     } else
-                        spdlog::warn("Inventory boundary capture target unavailable: {}",
+                        spdlog::warn("{} boundary capture target unavailable: {}",captureName,
                             std::get<Error>(native).message);
                 }
             }
@@ -1223,11 +1234,13 @@ void beforeDeferredUiFlush(void*) noexcept {
                         sources,16*1024*1024);
                     if(auto* images=std::get_if<std::vector<ProbeImage>>(&after)) {
                         capture->images.emplace_back(std::move(images->front()));
+                        const bool magic=capture->magic;
                         state->menuBoundaryCapture.emplace(std::move(*capture));
-                        spdlog::info("Inventory boundary frame {} captured reduced source and native before/after late copy; awaiting pre-Present",
-                            frame);
+                        spdlog::info("{} boundary frame {} captured reduced source and native before/after late copy; awaiting pre-Present",
+                            magic?"Magic":"Inventory",frame);
                     } else
-                        spdlog::warn("Inventory boundary capture after copy unavailable: {}",
+                        spdlog::warn("{} boundary capture after copy unavailable: {}",
+                            capture->magic?"Magic":"Inventory",
                             std::get<Error>(after).message);
                 }
                 state->ownedFallbacks.emplace_back(SdrSrFrameMode::SpatialFallback,
@@ -1301,12 +1314,12 @@ void beforeDeferredUiFlush(void*) noexcept {
             if(count==1||count%600==0)
                 spdlog::info("{} frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
                     preservedInventoryComposite?"Inventory":
-                        preservedMagicComposite?"Magic":"Main Menu",frame,count);
+                        "Main Menu",frame,count);
             try {cursor->PostDisplay();}
             catch(...) {
                 try {spdlog::warn("{} frame {} Cursor Menu replay threw",
                     preservedInventoryComposite?"Inventory":
-                        preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
+                        "Main Menu",frame);}catch(...) {}
             }
             if(capture&&captureTarget) {
                 const std::array<ID3D11Texture2D*,1> source{
@@ -1325,7 +1338,7 @@ void beforeDeferredUiFlush(void*) noexcept {
             state->cursorReplayMissingLogged=true;
             try {spdlog::warn("{} frame {} Cursor Menu is not available for native replay",
                 preservedInventoryComposite?"Inventory":
-                    preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
+                    "Main Menu",frame);}catch(...) {}
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");
@@ -1414,12 +1427,14 @@ void deferredUiFlushProxy(void* renderer) noexcept {
                         state->menuBoundaryCapture->images.emplace_back(
                             std::move(images->front()));
                         state->menuBoundaryCapture->afterEndFrameCaptured=true;
-                    } else spdlog::warn("Inventory frame {} after-EndFrame readback unavailable: {}",
+                    } else spdlog::warn("{} frame {} after-EndFrame readback unavailable: {}",
+                        state->menuBoundaryCapture->magic?"Magic":"Inventory",
                         frame,std::get<Error>(image).message);
                 }
             }
         }catch(...) {
-            try {spdlog::warn("Inventory frame {} after-EndFrame readback threw",
+            try {spdlog::warn("{} frame {} after-EndFrame readback threw",
+                state->menuBoundaryCapture->magic?"Magic":"Inventory",
                 frame);}catch(...) {}
         }
     }
@@ -2184,8 +2199,8 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
             auto* scene=activeOwnedSceneTexture();
             const auto device=state->createdDevice.load(std::memory_order_relaxed);
             if(capture.frame!=frame||!domain||!scene||!device)
-                spdlog::warn("Inventory boundary capture frame {} could not match pre-Present frame {}",
-                    capture.frame,frame);
+                spdlog::warn("{} boundary capture frame {} could not match pre-Present frame {}",
+                    capture.magic?"Magic":"Inventory",capture.frame,frame);
             else {
                 auto native=acquireNativeFlipTarget(swap,
                     reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
@@ -2208,7 +2223,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                             const auto directory=std::filesystem::path(documents)/
                                 "My Games"/"Skyrim Special Edition"/"SKSE"/
                                 "RazKolbasCaptures"/
-                                ("inventory-boundary-"+
+                                (std::string(capture.magic?"magic-boundary-":"inventory-boundary-")+
                                 std::to_string(GetCurrentProcessId())+"-"+
                                 std::to_string(frame)+"-"+
                                 std::to_string(GetTickCount64()));
@@ -2221,20 +2236,24 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                             names.emplace_back("native-pre-present.raw");
                             const auto saved=saveProbeBundle(directory,
                                 capture.images,names,
-                                "One sustained InventoryMenu frame around deferred copy, EndFrame and Present; diagnostic only");
+                                capture.magic?
+                                    "One sustained MagicMenu frame around deferred copy, EndFrame and Present; diagnostic only":
+                                    "One sustained InventoryMenu frame around deferred copy, EndFrame and Present; diagnostic only");
                             if(const auto error=std::get_if<Error>(&saved))
-                                spdlog::warn("Inventory boundary capture save failed: {}",
-                                    error->message);
+                                spdlog::warn("{} boundary capture save failed: {}",
+                                    capture.magic?"Magic":"Inventory",error->message);
                             else
-                                spdlog::info("Inventory boundary frame {} capture complete at {}",
-                                    frame,directory.string());
+                                spdlog::info("{} boundary frame {} capture complete at {}",
+                                    capture.magic?"Magic":"Inventory",frame,directory.string());
                         } else
-                            spdlog::warn("Inventory boundary capture Documents directory unavailable");
+                            spdlog::warn("{} boundary capture Documents directory unavailable",
+                                capture.magic?"Magic":"Inventory");
                     } else
-                        spdlog::warn("Inventory boundary pre-Present readback unavailable: {}",
-                            std::get<Error>(final).message);
+                        spdlog::warn("{} boundary pre-Present readback unavailable: {}",
+                            capture.magic?"Magic":"Inventory",std::get<Error>(final).message);
                 } else
-                    spdlog::warn("Inventory boundary pre-Present target unavailable: {}",
+                    spdlog::warn("{} boundary pre-Present target unavailable: {}",
+                        capture.magic?"Magic":"Inventory",
                         std::get<Error>(native).message);
             }
         }

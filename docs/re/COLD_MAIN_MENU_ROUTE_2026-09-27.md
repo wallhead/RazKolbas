@@ -42,4 +42,8 @@ manifest were replaced. All five installed payload hashes passed an
 independent check, including unchanged INI, signed SR and patched NR files.
 Installed DLL SHA-256:
 `a83a9cff9b86f29cc3f2ce8f0cdfc866b83cfd783ad10405f6e878056652b1c0`.
-**Skyrim visual and runtime verification for 0.1.104: NOT RUN.**
+The subsequent user-started 0.1.104 run reported that the title and other
+screens looked good, but MagicMenu became invisible. The log confirmed the
+MagicMenu native-composite preservation and Cursor Menu replay. The owner did
+not provide a measured title-glyph resolution. The MagicMenu candidate was
+removed in 0.1.105; see `MAGIC_MENU_VISIBILITY_2026-09-27.md`.

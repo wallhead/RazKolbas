@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## 0.1.105 MagicMenu visibility restore installed (2026-09-27)
+
+In the user-started 0.1.104 run, the owner reported the title and other
+screens looked good, but MagicMenu was invisible. The log confirms MagicMenu
+used the new native-composite preservation and Cursor Menu replay at frame
+215772. Inventory's native-composite preservation remains user-verified; the
+same assumption failed for MagicMenu. Version 0.1.105 restores MagicMenu's
+prior reduced-scene publication, keeps the inventory and cold-title routes,
+and adds a single sustained-MagicMenu boundary capture to locate the menu's
+actual pixels before a native-resolution fix is attempted. See
+`docs/re/MAGIC_MENU_VISIBILITY_2026-09-27.md`.
+
+Release build and all 43 CTest groups pass. The five-file MO2 ZIP and its
+payload hashes passed independent verification. After Skyrim exited, only the
+DLL and manifest were replaced in the V5.4 mod; the prior DLL/manifest were
+backed up, and INI/vendor libraries were preserved. Installed DLL SHA-256 is
+`283919b4db47de5ddf1be7de4d282dfd1fb5254f138523c526fff5401feb65e0`.
+**Skyrim runtime and visual verification of 0.1.105: NOT RUN.** The next
+user-started game should check MagicMenu visibility, title clarity and
+inventory, then exit so the bounded MagicMenu capture can be inspected.
+
 ## 0.1.104 cold Main Menu + MagicMenu candidate installed (2026-09-27)
 
 The owner also wants the title screen before loading a save to be clear. In
@@ -17,9 +38,10 @@ absent when only the DLL/manifest were replaced in the V5.4 RazKolbas mod;
 the prior 0.1.102 DLL/manifest were backed up, and the user's INI and both
 vendor libraries remained unchanged. Installed DLL SHA-256 is
 `a83a9cff9b86f29cc3f2ce8f0cdfc866b83cfd783ad10405f6e878056652b1c0`.
-**Main Menu, MagicMenu and inventory regression in 0.1.104 are NOT RUN in
-Skyrim.** The next user-started run should inspect title clarity before
-loading, then MagicMenu and inventory after loading.
+In the subsequent user-started Skyrim run, the owner reported the title and
+other screens looked good, but MagicMenu was invisible. This is a runtime
+regression of the MagicMenu composite-preservation candidate. The report does
+not separately quantify title glyph resolution or prove every other menu.
 
 ## 0.1.102 inventory result and 0.1.103 MagicMenu candidate (2026-09-27)
 
