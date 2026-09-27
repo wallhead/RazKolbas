@@ -78,7 +78,15 @@ profile, stage, renderer PCI IDs/LUID and selection reason. Logs include the
 profile path/hash and the first successful evaluation. Runtime selection
 does not display “working” on mere DLL load or initialization; the displayed
 stage distinguishes those from a submitted evaluation. In-game output
-validation still requires a user-started Skyrim run.
+validation of each new candidate requires a user-started Skyrim run.
+
+In the first 0.1.107 owner-started Skyrim run, DLAA + Auto selected the
+legacy runtime on PCI `10de:2702` and submitted thousands of NR and DLAA
+frames without an NR error. The owner reported normal image and UI, and the
+End menu showed the legacy runtime active. This confirms the Auto/legacy
+path. The supplied RTX 40 runtime remains untested in Skyrim; the installed
+INI has been prepared to select `ada-fastfp16` with explicit experimental
+opt-in on the next launch.
 
 A second code review found two defects before final installation: a failed
 vendor teardown could be retried by the destructor, and a pending profile

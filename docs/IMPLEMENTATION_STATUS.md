@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## 0.1.107 Skyrim DLAA + Auto verification (2026-09-27)
+
+The owner started Skyrim with DLAA and NR runtime profile Auto, then enabled
+NR in the End menu. The live `RazKolbas.log` selected `legacy-fastfp16` on
+renderer PCI `10de:2702`,
+recorded successful NR pre-SR submissions through 4,800 frames, and DLAA
+submissions through 6,000 frames. No NR error appeared in this session. The
+only warning in the inspected session said an owned SR scene was unavailable
+because SR was not requested; this is expected for DLAA. The owner confirmed
+that the image and UI looked normal and that the End menu showed the legacy
+runtime active. This verifies the 0.1.107 Auto/legacy DLAA route in Skyrim,
+not the newly supplied RTX 40 DLL.
+
+Skyrim was closed after the inspection. The installed V5.4 INI now requests
+`ada-fastfp16` with experimental opt-in for the next owner-started run; the
+prior INI and manifest are backed up under ignored
+`artifacts/local/v54-0.1.107-ada-test-backup`. The updated eight-file
+installed manifest has zero hash mismatches. **RTX 40 candidate in Skyrim:
+NOT RUN.**
+
 ## 0.1.107 GPU-aware NR runtime selection source candidate (2026-09-27)
 
 The owner reports that the installed 0.1.106 UI is visually fixed. This is
