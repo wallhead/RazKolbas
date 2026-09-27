@@ -3,8 +3,8 @@
 The source change began from commit `26b9ac8` on `codex/razkolbas-bootstrap`.
 It changes NR runtime selection and loading only. The D3D12 NR evaluation,
 pre-SR/DLAA insertion, guide formats, fences, recovery and UI route remain
-the same. The user's report confirms the installed 0.1.106 UI is visually
-fixed; this new runtime-selection build has **not** run in Skyrim.
+the same. The user's report confirms the installed 0.1.106 UI was visually
+fixed; subsequent 0.1.107 Skyrim runs are recorded below.
 
 `NrStage` starts from Skyrim's actual rendering `ID3D11Device`, obtains its
 `IDXGIAdapter` and exact DXGI vendor/device/subsystem/LUID, rejects software,
@@ -35,7 +35,7 @@ latched per process. SR/DLAA continues when NR selection or evaluation fails.
 | --- | --- | ---: | --- | --- | --- |
 | `legacy-fastfp16` | `91ea4143d9ed1cb90b11a2851cfc68dabe7d1e7414f8dfaa8016d86b99e40be7` | 165,840,496 | RTX 40 | RTX 4080 SUPER PCI `2702` only, based on prior game and current harness results | Yes |
 | `plain-fp16-20-30` | `6dac1b40f0c87af84a8177b18c741e84fb0c914f204c9d87d95916b665ba3af8` | 309,671,536 | RTX 20/30 | None; experimental | Yes, provisional and not hardware-tested |
-| `ada-fastfp16` | `e67dee209320cdafe0e93e45675d7aa34323a53acc57a72b2e40a181581c989a` | 165,840,496 | RTX 40 | None; experimental pending Skyrim regression | Yes; required for the RTX 4080 SUPER standalone harness |
+| `ada-fastfp16` | `e67dee209320cdafe0e93e45675d7aa34323a53acc57a72b2e40a181581c989a` | 165,840,496 | RTX 40 | None; DLAA run passed on RTX 4080 SUPER, DLSS SR pending | Yes; required for the RTX 4080 SUPER standalone harness |
 | `nvidia-50` | `e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e` | 165,840,496 | RTX 50 | None; experimental | No; signed original has not been tested with this host |
 
 The 20/30 and 40 builds have `HashMismatch` Authenticode status with an
@@ -46,8 +46,9 @@ GPU output. The 40-series standalone 30-frame harness on this machine's
 RTX 4080 SUPER and driver 616.92 failed `Init_Ext` without the narrow
 caller-name shim and passed with it, producing nonconstant changed colour
 and clean stage retirement. The legacy profile passed the same 30-frame
-harness. RTX 20/30 and RTX 50 hardware tests: **NOT RUN**. The 40-series
-Skyrim/ENB/ReShade test: **NOT RUN**. Full-image comparison in the harness
+harness. RTX 20/30 and RTX 50 hardware tests: **NOT RUN**. The RTX 40
+Skyrim DLAA run passed on this RTX 4080 SUPER; DLSS SR and dedicated
+ENB/ReShade parity checks are **NOT RUN**. Full-image comparison in the harness
 gave equal output hashes for the legacy and 40 builds on its synthetic input;
 that is not a performance or visual-equivalence result.
 
@@ -84,9 +85,11 @@ In the first 0.1.107 owner-started Skyrim run, DLAA + Auto selected the
 legacy runtime on PCI `10de:2702` and submitted thousands of NR and DLAA
 frames without an NR error. The owner reported normal image and UI, and the
 End menu showed the legacy runtime active. This confirms the Auto/legacy
-path. The supplied RTX 40 runtime remains untested in Skyrim; the installed
-INI has been prepared to select `ada-fastfp16` with explicit experimental
-opt-in on the next launch.
+path. In a second owner-started DLAA run, the supplied RTX 40 runtime was
+explicitly selected, its exact hash appeared in the log, and it reached
+5,400 NR submissions without an NR error. The owner reported that it seemed
+to work. The installed INI is now prepared for a DLSS Quality run with this
+runtime; that combination has not yet been tested in Skyrim.
 
 A second code review found two defects before final installation: a failed
 vendor teardown could be retried by the destructor, and a pending profile

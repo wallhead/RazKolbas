@@ -1,5 +1,33 @@
 # Implementation checkpoint
 
+## DLSS Quality HUD clarity investigation (2026-09-27)
+
+The owner reports health bars and compass look lower-resolution, without
+flicker, and requests a shared fix across UI elements. Two manifest-verified
+captures place HUD differently: 0.1.84 had visible HUD in the reduced DLSS
+input, while one 0.1.106 frame had no HUD in that input and showed HUD only
+in the final native composition. The current 0.1.107 Quality run has not
+started, so neither mechanism is yet proven for this report. The installed
+INI is prepared for that run; no UI code or installed DLL was changed for
+this investigation. See `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
+
+## 0.1.107 Skyrim RTX 40 NR + DLAA verification (2026-09-27)
+
+The owner started Skyrim with DLAA and the explicitly selected
+`ada-fastfp16` runtime on the RTX 4080 SUPER. The live log recorded the
+expected exact DLL hash
+`e67dee209320cdafe0e93e45675d7aa34323a53acc57a72b2e40a181581c989a`
+and successful NR pre-SR submissions through 5,400 frames while DLAA
+continued submitting. No NR error appeared. The owner reported that it
+seemed to work. This is a DLAA result on PCI `10de:2702`, not validation for
+every RTX 40 card or for DLSS SR.
+
+After closing Skyrim, the installed V5.4 INI was changed to DLSS Quality
+with NR enabled and `ada-fastfp16` still selected for the next owner-started
+run. The prior INI and manifest are backed up under ignored
+`artifacts/local/v54-0.1.107-ada-dlss-test-backup`; all eight installed
+manifest payload hashes match. **RTX 40 candidate with DLSS SR: NOT RUN.**
+
 ## 0.1.107 Skyrim DLAA + Auto verification (2026-09-27)
 
 The owner started Skyrim with DLAA and NR runtime profile Auto, then enabled
@@ -18,7 +46,7 @@ Skyrim was closed after the inspection. The installed V5.4 INI now requests
 prior INI and manifest are backed up under ignored
 `artifacts/local/v54-0.1.107-ada-test-backup`. The updated eight-file
 installed manifest has zero hash mismatches. **RTX 40 candidate in Skyrim:
-NOT RUN.**
+NOT RUN at this earlier checkpoint; see the RTX 40 DLAA run above.**
 
 ## 0.1.107 GPU-aware NR runtime selection source candidate (2026-09-27)
 
