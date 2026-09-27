@@ -17,8 +17,15 @@ copy only when a live MagicMenu movie exists, and queues the movie's
 inventory and title paths. A one-frame native before/after/EndFrame capture
 will test whether the movie draws. Release build and all 43 CTest groups
 pass; the five-file MO2 ZIP passed independent entry/hash verification.
-**Skyrim runtime and visual verification of 0.1.106: NOT RUN.** The package
-is staged but cannot replace the loaded 0.1.105 DLL until Skyrim exits.
+After the owner exited Skyrim, only the DLL and manifest were installed in
+the V5.4 MO2 mod; all five installed payload hashes match the manifest.
+The prior DLL/manifest are saved in ignored
+`artifacts/local/v54-0.1.106-install-backup`. Installed DLL SHA-256:
+`b5eeac5c4d1c5b9a2cf1f61c79420a3a115f1f0754bf8defd8130ac053001ccf`.
+**Skyrim runtime and visual verification of 0.1.106: NOT RUN.** The next
+user-started game should check MagicMenu clarity and whether the list,
+hero and cursor remain visible; the one-shot native replay capture will
+then be inspected.
 
 ## 0.1.105 MagicMenu visibility restore installed (2026-09-27)
 

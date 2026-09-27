@@ -36,6 +36,10 @@ Release build and 43 CTest groups passed. Staged ZIP:
 SHA-256 `506c2f4413ffb1f69c97d39c4540c350ef32a0b337bbceb4fdf11368a1e32dd5`.
 An independent ZIP entry and payload hash check passed. Candidate DLL
 SHA-256 `b5eeac5c4d1c5b9a2cf1f61c79420a3a115f1f0754bf8defd8130ac053001ccf`.
-**Skyrim runtime/visual verification: NOT RUN.** Install after game exit;
-inspect `magic-movie-replay-*` capture from the next user-started run and
+After Skyrim exited, only the DLL and manifest were replaced in the V5.4
+MO2 mod. The previous DLL/manifest are backed up under ignored
+`artifacts/local/v54-0.1.106-install-backup`; INI and vendor runtimes were
+preserved. All five installed manifest hashes passed an independent check.
+**Skyrim runtime/visual verification: NOT RUN.** Inspect
+`magic-movie-replay-*` capture from the next user-started run and
 check list clarity, hero rendering, cursor, inventory and title.
