@@ -137,11 +137,11 @@ struct WorldState {
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
-    bool nativeUiRouteActivated{};
+    bool nativeUiRouteActivated{},coldTitleUiRouteLogged{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
-        preservedMagicComposites{},cursorReplays{};
+        preservedMagicComposites{},preservedMainMenuComposites{},cursorReplays{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
     bool deferredMenuPublicationWarningLogged{};
@@ -554,6 +554,10 @@ bool inventoryMenuOnStack(const WorldState* state) {
 }
 bool magicMenuOnStack(const WorldState* state) {
     return namedMenuOnStack(state,RE::MagicMenu::MENU_NAME);
+}
+bool titleMenuOnStack(const WorldState* state) {
+    return namedMenuOnStack(state,RE::MainMenu::MENU_NAME)&&
+        !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
 }
 RE::IMenu* cursorMenuOnStack(const WorldState* state) {
     RE::UI* ui{};
@@ -1065,17 +1069,40 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                             frame,std::get<Error>(sample).message);
                 } catch(...) {}
             }
-            if(frame>12&&shouldUseMenuPublication(
+            bool coldTitleReady=false;
+            if(frame>12&&!state->ownedSceneGate.ready()&&
+               titleMenuOnStack(state)&&ui->latePassRoutingAvailable()&&
+               !ui->compatibilityFault()) {
+                // The title has no world-like depth, so NGX stays gated. A
+                // verified renderer/guide chain still permits the existing
+                // spatial scene publication before native Scaleform drawing.
+                const auto numbers=readWorldNumbers(
+                    reinterpret_cast<void*>(state->expectedRenderer),
+                    state->expectedRenderer);
+                coldTitleReady=numbers.valid&&
+                    numbers.lockOwner==GetCurrentThreadId()&&
+                    numbers.lockRecursion>0&&
+                    numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
+                    numbers.context==state->createdContext.load(std::memory_order_acquire)&&
+                    numbers.swap==state->createdSwap.load(std::memory_order_acquire)&&
+                    numbers.motion&&numbers.depth&&activeOwnedSceneTexture();
+            }
+            if(frame>12&&(coldTitleReady||shouldUseMenuPublication(
                    state->nativeUiRouteActivated,state->menuSceneGate.ready(),
-                   ui->latePassRoutingAvailable())) {
+                   ui->latePassRoutingAvailable()))) {
                 if(processOwnedWorldFrame(state,
                     reinterpret_cast<void*>(state->expectedRenderer),frame,
                     OwnedPublicationBoundary::MenuDisplay)&&
-                   domain->phase()==ScenePhase::NativeUi&&
-                   !state->nativeUiRouteActivated) {
-                    state->nativeUiRouteActivated=true;
-                    try {spdlog::info("Owned native UI resource route activated at frame {} after same-boundary colour/depth admission; DLSS submissions={}",
-                        frame,state->srPresenter.submittedFrames());}catch(...) {}
+                   domain->phase()==ScenePhase::NativeUi) {
+                    if(coldTitleReady&&!state->coldTitleUiRouteLogged) {
+                        state->coldTitleUiRouteLogged=true;
+                        try {spdlog::info("Owned cold Main Menu spatial publication entered native UI at frame {}; provider remains gated until world admission",
+                            frame);}catch(...) {}
+                    } else if(!coldTitleReady&&!state->nativeUiRouteActivated) {
+                        state->nativeUiRouteActivated=true;
+                        try {spdlog::info("Owned native UI resource route activated at frame {} after same-boundary colour/depth admission; DLSS submissions={}",
+                            frame,state->srPresenter.submittedFrames());}catch(...) {}
+                    }
                 }
             }
           } catch(const std::exception& error) {
@@ -1120,10 +1147,14 @@ void beforeDeferredUiFlush(void*) noexcept {
     bool preservedNativeMenuComposite=false;
     bool preservedInventoryComposite=false;
     bool preservedMagicComposite=false;
+    bool preservedMainMenuComposite=false;
     if(ui->reducedMenuPassPending()) {
         preservedInventoryComposite=inventoryMenuOnStack(state);
         preservedMagicComposite=!preservedInventoryComposite&&magicMenuOnStack(state);
-        if(preservedInventoryComposite||preservedMagicComposite) {
+        preservedMainMenuComposite=!preservedInventoryComposite&&
+            !preservedMagicComposite&&titleMenuOnStack(state);
+        if(preservedInventoryComposite||preservedMagicComposite||
+           preservedMainMenuComposite) {
             // A sustained inventory capture showed the list and preview on
             // native colour before this boundary. MagicMenu is also a custom
             // rendered item menu, and the live run reports it blurry while
@@ -1137,10 +1168,15 @@ void beforeDeferredUiFlush(void*) noexcept {
                 if(count==1||count%600==0)
                     spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
                         frame,count);
-            } else {
+            } else if(preservedMagicComposite) {
                 const auto count=++state->preservedMagicComposites;
                 if(count==1||count%600==0)
                     spdlog::info("Magic frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
+                        frame,count);
+            } else {
+                const auto count=++state->preservedMainMenuComposites;
+                if(count==1||count%600==0)
+                    spdlog::info("Main Menu frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
                         frame,count);
             }
         } else {
@@ -1264,11 +1300,13 @@ void beforeDeferredUiFlush(void*) noexcept {
             const auto count=++state->cursorReplays;
             if(count==1||count%600==0)
                 spdlog::info("{} frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
-                    preservedInventoryComposite?"Inventory":"Magic",frame,count);
+                    preservedInventoryComposite?"Inventory":
+                        preservedMagicComposite?"Magic":"Main Menu",frame,count);
             try {cursor->PostDisplay();}
             catch(...) {
                 try {spdlog::warn("{} frame {} Cursor Menu replay threw",
-                    preservedInventoryComposite?"Inventory":"Magic",frame);}catch(...) {}
+                    preservedInventoryComposite?"Inventory":
+                        preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
             }
             if(capture&&captureTarget) {
                 const std::array<ID3D11Texture2D*,1> source{
@@ -1286,7 +1324,8 @@ void beforeDeferredUiFlush(void*) noexcept {
         } else if(!state->cursorReplayMissingLogged) {
             state->cursorReplayMissingLogged=true;
             try {spdlog::warn("{} frame {} Cursor Menu is not available for native replay",
-                preservedInventoryComposite?"Inventory":"Magic",frame);}catch(...) {}
+                preservedInventoryComposite?"Inventory":
+                    preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");

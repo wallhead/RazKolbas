@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## 0.1.104 cold Main Menu + MagicMenu candidate installed (2026-09-27)
+
+The owner also wants the title screen before loading a save to be clear. In
+the 0.1.102 live log, native UI routing first activated at frame 7832 after a
+save loaded; the cold title used reduced 1707x960 pre-Present spatial output
+to 2560x1440. Source 0.1.104 adds a Main Menu-only pre-UI spatial publication
+and native UI handoff when exact renderer/resource guards pass. Loading Menu
+is excluded and cold-title activation does not latch the world route. The
+0.1.103 MagicMenu-specific composite preservation is included. See
+`docs/re/COLD_MAIN_MENU_ROUTE_2026-09-27.md` for the evidence and limits.
+
+The 0.1.104 Release build passed all 43 CTest groups. Its five-file MO2 ZIP
+and installed payload hashes passed independent verification. Skyrim was
+absent when only the DLL/manifest were replaced in the V5.4 RazKolbas mod;
+the prior 0.1.102 DLL/manifest were backed up, and the user's INI and both
+vendor libraries remained unchanged. Installed DLL SHA-256 is
+`a83a9cff9b86f29cc3f2ce8f0cdfc866b83cfd783ad10405f6e878056652b1c0`.
+**Main Menu, MagicMenu and inventory regression in 0.1.104 are NOT RUN in
+Skyrim.** The next user-started run should inspect title clarity before
+loading, then MagicMenu and inventory after loading.
+
 ## 0.1.102 inventory result and 0.1.103 MagicMenu candidate (2026-09-27)
 
 The owner reports inventory is good in the user-started 0.1.102 run and

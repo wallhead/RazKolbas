@@ -55,3 +55,8 @@ Release DLL SHA-256
 At this checkpoint **0.1.103 is packaged but not installed or run in Skyrim**;
 the game must exit before its loaded DLL is replaced. A result for magic menu,
 cursor interaction and inventory regression is still **NOT RUN**.
+
+The owner then requested title-screen clarity too. The 0.1.103 package was
+superseded before installation by 0.1.104, which includes the MagicMenu
+candidate and a bounded cold Main Menu route. See
+`COLD_MAIN_MENU_ROUTE_2026-09-27.md` for its separate build/install status.
