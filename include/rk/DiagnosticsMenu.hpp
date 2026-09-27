@@ -19,7 +19,6 @@ struct DiagnosticsSnapshot {
     std::uint64_t worldFrames{},dlssFrames{},skippedFrames{};
     bool dlssDisabled{},skyrimTaaActive{true},engineDrsKnown{},dlaaSuspendedByDrs{};
     bool srRequested{},srSourceReady{},ownedSceneActive{};
-    bool inventoryCursorOverlayNeeded{};
     float postSharpness{};
 };
 

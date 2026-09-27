@@ -34,7 +34,6 @@ struct MenuState {
     bool enabled{};
     bool visible{},endWasDown{},failed{};
     std::uint64_t visibleFrames{};
-    std::uint64_t inventoryCursorFrames{};
     Settings activeSettings;
     Settings requestedSettings;
     std::filesystem::path iniPath;
@@ -453,8 +452,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
     auto& state=menu();
     std::unique_lock guard(state.mutex,std::try_to_lock);
     if(!guard)return;
-    if(!swap||state.failed||
-       (!state.enabled&&!snapshot.inventoryCursorOverlayNeeded)) {
+    if(!swap||state.failed||!state.enabled) {
         updateGameInputCapture(state,false);
         return;
     }
@@ -465,8 +463,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
             return;
         }
         const bool focused=GetForegroundWindow()==swapDesc.OutputWindow;
-        const bool endDown=state.enabled&&focused&&
-            (GetAsyncKeyState(state.hotkey)&0x8000)!=0;
+        const bool endDown=focused&&(GetAsyncKeyState(state.hotkey)&0x8000)!=0;
         if(endDown&&!state.endWasDown) {
             if(state.visible&&state.settingsDirty)persistSettings(state);
             state.visible=!state.visible;
@@ -476,9 +473,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         }
         state.endWasDown=endDown;
         updateGameInputCapture(state,state.visible&&focused);
-        const bool inventoryCursorOnly=
-            snapshot.inventoryCursorOverlayNeeded&&!state.visible&&focused;
-        if((!state.visible&&!inventoryCursorOnly)||!focused) {
+        if(!state.visible||!focused) {
             if(state.imgui) {
                 ImGui::SetCurrentContext(state.imgui);
                 ImGui::GetIO().MouseDrawCursor=false;
@@ -525,17 +520,10 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
         updateMouse(swapDesc.OutputWindow,io);
         ImGui_ImplDX11_NewFrame();
         ImGui::NewFrame();
-        if(state.visible)
-            drawStatus(state,snapshot,backDesc.Width,backDesc.Height,state.hotkeyName);
+        drawStatus(state,snapshot,backDesc.Width,backDesc.Height,state.hotkeyName);
         ImGui::Render();
-        if(state.visible)++state.visibleFrames;
-        if(inventoryCursorOnly) {
-            const auto count=++state.inventoryCursorFrames;
-            if(count==1||count%600==0)
-                spdlog::info("Inventory cursor overlay drawn above native menu at frame {}",count);
-        }
-        if(state.visible&&
-           (state.visibleFrames<=3||state.visibleFrames%600==0))
+        ++state.visibleFrames;
+        if(state.visibleFrames<=3||state.visibleFrames%600==0)
             spdlog::info("Diagnostics mouse: frame={} pos=({:.0f},{:.0f}) left={} capture={}",
                 state.visibleFrames,io.MousePos.x,io.MousePos.y,io.MouseDown[0],
                 io.WantCaptureMouse);

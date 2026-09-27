@@ -1,5 +1,46 @@
 # Implementation checkpoint
 
+## 0.1.102 Skyrim cursor replay candidate (2026-09-27)
+
+The user-started 0.1.101 run showed a Windows-style pointer over inventory,
+but clicking under it did nothing and moving it over rows did not highlight
+them. The log recorded the inventory-preservation path and cursor overlay
+running, but no diagnostics input-capture activation in that run. This rules
+out the ImGui cursor as a usable replacement for Skyrim's own pointer. The
+log is preserved only under ignored
+`artifacts/local/runtime-0.1.101-cursor-overlay-mismatch-20260927/RazKolbas.log`
+(SHA-256 `f5c677a23ec59cb0cb6bcbd8ebd096a917e57074d95563b3f77047e301e0e9df`).
+The 0.1.99 image set shows Skyrim's themed pointer in the reduced source and
+after the copy, while the native-before-copy image contains the inventory
+list without that pointer. Its exact active-frame position and input mapping
+were not measured, so the overlay's coordinate mismatch is an inference.
+
+Source 0.1.102 removes the 0.1.101 ImGui cursor-only path, restoring 0.1.100
+input behavior. When the reduced inventory copy is skipped and native colour
+has been rebound, it finds the live `Cursor Menu` on Skyrim's UI stack and
+calls its existing `PostDisplay` once more before deferred Scaleform EndFrame.
+CommonLib's implementation of the inherited `IMenu::PostDisplay` calls the
+menu's `uiMovie->Display()`. This is a **guarded candidate**, not a proven
+cursor fix. One sustained inventory frame reads native colour before the
+replay, after the replay, and after EndFrame into an ignored local capture,
+so a subsequent user-started run can show whether and when the cursor movie
+changed pixels. No new binary patch site is added.
+
+The Release build passed all 42 CTest groups; Skyrim runtime verification is
+**NOT RUN**. The V5.4 MO2 package is
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.102-v54-cursor-replay.zip`
+(SHA-256 `12bc9dffabb94ef1455998107abb7d9cf877f057fd4dbd240794e30199dfc7d8`).
+All five payload hashes and the manifest entry were independently checked
+inside the ZIP. Release DLL SHA-256 is
+`faec1fb7d0ccad2f81ebc02f623094806804fef95218bbabb34760e04b379b80`.
+The game process remained open after a graceful close request, and Windows
+denied a process stop. The user then closed Skyrim. All five installed 0.1.101
+payloads matched its manifest; its DLL, INI and manifest were backed up under
+ignored `artifacts/local/v54-0.1.102-install-backup`. Only the DLL and manifest
+were replaced in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`. All five
+installed payloads match the 0.1.102 manifest. The INI and SR/NR libraries
+did not change.
+
 ## 0.1.101 inventory cursor overlay (2026-09-27)
 
 The user-started 0.1.100 run confirmed that the inventory is visible again,

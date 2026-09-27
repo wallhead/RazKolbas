@@ -49,7 +49,6 @@ struct WorldState {
     DeferredUiFlushForwarder deferredUiFlushForwarder;
     std::atomic<std::uint64_t> forwarded{0};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
-    std::atomic<bool> inventoryCursorOverlayNeeded{false};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
     std::atomic<std::uint64_t> statusDlssFrames{0},statusSkippedFrames{0};
     std::atomic<bool> statusDlssDisabled{false};
@@ -101,6 +100,12 @@ struct WorldState {
     };
     bool menuBoundaryCaptureAttempted{};
     std::optional<MenuBoundaryCapture> menuBoundaryCapture;
+    struct CursorReplayCapture {
+        std::uint64_t frame{};
+        std::vector<ProbeImage> images;
+    };
+    bool cursorReplayCaptureAttempted{},cursorReplayMissingLogged{};
+    std::optional<CursorReplayCapture> cursorReplayCapture;
     std::uint64_t inventoryMenuLastFrame{},inventoryTraceFrame{};
     unsigned inventoryMenuStableFrames{},inventoryTraceWindowFrames{};
     struct CompletedOutput {
@@ -135,7 +140,8 @@ struct WorldState {
     bool nativeUiRouteActivated{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
-    std::uint64_t deferredMenuPublications{},preservedInventoryComposites{};
+    std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
+        cursorReplays{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
     bool deferredMenuPublicationWarningLogged{};
@@ -542,6 +548,20 @@ bool inventoryMenuOnStack(const WorldState* state) {
         return false;
     }
     return false;
+}
+RE::IMenu* cursorMenuOnStack(const WorldState* state) {
+    RE::UI* ui{};
+    if(!state||!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return nullptr;
+    for(auto& [name,entry]:ui->menuMap) {
+        if(std::string_view(name.c_str())!=RE::CursorMenu::MENU_NAME)continue;
+        auto* cursor=entry.menu.get();
+        if(!cursor)return nullptr;
+        for(const auto& stacked:ui->menuStack)
+            if(stacked.get()==cursor)return cursor;
+        return nullptr;
+    }
+    return nullptr;
 }
 struct BoundUiView {
     std::uintptr_t id{};
@@ -977,8 +997,6 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     auto* state=active.load(std::memory_order_acquire);
     auto* domain=activeOwnedSceneDomain();
     const auto frame=state?state->forwarded.load(std::memory_order_relaxed):0;
-    if(state)state->inventoryCursorOverlayNeeded.store(false,
-        std::memory_order_release);
     if(state&&domain&&domain->phase()==ScenePhase::World) {
         if(auto* ui=ownedUiRedirector()) {
           try {
@@ -1093,14 +1111,14 @@ void beforeDeferredUiFlush(void*) noexcept {
     auto* ui=ownedUiRedirector();
     if(!ui)return;
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    bool preservedInventoryComposite=false;
     if(ui->reducedMenuPassPending()) {
         if(inventoryMenuOnStack(state)) {
             // A sustained inventory capture showed the list and preview on
             // native colour before this boundary. Publishing the reduced
             // scene here erased the list; keep the already-composed target.
             state->menuBoundaryCaptureAttempted=true;
-            state->inventoryCursorOverlayNeeded.store(true,
-                std::memory_order_release);
+            preservedInventoryComposite=true;
             const auto count=++state->preservedInventoryComposites;
             if(count==1||count%600==0)
                 spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
@@ -1194,6 +1212,63 @@ void beforeDeferredUiFlush(void*) noexcept {
         try {spdlog::warn("Deferred Scaleform UI flush frame {} could not reassert native depth/stencil; HRESULT=0x{:08x}",
             frame,static_cast<std::uint32_t>(rebound));}catch(...) {}
     }
+    if(preservedInventoryComposite&&SUCCEEDED(rebound)) {
+        if(auto* cursor=cursorMenuOnStack(state);cursor&&cursor->uiMovie) {
+            std::optional<WorldState::CursorReplayCapture> capture;
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
+            if(!state->cursorReplayCaptureAttempted&&
+               state->inventoryMenuStableFrames==30) {
+                state->cursorReplayCaptureAttempted=true;
+                const auto device=state->createdDevice.load(std::memory_order_relaxed);
+                const auto context=state->createdContext.load(std::memory_order_relaxed);
+                const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+                if(device&&context&&swap) {
+                    auto native=acquireNativeFlipTarget(
+                        reinterpret_cast<IDXGISwapChain*>(swap),
+                        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                    if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                        captureTarget=target->texture;
+                        const std::array<ID3D11Texture2D*,1> source{
+                            captureTarget.Get()};
+                        auto before=readbackCandidates(
+                            reinterpret_cast<ID3D11DeviceContext*>(context),
+                            source,16*1024*1024);
+                        if(auto* images=std::get_if<std::vector<ProbeImage>>(&before))
+                            capture.emplace(WorldState::CursorReplayCapture{
+                                frame,std::move(*images)});
+                        else spdlog::warn("Inventory frame {} cursor replay before-readback unavailable: {}",
+                            frame,std::get<Error>(before).message);
+                    }
+                }
+            }
+            const auto count=++state->cursorReplays;
+            if(count==1||count%600==0)
+                spdlog::info("Inventory frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
+                    frame,count);
+            try {cursor->PostDisplay();}
+            catch(...) {
+                try {spdlog::warn("Inventory frame {} Cursor Menu replay threw",
+                    frame);}catch(...) {}
+            }
+            if(capture&&captureTarget) {
+                const std::array<ID3D11Texture2D*,1> source{
+                    captureTarget.Get()};
+                auto after=readbackCandidates(
+                    reinterpret_cast<ID3D11DeviceContext*>(
+                        state->createdContext.load(std::memory_order_relaxed)),
+                    source,16*1024*1024);
+                if(auto* images=std::get_if<std::vector<ProbeImage>>(&after)) {
+                    capture->images.emplace_back(std::move(images->front()));
+                    state->cursorReplayCapture.emplace(std::move(*capture));
+                } else spdlog::warn("Inventory frame {} cursor replay after-readback unavailable: {}",
+                    frame,std::get<Error>(after).message);
+            }
+        } else if(!state->cursorReplayMissingLogged) {
+            state->cursorReplayMissingLogged=true;
+            try {spdlog::warn("Inventory frame {} Cursor Menu is not available for native replay",
+                frame);}catch(...) {}
+        }
+    }
     logInventoryBinding(state,frame,"before-EndFrame");
 #endif
 }
@@ -1204,6 +1279,62 @@ void deferredUiFlushProxy(void* renderer) noexcept {
 #ifdef RK_WITH_NGX
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     logInventoryBinding(state,frame,"after-EndFrame");
+    if(state->cursorReplayCapture&&
+       state->cursorReplayCapture->frame==frame&&
+       state->cursorReplayCapture->images.size()==2) {
+        auto capture=std::move(*state->cursorReplayCapture);
+        state->cursorReplayCapture.reset();
+        try {
+            const auto device=state->createdDevice.load(std::memory_order_relaxed);
+            const auto context=state->createdContext.load(std::memory_order_relaxed);
+            const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+            auto* domain=activeOwnedSceneDomain();
+            if(device&&context&&swap&&domain) {
+                auto native=acquireNativeFlipTarget(
+                    reinterpret_cast<IDXGISwapChain*>(swap),
+                    reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                    const std::array<ID3D11Texture2D*,1> source{target->texture.Get()};
+                    auto after=readbackCandidates(
+                        reinterpret_cast<ID3D11DeviceContext*>(context),
+                        source,16*1024*1024);
+                    if(auto* images=std::get_if<std::vector<ProbeImage>>(&after)) {
+                        capture.images.emplace_back(std::move(images->front()));
+                        PWSTR documents=nullptr;
+                        const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+                            KF_FLAG_DEFAULT,nullptr,&documents);
+                        struct FreeDocuments {
+                            PWSTR value;~FreeDocuments(){CoTaskMemFree(value);}
+                        } free{documents};
+                        if(SUCCEEDED(found)&&documents) {
+                            const auto directory=std::filesystem::path(documents)/
+                                "My Games"/"Skyrim Special Edition"/"SKSE"/
+                                "RazKolbasCaptures"/
+                                ("cursor-replay-"+
+                                std::to_string(GetCurrentProcessId())+"-"+
+                                std::to_string(frame)+"-"+
+                                std::to_string(GetTickCount64()));
+                            constexpr std::array<std::string_view,3> names{
+                                "native-before-cursor-replay.raw",
+                                "native-after-cursor-replay.raw",
+                                "native-after-endframe.raw"};
+                            const auto saved=saveProbeBundle(directory,
+                                capture.images,names,
+                                "One InventoryMenu frame around native Cursor Menu replay; diagnostic only");
+                            if(const auto error=std::get_if<Error>(&saved))
+                                spdlog::warn("Inventory cursor replay capture save failed: {}",
+                                    error->message);
+                            else spdlog::info("Inventory cursor replay frame {} capture complete at {}",
+                                frame,directory.string());
+                        }
+                    }
+                }
+            }
+        }catch(...) {
+            try {spdlog::warn("Inventory cursor replay frame {} capture failed",
+                frame);}catch(...) {}
+        }
+    }
     if(state->menuBoundaryCapture&&state->menuBoundaryCapture->frame==frame&&
        state->menuBoundaryCapture->images.size()==3) {
         try {
@@ -1757,8 +1888,6 @@ std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap
        reinterpret_cast<std::uintptr_t>(swap))return std::nullopt;
     DiagnosticsSnapshot snapshot{};
     snapshot.mode=state->displayedMode.load(std::memory_order_acquire);
-    snapshot.inventoryCursorOverlayNeeded=
-        state->inventoryCursorOverlayNeeded.load(std::memory_order_acquire);
     snapshot.displayWidth=state->statusWidth.load(std::memory_order_relaxed);
     snapshot.displayHeight=state->statusHeight.load(std::memory_order_relaxed);
     DXGI_SWAP_CHAIN_DESC swapDesc{};
