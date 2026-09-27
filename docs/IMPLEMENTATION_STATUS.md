@@ -1,5 +1,23 @@
 # Implementation checkpoint
 
+## AIO native UI RE24 local cross-check (2026-09-27)
+
+The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_24.zip` as
+further reference evidence. A normalized local check passed all 67 payload
+hashes, and the exact original AIO DLL passed all 17 bounded code-span hashes.
+Capstone independently decoded selected transition, graphics-state and late-OM
+sites. The packet's 114 synthetic original-CPU checks per compiler were
+**not rerun locally**; no game/GPU behavior was verified. The evidence shows
+that AIO's native callback can publish twice in a synthetic frame, its
+fullscreen helper leaves stencil/scissor disabled and partially restores
+state, and effective cached views matter more than wrapper texture fields.
+See `docs/re/AIO_NATIVE_UI_RE24_AUDIT.md` for exact limits.
+
+No renderer source or installed 0.1.102 payload changed. **Inventory cursor
+interaction, title/HUD draw state and native-resolution pixels remain NOT
+RUN** for this build. The next user-started game should settle the cursor
+candidate and supply the live read-only dimension probe before any new patch.
+
 ## AIO native UI RE23 cross-check and read-only probe (2026-09-27)
 
 The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_23.zip` as
