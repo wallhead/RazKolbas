@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## Native UI resolution audit 21 local review (2026-09-27)
+
+The supplied `C:/Users/user/Downloads/RazKolbas_Native_UI_Resolution_Audit_21.zip`
+was reviewed against commit `9590420`. Its 13 manifest-listed files passed the
+packet's SHA-256 verifier. Its two copied predicate bodies exactly match the
+local checkout. The source confirms that cold-start menu publication is gated
+by world-oriented readiness, the colour-only spatial fallback sits behind
+motion/depth validation, full late-3D companion observation gates the native
+UI depth/stencil binding, the reduced-pass latch is based on motion-MRT shape
+rather than menu identity, and non-inventory deferred spatial publication can
+still overwrite the native destination. The preserved 0.1.101 log shows
+1707x960-to-2560x1440 pre-Present spatial publication before native routing
+activates. These findings do **not** establish the actual title-screen text
+draw target or prove the packet's proposed repair visually. Details and limits
+are in `docs/re/NATIVE_UI_RESOLUTION_AUDIT21_REVIEW.md`.
+
+No rendering source, installed MO2 payload or user INI changed in this review.
+The 0.1.102 Skyrim-themed cursor replay remains **NOT RUN in Skyrim**. The next
+user-started run should first verify inventory visibility, native cursor and
+item highlight/click behavior; its bounded capture will settle that candidate.
+The broader title/HUD repair then needs an effective draw-target/viewport,
+writable-stencil and before/after-copy trace so a colour-only native UI route
+can be implemented without guessing at Scaleform's draw boundary. The audit's
+GCC/Clang policy checks are source-behavior witnesses; Windows/GPU raster and
+game visual verification for a resolution fix are **NOT RUN**.
+
 ## 0.1.102 Skyrim cursor replay candidate (2026-09-27)
 
 The user-started 0.1.101 run showed a Windows-style pointer over inventory,
