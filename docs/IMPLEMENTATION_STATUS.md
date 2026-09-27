@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## AIO native UI RE23 cross-check and read-only probe (2026-09-27)
+
+The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_23.zip` as
+additional reference evidence. Its 78 payload hashes, the original AIO DLL
+identity, 19 code-span hashes and three shader blob hashes passed local
+read-only checks; its strict-token scalar shader test passed 11 finite cases.
+The packet's 173 synthetic original-CPU assertions per compiler were **not
+rerun locally** and do not demonstrate Skyrim/GPU pixels. The packet separates
+display/reduced dimension writers, HUD-less base snapshot `+0x490`, optional
+difference-mask UI plane `+0x3e0`, and already-composed native output. These
+roles cannot be conflated to justify RazKolbas's non-inventory late scene
+overwrite. See `docs/re/AIO_NATIVE_UI_RE23_AUDIT.md`.
+
+The exact installed 1.6.1170 Address Library maps the shared dimension-writer
+candidate to game RVA `0x14b2e14` (aligned CALL), and four dimension globals
+to `0x328cc44/48/4c/50`. The hash-gated read-only live-detour probe now
+records both pairs and candidate call-site ownership on a user-started
+process. Its two new pure tests failed before implementation and passed after.
+The Release `tools/Build.ps1 -Preset win-release` run passed all 43 CTest
+groups, including the new read-only probe test. This is build/synthetic
+verification, not a game observation.
+The installed 0.1.102 DLL/INI/runtime remains unchanged. **The probe has not
+run live; cursor interaction, final dimension values, title/HUD draw state and
+visual correctness are NOT RUN**. The next user-started game test should
+first verify the 0.1.102 inventory cursor and item selection, then gather
+the read-only dimensions while the game is open.
+
 ## AIO native UI RE22 local cross-check (2026-09-27)
 
 The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_22.zip` as

@@ -1,4 +1,4 @@
-"""Hash-gated read-only resolution of occupied Skyrim renderer hook entries.
+"""Hash-gated read-only resolution of occupied Skyrim hooks and UI dimensions.
 
 Run only against a user-started exact 1.6.1170 process. No remote code,
 thread, breakpoint, memory write, input event, or process-control operation.
@@ -13,7 +13,27 @@ from ctypes import wintypes as W
 from pathlib import Path
 
 GAME_SHA256 = "c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9"
-SITES = {"target_creation_wrapper": 0xe4fbb0, "resize_buffer_entry": 0xe43e84}
+SITES = {
+    "target_creation_wrapper": 0xe4fbb0,
+    "resize_buffer_entry": 0xe43e84,
+    "dimension_writer_call": 0x14b2e14,
+    "mouse_metadata_call": 0x913efb,
+    "screen_size_call": 0xe4cd52,
+    "native_transition_call": 0x972d34,
+}
+
+
+def decode_direct_call_target(address, data):
+    if len(data) < 5 or data[0] != 0xe8:
+        return None
+    return address + 5 + struct.unpack_from("<i", data, 1)[0]
+
+
+def dimension_pairs(state):
+    if len(state) < 0x34:
+        raise ValueError("Graphics state lacks both dimension pairs")
+    return (struct.unpack_from("<II", state, 0x24),
+            struct.unpack_from("<II", state, 0x2c))
 
 
 def main():
@@ -110,6 +130,9 @@ def main():
                     target = entry + 5 + struct.unpack_from("<i", data, 1)[0]
                     item["target"] = hex(target)
                     item["targetBytes"] = read(target, 96).hex()
+                elif (target := decode_direct_call_target(entry, data)) is not None:
+                    item["target"] = hex(target)
+                    item["targetBytes"] = read(target, 96).hex()
                 if "target" in item:
                     resolved = int(item["target"], 16)
                     owner = next((module for module in modules
@@ -135,8 +158,11 @@ def main():
         for index in range(args.samples):
             state = read(args.base + 0x328cc20, 0x120)
             viewport = struct.unpack("<6f", read(args.base + 0x202abe0, 24))
+            pair_a, pair_b = dimension_pairs(state)
             samples.append({"index": index,
-                "display": struct.unpack_from("<II", state, 0x24),
+                "display": pair_a,
+                "dimensionPairA": pair_a,
+                "dimensionPairB": pair_b,
                 "currentRatio": struct.unpack_from("<ff", state, 0x104),
                 "previousRatio": struct.unpack_from("<ff", state, 0x10c),
                 "drsCounter": struct.unpack_from("<I", state, 0x118)[0],
