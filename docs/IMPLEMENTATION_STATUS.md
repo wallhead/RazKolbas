@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## DLSS Frame Generation RE25 architecture checkpoint (2026-09-27)
+
+The owner's `AIO_DLSS_FrameGen_RE_25.zip` was audited as reference evidence.
+All 121 payload hashes, the exact ZIP entry set, four original-binary
+identities, and 42 bounded PE code-span hashes matched; four key instruction
+anchors were independently spot-checked with Capstone. The packet's reported
+CPU probe assertions were not rerun. See
+`docs/re/AIO_DLSS_FG_RE25_AUDIT.md`.
+
+The resulting architecture and implementation sequence are in
+`docs/design/DLSS_FG_ARCHITECTURE.md` and
+`docs/superpowers/plans/2026-09-27-dlss-fg-integration.md`. AIO's host
+export prepares FG input; generated frames require a Streamline-managed
+lower D3D12 Present. RazKolbas currently has FG settings and a D3D11 Present
+observer, but no matching presentation owner, FG guide/UI lifetime service or
+DLSS-G provider. **FG implementation: NOT STARTED. Skyrim FG runtime test:
+NOT RUN.** No DLL, installed MO2 mod or INI was changed for this audit.
+Next offline action: implement the frame/retirement policy and its focused
+tests, then build the same-adapter presentation/interop harness before any
+Skyrim FG candidate is installed.
+
 ## 0.1.106 native MagicMenu movie replay candidate (2026-09-27)
 
 The owner ran 0.1.105 and reports MagicMenu is visible but blurry. Its bounded
