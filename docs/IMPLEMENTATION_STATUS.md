@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## 0.1.106 native MagicMenu movie replay candidate (2026-09-27)
+
+The owner ran 0.1.105 and reports MagicMenu is visible but blurry. Its bounded
+same-frame capture proves the native 2560x1440 image before deferred copy has
+the world and hero but no magic list, while the 1707x960 reduced scene already
+has the list. After the late copy, the native image contains the enlarged
+list and remains byte-identical through EndFrame and pre-Present. This is why
+the earlier native-composite-only candidate made MagicMenu invisible and the
+visibility restore left it blurry. See
+`docs/re/MAGIC_MENU_NATIVE_REPLAY_2026-09-27.md`.
+
+The 0.1.106 candidate keeps that native world/hero, skips the blurry late
+copy only when a live MagicMenu movie exists, and queues the movie's
+`Display()` on the rebound native target before EndFrame. It keeps the
+inventory and title paths. A one-frame native before/after/EndFrame capture
+will test whether the movie draws. Release build and all 43 CTest groups
+pass; the five-file MO2 ZIP passed independent entry/hash verification.
+**Skyrim runtime and visual verification of 0.1.106: NOT RUN.** The package
+is staged but cannot replace the loaded 0.1.105 DLL until Skyrim exits.
+
 ## 0.1.105 MagicMenu visibility restore installed (2026-09-27)
 
 In the user-started 0.1.104 run, the owner reported the title and other
@@ -17,9 +37,9 @@ payload hashes passed independent verification. After Skyrim exited, only the
 DLL and manifest were replaced in the V5.4 mod; the prior DLL/manifest were
 backed up, and INI/vendor libraries were preserved. Installed DLL SHA-256 is
 `283919b4db47de5ddf1be7de4d282dfd1fb5254f138523c526fff5401feb65e0`.
-**Skyrim runtime and visual verification of 0.1.105: NOT RUN.** The next
-user-started game should check MagicMenu visibility, title clarity and
-inventory, then exit so the bounded MagicMenu capture can be inspected.
+In the user-started 0.1.105 run, the owner reports MagicMenu is visible but
+blurry. The capture completed at frame 11251; see the 0.1.106 checkpoint
+above. Title and inventory were not separately retested in this report.
 
 ## 0.1.104 cold Main Menu + MagicMenu candidate installed (2026-09-27)
 

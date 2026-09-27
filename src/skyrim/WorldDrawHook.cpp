@@ -101,10 +101,12 @@ struct WorldState {
     };
     bool menuBoundaryCaptureAttempted{};
     bool magicBoundaryCaptureAttempted{};
+    bool magicReplayCaptureAttempted{};
     std::optional<MenuBoundaryCapture> menuBoundaryCapture;
     struct CursorReplayCapture {
         std::uint64_t frame{};
         std::vector<ProbeImage> images;
+        bool magic{};
     };
     bool cursorReplayCaptureAttempted{},cursorReplayMissingLogged{};
     std::optional<CursorReplayCapture> cursorReplayCapture;
@@ -145,7 +147,8 @@ struct WorldState {
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
-        preservedMagicComposites{},preservedMainMenuComposites{},cursorReplays{};
+        preservedMagicComposites{},preservedMainMenuComposites{},
+        magicMovieReplays{},cursorReplays{};
     bool deferredUiFlushWarningLogged{};
     bool deferredUiFlushMotionWarningLogged{};
     bool deferredMenuPublicationWarningLogged{};
@@ -539,19 +542,22 @@ std::pair<std::uintptr_t,std::string> menuAtOrdinal(
             reinterpret_cast<std::uintptr_t>(menu),name.c_str()};
     return {reinterpret_cast<std::uintptr_t>(menu),"unregistered"};
 }
-bool namedMenuOnStack(const WorldState* state,std::string_view menuName) {
+RE::IMenu* menuInstanceOnStack(const WorldState* state,std::string_view menuName) {
     RE::UI* ui{};
     if(!state||!state->uiSingletonCell||
-       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return false;
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return nullptr;
     for(auto& [name,entry]:ui->menuMap) {
         if(std::string_view(name.c_str())!=menuName)continue;
         auto* menu=entry.menu.get();
-        if(!menu)return false;
+        if(!menu)return nullptr;
         for(const auto& stacked:ui->menuStack)
-            if(stacked.get()==menu)return true;
-        return false;
+            if(stacked.get()==menu)return menu;
+        return nullptr;
     }
-    return false;
+    return nullptr;
+}
+bool namedMenuOnStack(const WorldState* state,std::string_view menuName) {
+    return menuInstanceOnStack(state,menuName)!=nullptr;
 }
 bool inventoryMenuOnStack(const WorldState* state) {
     return namedMenuOnStack(state,RE::InventoryMenu::MENU_NAME);
@@ -1161,15 +1167,21 @@ void beforeDeferredUiFlush(void*) noexcept {
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
     bool preservedNativeMenuComposite=false;
     bool preservedInventoryComposite=false;
+    bool preservedMagicComposite=false;
     bool preservedMainMenuComposite=false;
     if(ui->reducedMenuPassPending()) {
         preservedInventoryComposite=inventoryMenuOnStack(state);
+        auto* magicMenu=preservedInventoryComposite?nullptr:
+            menuInstanceOnStack(state,RE::MagicMenu::MENU_NAME);
+        preservedMagicComposite=magicMenu&&magicMenu->uiMovie;
         preservedMainMenuComposite=!preservedInventoryComposite&&
-            titleMenuOnStack(state);
-        if(preservedInventoryComposite||preservedMainMenuComposite) {
-            // Inventory and the cold title retain their verified native
-            // composite. MagicMenu needs its reduced scene publication: the
-            // user observed an invisible magic panel when we skipped it.
+            !preservedMagicComposite&&titleMenuOnStack(state);
+        if(preservedInventoryComposite||preservedMagicComposite||
+           preservedMainMenuComposite) {
+            // The MagicMenu capture showed its movie only in the reduced
+            // image, while world/hero were already in native colour. Replay
+            // that movie after rebinding rather than copying blurry UI over
+            // the native scene.
             if(preservedInventoryComposite)
                 state->menuBoundaryCaptureAttempted=true;
             preservedNativeMenuComposite=true;
@@ -1177,6 +1189,11 @@ void beforeDeferredUiFlush(void*) noexcept {
                 const auto count=++state->preservedInventoryComposites;
                 if(count==1||count%600==0)
                     spdlog::info("Inventory frame {} retained native UI composite instead of overwriting it with the reduced menu scene; count={}",
+                        frame,count);
+            } else if(preservedMagicComposite) {
+                const auto count=++state->preservedMagicComposites;
+                if(count==1||count%600==0)
+                    spdlog::info("Magic frame {} retained native world/hero for Scaleform movie replay; count={}",
                         frame,count);
             } else {
                 const auto count=++state->preservedMainMenuComposites;
@@ -1282,6 +1299,57 @@ void beforeDeferredUiFlush(void*) noexcept {
             frame,static_cast<std::uint32_t>(rebound));}catch(...) {}
     }
     if(preservedNativeMenuComposite&&SUCCEEDED(rebound)) {
+        if(preservedMagicComposite) {
+            if(auto* magic=menuInstanceOnStack(state,RE::MagicMenu::MENU_NAME);
+               magic&&magic->uiMovie) {
+                std::optional<WorldState::CursorReplayCapture> capture;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
+                if(!state->magicReplayCaptureAttempted&&
+                   state->magicMenuStableFrames==30) {
+                    state->magicReplayCaptureAttempted=true;
+                    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+                    const auto context=state->createdContext.load(std::memory_order_relaxed);
+                    const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+                    if(device&&context&&swap) {
+                        auto native=acquireNativeFlipTarget(
+                            reinterpret_cast<IDXGISwapChain*>(swap),
+                            reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+                        if(auto* target=std::get_if<NativeFlipTarget>(&native)) {
+                            captureTarget=target->texture;
+                            const std::array<ID3D11Texture2D*,1> source{
+                                captureTarget.Get()};
+                            auto before=readbackCandidates(
+                                reinterpret_cast<ID3D11DeviceContext*>(context),
+                                source,16*1024*1024);
+                            if(auto* images=std::get_if<std::vector<ProbeImage>>(&before))
+                                capture.emplace(WorldState::CursorReplayCapture{
+                                    frame,std::move(*images),true});
+                        }
+                    }
+                }
+                const auto count=++state->magicMovieReplays;
+                if(count==1||count%600==0)
+                    spdlog::info("Magic frame {} replaying Scaleform movie on native colour; count={}",
+                        frame,count);
+                try {magic->uiMovie->Display();}
+                catch(...) {
+                    try {spdlog::warn("Magic frame {} Scaleform movie replay threw",
+                        frame);}catch(...) {}
+                }
+                if(capture&&captureTarget) {
+                    const std::array<ID3D11Texture2D*,1> source{
+                        captureTarget.Get()};
+                    auto after=readbackCandidates(
+                        reinterpret_cast<ID3D11DeviceContext*>(
+                            state->createdContext.load(std::memory_order_relaxed)),
+                        source,16*1024*1024);
+                    if(auto* images=std::get_if<std::vector<ProbeImage>>(&after)) {
+                        capture->images.emplace_back(std::move(images->front()));
+                        state->cursorReplayCapture.emplace(std::move(*capture));
+                    }
+                }
+            }
+        }
         if(auto* cursor=cursorMenuOnStack(state);cursor&&cursor->uiMovie) {
             std::optional<WorldState::CursorReplayCapture> capture;
             Microsoft::WRL::ComPtr<ID3D11Texture2D> captureTarget;
@@ -1314,12 +1382,12 @@ void beforeDeferredUiFlush(void*) noexcept {
             if(count==1||count%600==0)
                 spdlog::info("{} frame {} replaying Skyrim Cursor Menu after native UI rebind; count={}",
                     preservedInventoryComposite?"Inventory":
-                        "Main Menu",frame,count);
+                        preservedMagicComposite?"Magic":"Main Menu",frame,count);
             try {cursor->PostDisplay();}
             catch(...) {
                 try {spdlog::warn("{} frame {} Cursor Menu replay threw",
                     preservedInventoryComposite?"Inventory":
-                        "Main Menu",frame);}catch(...) {}
+                        preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
             }
             if(capture&&captureTarget) {
                 const std::array<ID3D11Texture2D*,1> source{
@@ -1338,7 +1406,7 @@ void beforeDeferredUiFlush(void*) noexcept {
             state->cursorReplayMissingLogged=true;
             try {spdlog::warn("{} frame {} Cursor Menu is not available for native replay",
                 preservedInventoryComposite?"Inventory":
-                    "Main Menu",frame);}catch(...) {}
+                    preservedMagicComposite?"Magic":"Main Menu",frame);}catch(...) {}
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");
@@ -1382,28 +1450,40 @@ void deferredUiFlushProxy(void* renderer) noexcept {
                             const auto directory=std::filesystem::path(documents)/
                                 "My Games"/"Skyrim Special Edition"/"SKSE"/
                                 "RazKolbasCaptures"/
-                                ("cursor-replay-"+
+                                (std::string(capture.magic?"magic-movie-replay-":
+                                    "cursor-replay-")+
                                 std::to_string(GetCurrentProcessId())+"-"+
                                 std::to_string(frame)+"-"+
                                 std::to_string(GetTickCount64()));
-                            constexpr std::array<std::string_view,3> names{
-                                "native-before-cursor-replay.raw",
-                                "native-after-cursor-replay.raw",
-                                "native-after-endframe.raw"};
+                            const std::array<std::string_view,3> names=
+                                capture.magic?
+                                std::array<std::string_view,3>{
+                                    "native-before-magic-replay.raw",
+                                    "native-after-magic-replay.raw",
+                                    "native-after-endframe.raw"}:
+                                std::array<std::string_view,3>{
+                                    "native-before-cursor-replay.raw",
+                                    "native-after-cursor-replay.raw",
+                                    "native-after-endframe.raw"};
                             const auto saved=saveProbeBundle(directory,
                                 capture.images,names,
-                                "One InventoryMenu frame around native Cursor Menu replay; diagnostic only");
+                                capture.magic?
+                                    "One MagicMenu frame around native movie replay; diagnostic only":
+                                    "One InventoryMenu frame around native Cursor Menu replay; diagnostic only");
                             if(const auto error=std::get_if<Error>(&saved))
-                                spdlog::warn("Inventory cursor replay capture save failed: {}",
+                                spdlog::warn("{} replay capture save failed: {}",
+                                    capture.magic?"Magic movie":"Inventory cursor",
                                     error->message);
-                            else spdlog::info("Inventory cursor replay frame {} capture complete at {}",
+                            else spdlog::info("{} replay frame {} capture complete at {}",
+                                capture.magic?"Magic movie":"Inventory cursor",
                                 frame,directory.string());
                         }
                     }
                 }
             }
         }catch(...) {
-            try {spdlog::warn("Inventory cursor replay frame {} capture failed",
+            try {spdlog::warn("{} replay frame {} capture failed",
+                capture.magic?"Magic movie":"Inventory cursor",
                 frame);}catch(...) {}
         }
     }
