@@ -1,5 +1,12 @@
 # Main Menu viewport reference cross-check, 2026-09-26
 
+**Correction from exact-DLL RE22 (2026-09-27):** The old Main/Map labels below
+were wrong. The string objects and menu-state bytes are Main Menu at object
+RVA `0x329320` / `+0x11`, Loading Menu at `0x329300` / `+0x12`, and MapMenu at
+`0x3292a0` / `+0x15`. The helper and viewport startup branch handle
+**Main/Loading**, not Main/Map. The original DLL and 23 bounded code spans
+were hash-checked locally; see `AIO_NATIVE_UI_RE22_AUDIT.md`.
+
 An independent subagent performed read-only PE mapping and Capstone 5.0.7
 disassembly on the supplied AIO `SkyrimUpscaler.dll`, SHA-256
 `94ded937705c721be5aba784cbb04f5c3873acf2ae477b5727f1b40b00018dcb`.
@@ -7,13 +14,14 @@ These are reference observations, not instructions to copy code or modify
 the DLL. The mapped bounded windows and RVA findings are:
 
 - Menu tracking at RVA `0x1e9450` compares `Main Menu` (string object RVA
-  `0x329300`) and records its state at menu-state `+0x12`; `MapMenu` uses
-  `+0x11`. Bounded window `0x1e9450+0x240` SHA-256 is
+  `0x329320`) and records its state at menu-state `+0x11`; `Loading Menu`
+  uses object `0x329300` and state `+0x12`; `MapMenu` uses `+0x15`.
+  Bounded window `0x1e9450+0x240` SHA-256 is
   `ff6ebb840b5abf104938e814a4f883d790036b0094a7f0fc0427ebcca8406869`.
-- Helper RVA `0x1e96a0` returns true if either menu state is set or the
+- Helper RVA `0x1e96a0` returns true if either Main/Loading state is set or the
   active menu name matches. Window `0x1e96a0+0x55` SHA-256 is
   `2b9ca6777e54c381747b3c9f1df42dab066d281e6d6b70f6646339e1c8e16214`.
-- Viewport hook RVA `0x2012c0` has a Main Menu/MapMenu branch at
+- Viewport hook RVA `0x2012c0` has a Main Menu/Loading Menu branch at
   `0x2012e9..0x201331` controlled by initialized byte RVA `0x378498=1`.
   That branch supplies the reference's render width/height at host
   `+0x2c/+0x30`. The ordinary late branch at `0x20138b..0x20141a`

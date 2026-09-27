@@ -1,5 +1,28 @@
 # Implementation checkpoint
 
+## AIO native UI RE22 local cross-check (2026-09-27)
+
+The owner supplied `C:/Users/user/Downloads/AIO_Native_UI_RE_22.zip` as
+additional reference evidence. Its 74 payloads passed the packet SHA-256
+manifest. The exact original AIO host DLL matches the target hash; local
+read-only PE mapping verified all 23 bounded code-span hashes, five menu
+objects/strings and the cited UI shader. Capstone independently decoded the
+key dimension wrappers and menu predicate. This corrects the inherited
+Main/Map label: AIO's bootstrap case is **Main/Loading**, with menu-state
+bytes `+0x11/+0x12`; Map is `+0x15`. `docs/re/MAIN_MENU_RE20.md` is corrected.
+
+The hash-matched V5.4 Skyrim 1.6.1170 executable, installed Address Library
+and preserved decoded game text map AIO's candidate mouse metadata,
+screen-size argument and internal native transition to aligned CALL sites at
+game RVAs `0x913efb`, `0xe4cd52` and `0x972d34`, respectively. The alternate
+paired IDs do not yield aligned calls in this exact decoded snapshot. The
+static ABI clues and limits are in `docs/re/AIO_NATIVE_UI_RE22_AUDIT.md`.
+No game hook or renderer source changed, and the 0.1.102 MO2 package remains
+installed. The packet's synthetic CPU probe is packet-reported; **live hook
+ownership, consumer values, actual UI draw extents, Windows/GPU behavior and
+visual correctness are NOT RUN**. The next user-started run still needs to
+settle the inventory cursor candidate before any metadata patch is installed.
+
 ## Native UI resolution audit 21 local review (2026-09-27)
 
 The supplied `C:/Users/user/Downloads/RazKolbas_Native_UI_Resolution_Audit_21.zip`
