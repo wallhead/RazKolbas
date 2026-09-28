@@ -95,7 +95,7 @@ if(WIN32)
     target_include_directories(RazKolbasFgStreamlineProbe SYSTEM PRIVATE
       "${RK_STREAMLINE_SDK_ROOT}/include")
     target_compile_definitions(RazKolbasFgStreamlineProbe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(RazKolbasFgStreamlineProbe PRIVATE "${sl_lib}" d3d12 dxgi)
+    target_link_libraries(RazKolbasFgStreamlineProbe PRIVATE rk_core "${sl_lib}" d3d11 d3d12 dxgi)
     foreach(sl_binary IN LISTS sl_binaries)
       add_custom_command(TARGET RazKolbasFgStreamlineProbe POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

@@ -1,5 +1,21 @@
 # Implementation checkpoint
 
+## Streamline lower-swap D3D11 facade, FG Off (2026-09-28)
+
+The hash-pinned Streamline 2.14.1 standalone probe now binds the D3D11
+facade above its proxied D3D12 lower swap. It discovered that the queue
+reports the proxy D3D12 identity while the lower swap reports native; the
+verified `slGetNativeInterface` proxy/native pair resolves the binding without
+weakening either exact identity check. On the local RTX 4080 SUPER, the
+facade returned the original D3D11 device, hid D3D12, presented once with
+DLSS-G Off, and produced a fenced lower-backbuffer pixel matching the D3D11
+source. Resize succeeded. Three additional fresh-process readback runs
+matched and exited 0. The final Streamline state reported one actual
+presented real frame with FG Off. Release **52/52** CTest groups passed. See
+`docs/re/FG_STREAMLINE_FACADE_OFF_2026-09-28.md`. This is offline FG-Off
+evidence; installed V5.4 0.1.115 is unchanged, and Skyrim FG On/generated
+output remain **NOT RUN**.
+
 ## FG D3D11 swap COM facade (2026-09-28)
 
 The source-only `FgD3D11SwapFacade` now exposes SwapChain1/3/4, virtual

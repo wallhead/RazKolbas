@@ -13,9 +13,13 @@ namespace rk {
 class FgD3D11PresentBridge {
 public:
     ~FgD3D11PresentBridge() noexcept;
+    // verifiedLowerNative is optional for native DXGI. For a proxy lower,
+    // the caller must obtain and verify it from that proxy's official
+    // native-interface API; adapter equality alone is not sufficient.
     static Result<std::unique_ptr<FgD3D11PresentBridge>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
-        ID3D12CommandQueue* queue,IDXGISwapChain* lower);
+        ID3D12CommandQueue* queue,IDXGISwapChain* lower,
+        ID3D12Device* verifiedLowerNative=nullptr);
     UINT currentIndex() const noexcept;
     ID3D11Texture2D* renderBuffer(UINT index) const noexcept;
     HRESULT copyToCurrent() noexcept;

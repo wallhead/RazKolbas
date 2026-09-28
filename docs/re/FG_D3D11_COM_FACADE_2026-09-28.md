@@ -16,8 +16,10 @@ and twelve more resize/present cycles. Both Debug and Release builds passed
 **52/52** CTest groups. This proves the isolated COM/pixel transaction on
 WARP, not compatibility with the live ENB/ReShade wrapper chain.
 
-The facade is not connected to Skyrim or a Streamline/FSR lower owner. It
-still uses CPU waits for the offline colour transfer. Zero width or height
+The facade is not connected to Skyrim. A subsequent standalone probe also
+passed a real colour pixel through a Streamline FG-Off lower swap; see
+`docs/re/FG_STREAMLINE_FACADE_OFF_2026-09-28.md`. It still uses CPU waits for
+the offline colour transfer. Zero width or height
 resize is rejected, and recovery after device removal is not implemented.
 Private-data and parent calls currently forward to the lower swap and need
 wrapper-chain validation, especially when a caller stores the facade itself

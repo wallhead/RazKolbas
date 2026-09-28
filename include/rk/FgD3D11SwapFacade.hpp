@@ -8,9 +8,12 @@ namespace rk {
 // interception are deliberately gated until their lifetime tests exist.
 class FgD3D11SwapFacade final : public IDXGISwapChain4 {
 public:
+    // Pass verifiedLowerNative only after proving its COM identity through
+    // the lower proxy's official native-interface API.
     static Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
-        ID3D12CommandQueue* queue,IDXGISwapChain* lower);
+        ID3D12CommandQueue* queue,IDXGISwapChain* lower,
+        ID3D12Device* verifiedLowerNative=nullptr);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;

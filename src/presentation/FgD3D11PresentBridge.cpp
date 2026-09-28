@@ -57,7 +57,8 @@ FgD3D11PresentBridge::~FgD3D11PresentBridge() noexcept {
 
 Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
-    ID3D12CommandQueue* queue,IDXGISwapChain* lower) {
+    ID3D12CommandQueue* queue,IDXGISwapChain* lower,
+    ID3D12Device* verifiedLowerNative) {
     if(!d11||!context||!d12||!queue||!lower)
         return Error{ErrorCode::InvalidInput,"FG D3D11 bridge requires all devices, context, queue and lower swap"};
     auto lowerResult=FgLowerSwap::create(lower);
@@ -69,7 +70,13 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
         return Error{ErrorCode::Conflict,"FG bridge context belongs to a different D3D11 device"};
     Microsoft::WRL::ComPtr<ID3D12Device> lowerDevice;
     if(FAILED(lower->GetDevice(IID_PPV_ARGS(&lowerDevice)))||
-       !sameIdentity(lowerDevice.Get(),d12))
+       !sameIdentity(lowerDevice.Get(),
+           verifiedLowerNative?verifiedLowerNative:d12)||
+       (verifiedLowerNative&&
+           (verifiedLowerNative->GetAdapterLuid().LowPart!=
+                d12->GetAdapterLuid().LowPart||
+            verifiedLowerNative->GetAdapterLuid().HighPart!=
+                d12->GetAdapterLuid().HighPart)))
         return Error{ErrorCode::Conflict,"FG lower swap belongs to a different D3D12 device"};
     Microsoft::WRL::ComPtr<ID3D12Device> queueDevice;
     if(FAILED(queue->GetDevice(IID_PPV_ARGS(&queueDevice)))||
