@@ -14,7 +14,9 @@ source-only capture boundary: the current Skyrim route still draws UI into
 the final backbuffer and has no verified separate transparent UI producer.
 Consequently no FG UI tags or FG-On game integration were enabled. The
 installed V5.4 0.1.115 DLL is unchanged; Skyrim verification is **NOT RUN**
-for this change. See `docs/re/FG_UI_PLANES_OFFLINE_2026-09-28.md`.
+for this change. See `docs/re/FG_UI_PLANES_OFFLINE_2026-09-28.md` and the
+read-only RE23/RE24 plus archived-capture assessment in
+`docs/re/FG_UI_SOURCE_ROUTE_RE23_RE24_2026-09-28.md`.
 
 ## AIO FG deep dive RE28 audit (2026-09-28)
 
