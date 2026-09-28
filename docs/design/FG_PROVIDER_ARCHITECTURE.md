@@ -9,7 +9,8 @@ Present per source frame. Its backend interface requires Off/drain before
 presenting an ordinary frame after FG was active; a failed enable falls back
 to the real frame. The lower call carries the exact DXGI Present or Present1
 method, sync interval, flags, Present1 parameters and HRESULT. Test Presents
-are forwarded with generation Off and do not consume a real-source token.
+are forwarded with per-call generation suppressed, without cycling persistent
+provider mode or consuming a real-source token.
 Failed Off/drain can retry that source; once lower Present is attempted its
 token is consumed even if the result is uncertain. These interfaces do not
 yet create generated frames. A

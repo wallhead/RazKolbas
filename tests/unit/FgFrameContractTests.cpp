@@ -133,6 +133,8 @@ TEST_CASE("FG retirement waits for provider input and allocator fences independe
     REQUIRE_FALSE(lease.ready({7,10,12,13,16,18}));
     REQUIRE_FALSE(lease.ready({7,10,12,14,16,17}));
     REQUIRE_FALSE(lease.ready({8,10,12,14,16,18}));
+    REQUIRE_FALSE(lease.ready({7,10,UINT64_MAX,14,16,18}));
+    REQUIRE_FALSE(lease.ready({7,10,12,UINT64_MAX,16,18}));
     REQUIRE(lease.ready({7,10,12,14,16,18}));
 }
 
@@ -145,6 +147,7 @@ TEST_CASE("FG input slots cannot be reused across unretired provider work or res
     REQUIRE_FALSE(pool.submit(*first,{8,10,12,14,16,18}));
     REQUIRE(pool.submit(*first,{7,10,12,14,16,18}));
     REQUIRE_FALSE(pool.releaseUnsubmitted(*first));
+    REQUIRE_FALSE(pool.advanceGeneration(8,{7,10,UINT64_MAX,14,16,18}));
     REQUIRE_FALSE(pool.advanceGeneration(8,{7,10,12,13,16,18}));
     const auto second=pool.acquire(start);
     const auto third=pool.acquire(start);

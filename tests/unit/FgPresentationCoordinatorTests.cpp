@@ -154,9 +154,12 @@ TEST_CASE("DXGI test Present bypasses generation and does not consume a source",
     REQUIRE(backend.calls==std::vector<const char*>{"present","on","present"});
     const auto probeWhileOn=owner.present(frame(2),true,test);
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(probeWhileOn));
+    REQUIRE(owner.enabled());
     REQUIRE(backend.calls==std::vector<const char*>{
-        "present","on","present","off-drain","present"});
+        "present","on","present","present"});
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(2),true)));
+    REQUIRE(backend.calls==std::vector<const char*>{
+        "present","on","present","present","present"});
 }
 
 TEST_CASE("An uncertain lower Present error consumes its source token",

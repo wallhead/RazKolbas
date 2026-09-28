@@ -125,8 +125,15 @@ FgDecision FgProviderSession::decide(const FgSourceFrame& frame,
     return decideFg(frame,request,{liveCapability});
 }
 bool FgRetirementSet::ready(const FgFenceProgress& progress) const noexcept {
+    const auto valid=[](std::uint64_t value) noexcept {
+        return value!=0&&value!=UINT64_MAX;
+    };
     return generation!=0&&progress.generation==generation&&
-        producer!=0&&copy!=0&&providerInput!=0&&present!=0&&allocator!=0&&
+        valid(producer)&&valid(copy)&&valid(providerInput)&&
+        valid(present)&&valid(allocator)&&
+        progress.producer!=UINT64_MAX&&progress.copy!=UINT64_MAX&&
+        progress.providerInput!=UINT64_MAX&&progress.present!=UINT64_MAX&&
+        progress.allocator!=UINT64_MAX&&
         progress.producer>=producer&&progress.copy>=copy&&
         progress.providerInput>=providerInput&&progress.present>=present&&
         progress.allocator>=allocator;
@@ -139,7 +146,10 @@ void FgLeasePool::retire(const FgFenceProgress& progress) noexcept {
 }
 std::optional<std::size_t> FgLeasePool::acquire(
     const FgFenceProgress& progress) noexcept {
-    if(!generation_||progress.generation!=generation_)return std::nullopt;
+    if(!generation_||progress.generation!=generation_||
+       progress.producer==UINT64_MAX||progress.copy==UINT64_MAX||
+       progress.providerInput==UINT64_MAX||progress.present==UINT64_MAX||
+       progress.allocator==UINT64_MAX)return std::nullopt;
     retire(progress);
     for(std::size_t index=0;index<slots_.size();++index)
         if(slots_[index].state==State::Free) {
@@ -153,7 +163,10 @@ bool FgLeasePool::submit(std::size_t index,
     if(index>=slots_.size()||slots_[index].state!=State::Acquired||
        retirement.generation!=generation_||!retirement.producer||
        !retirement.copy||!retirement.providerInput||!retirement.present||
-       !retirement.allocator)return false;
+       !retirement.allocator||retirement.producer==UINT64_MAX||
+       retirement.copy==UINT64_MAX||retirement.providerInput==UINT64_MAX||
+       retirement.present==UINT64_MAX||retirement.allocator==UINT64_MAX)
+        return false;
     slots_[index]={State::InFlight,retirement};
     return true;
 }
@@ -171,7 +184,10 @@ bool FgLeasePool::advanceGeneration(std::uint64_t next,
 }
 bool FgLeasePool::canAdvanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) const noexcept {
-    if(!next||next<=generation_||progress.generation!=generation_)return false;
+    if(!next||next<=generation_||progress.generation!=generation_||
+       progress.producer==UINT64_MAX||progress.copy==UINT64_MAX||
+       progress.providerInput==UINT64_MAX||progress.present==UINT64_MAX||
+       progress.allocator==UINT64_MAX)return false;
     for(const auto& slot:slots_) {
         if(slot.state==State::Acquired)return false;
         if(slot.state==State::InFlight&&!slot.retirement.ready(progress))return false;

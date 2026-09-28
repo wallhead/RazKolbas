@@ -4,6 +4,13 @@
 #include <atomic>
 
 namespace rk {
+FgCopyStatus classifyFgCopyStatus(std::uint64_t completed,
+    std::uint64_t requested,HRESULT deviceHealth) noexcept {
+    if(!requested||requested==UINT64_MAX)return FgCopyStatus::Unknown;
+    if(completed==UINT64_MAX||FAILED(deviceHealth))
+        return FgCopyStatus::DeviceRemoved;
+    return completed>=requested?FgCopyStatus::Complete:FgCopyStatus::Pending;
+}
 namespace {
 std::atomic<std::uint64_t> nextBridgeId{1};
 bool sameLuid(LUID a,LUID b) noexcept {
@@ -54,10 +61,13 @@ Result<std::unique_ptr<FgSharedInputs>> FgSharedInputs::create(
     if(FAILED(shared)||!handle)
         return Error{ErrorCode::Unavailable,"Cannot share FG producer fence"};
     const auto opened=d12->OpenSharedHandle(handle,
-        IID_PPV_ARGS(&bridge->consumerFence_));
+        IID_PPV_ARGS(&bridge->producerGate_));
     CloseHandle(handle);
     if(FAILED(opened))
         return Error{ErrorCode::Unavailable,"Cannot open FG fence on D3D12"};
+    if(FAILED(d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&bridge->consumerFence_))))
+        return Error{ErrorCode::Unavailable,"Cannot create FG consumer fence"};
     return bridge;
 }
 Result<FgSharedSurface> FgSharedInputs::makeSurface(
@@ -108,34 +118,50 @@ Result<FgCopyTicket> FgSharedInputs::copy(ID3D11DeviceContext* context,
        FAILED(context->QueryInterface(IID_PPV_ARGS(&context4))))
         return Error{ErrorCode::Conflict,"FG copy requires the matching D3D11 immediate context"};
     std::scoped_lock lock(mutex_);
-    if(failed_||nextValue_>UINT64_MAX-2)
+    if(failed_||!healthy()||nextProducerValue_>=UINT64_MAX-1||
+       nextCopyValue_>=UINT64_MAX-1)
         return Error{ErrorCode::Unavailable,"FG interop fence timeline is unavailable"};
-    const FgCopyTicket ticket{nextValue_+1,nextValue_+2};
-    nextValue_=ticket.copy;
+    const FgCopyTicket ticket{++nextProducerValue_,++nextCopyValue_};
     context->CopyResource(target.d11_.Get(),source);
     if(FAILED(context4->Signal(producerFence_.Get(),ticket.producer))) {
         failed_=true;
         return Error{ErrorCode::DeviceRemoved,"Cannot signal FG producer completion"};
     }
     context->Flush();
-    if(FAILED(queue_->Wait(consumerFence_.Get(),ticket.producer))||
+    if(FAILED(queue_->Wait(producerGate_.Get(),ticket.producer))||
        FAILED(queue_->Signal(consumerFence_.Get(),ticket.copy))) {
         failed_=true;
         return Error{ErrorCode::DeviceRemoved,"Cannot signal FG shared-copy completion"};
     }
     return ticket;
 }
+bool FgSharedInputs::healthy() const noexcept {
+    return d12_&&SUCCEEDED(d12_->GetDeviceRemovedReason())&&
+        producerGate_&&producerGate_->GetCompletedValue()!=UINT64_MAX&&
+        consumerFence_&&consumerFence_->GetCompletedValue()!=UINT64_MAX;
+}
+bool FgSharedInputs::producerComplete(std::uint64_t value) const noexcept {
+    return producerGate_&&d12_&&classifyFgCopyStatus(
+        producerGate_->GetCompletedValue(),value,
+        d12_->GetDeviceRemovedReason())==FgCopyStatus::Complete;
+}
+FgCopyStatus FgSharedInputs::copyStatus(std::uint64_t value) const noexcept {
+    if(!consumerFence_||!d12_)return FgCopyStatus::Unknown;
+    return classifyFgCopyStatus(consumerFence_->GetCompletedValue(),value,
+        d12_->GetDeviceRemovedReason());
+}
 bool FgSharedInputs::copyComplete(std::uint64_t value) const noexcept {
-    return value!=0&&consumerFence_&&consumerFence_->GetCompletedValue()>=value;
+    return copyStatus(value)==FgCopyStatus::Complete;
 }
 bool FgSharedInputs::waitCopy(std::uint64_t value) const noexcept {
-    if(!value||!consumerFence_)return false;
-    if(copyComplete(value))return true;
+    const auto initial=copyStatus(value);
+    if(initial==FgCopyStatus::Complete)return true;
+    if(initial!=FgCopyStatus::Pending)return false;
     const auto event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
     if(!event)return false;
     const auto armed=consumerFence_->SetEventOnCompletion(value,event);
     const auto waited=SUCCEEDED(armed)?WaitForSingleObject(event,5000):WAIT_FAILED;
     CloseHandle(event);
-    return waited==WAIT_OBJECT_0&&SUCCEEDED(d12_->GetDeviceRemovedReason());
+    return waited==WAIT_OBJECT_0&&copyStatus(value)==FgCopyStatus::Complete;
 }
 }

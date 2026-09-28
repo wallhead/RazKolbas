@@ -22,7 +22,7 @@ FgInputLeaseRing::FgInputLeaseRing(FgSharedInputs& bridge,
 Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     const FgInputSources& sources,ID3D11DeviceContext* context,
     const FgFenceProgress& progress) {
-    if(failed_||!context||!frame.source||!frame.resetEpoch||
+    if(failed_||!bridge_.healthy()||!context||!frame.source||!frame.resetEpoch||
        frame.generation!=pool_.generation()||
        progress.generation!=frame.generation||
        !frame.render.valid()||!frame.display.valid())
@@ -83,7 +83,8 @@ bool FgInputLeaseRing::current(const FgInputLease& lease) const noexcept {
 }
 bool FgInputLeaseRing::submit(const FgInputLease& lease,
     const FgRetirementSet& retirement) noexcept {
-    if(failed_||!current(lease)||retirement.generation!=lease.generation||
+    if(failed_||!bridge_.healthy()||!current(lease)||
+       retirement.generation!=lease.generation||
        retirement.producer<lease.lastCopy.producer||
        retirement.copy<lease.lastCopy.copy||
        !lease.lastCopy.producer||!lease.lastCopy.copy||
@@ -92,20 +93,26 @@ bool FgInputLeaseRing::submit(const FgInputLease& lease,
     return true;
 }
 bool FgInputLeaseRing::discard(const FgInputLease& lease) noexcept {
-    if(failed_||!current(lease)||
-       !bridge_.waitCopy(lease.lastCopy.copy)||
+    if(failed_||!current(lease))return false;
+    if(bridge_.copyStatus(lease.lastCopy.copy)==FgCopyStatus::DeviceRemoved) {
+        failed_=true;
+        return false;
+    }
+    if(!bridge_.waitCopy(lease.lastCopy.copy)||
        !pool_.releaseUnsubmitted(lease.slot))return false;
     slots_[lease.slot].prepared=false;
     return true;
 }
 bool FgInputLeaseRing::advanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) noexcept {
-    if(failed_||!pool_.advanceGeneration(next,progress))return false;
+    if(failed_||!bridge_.healthy()||!pool_.advanceGeneration(next,progress))
+        return false;
     for(auto& slot:slots_)slot=Slot{};
     return true;
 }
 bool FgInputLeaseRing::canAdvanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) const noexcept {
-    return !failed_&&pool_.canAdvanceGeneration(next,progress);
+    return !failed_&&bridge_.healthy()&&
+        pool_.canAdvanceGeneration(next,progress);
 }
 }

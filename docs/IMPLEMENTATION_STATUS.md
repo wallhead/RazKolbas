@@ -1,5 +1,22 @@
 # Implementation checkpoint
 
+## FG review 26 corrections (2026-09-28)
+
+The supplied FG-vs-AIO review was checked against source and public SDK/API
+contracts. The standalone Streamline probe now balances native COM query
+references; five fresh-process FG-Off swap/Present/resize runs exited 0. The
+FG copy bridge now uses separate D3D11-producer and D3D12-consumer fences,
+rejects the device-removal completion sentinel, and prevents removed-device
+progress from retiring leases. A deliberately blocked WARP D3D12 queue
+confirmed that two completed producer submissions do not certify an earlier
+consumer ticket. DXGI TEST Present no longer cycles persistent FG mode.
+Release build and **51/51** CTest groups pass. These are offline results.
+The installed V5.4 0.1.115 diagnostic DLL is unchanged; Skyrim runtime result
+after this review remains **NOT RUN**, and FG remains effectively Off.
+Unresolved provider, prior-present input-fence, resource quarantine and
+ENB/ReShade ownership gates are recorded in
+`docs/re/FG_REVIEW_26_TRIAGE.md`.
+
 ## Streamline 2.14.1 lower-swap Off probe (2026-09-28)
 
 The optional standalone `RazKolbasFgStreamlineProbe --swap` now exercises a

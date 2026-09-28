@@ -5,6 +5,8 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <array>
+#include <chrono>
+#include <thread>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
@@ -59,7 +61,7 @@ TEST_CASE("FG shared colour reaches a same-adapter D3D12 lease", "[fg_interop]")
     REQUIRE(std::holds_alternative<rk::FgCopyTicket>(copied));
     const auto ticket=std::get<rk::FgCopyTicket>(copied);
     REQUIRE(ticket.producer!=0);
-    REQUIRE(ticket.copy>ticket.producer);
+    REQUIRE(ticket.copy!=0);
     REQUIRE(bridge->waitCopy(ticket.copy));
     REQUIRE_FALSE(bridge->copyComplete(ticket.copy+2));
 
@@ -120,4 +122,74 @@ TEST_CASE("FG shared colour reaches a same-adapter D3D12 lease", "[fg_interop]")
     REQUIRE(SUCCEEDED(readback->Map(0,nullptr,&mapped)));
     REQUIRE(*static_cast<const std::uint32_t*>(mapped)==pixels.front());
     readback->Unmap(0,nullptr);
+}
+
+TEST_CASE("FG copy progress rejects a removed-device fence sentinel",
+    "[fg_interop]") {
+    using rk::FgCopyStatus;
+    using rk::classifyFgCopyStatus;
+    REQUIRE(classifyFgCopyStatus(4,5,S_OK)==FgCopyStatus::Pending);
+    REQUIRE(classifyFgCopyStatus(5,5,S_OK)==FgCopyStatus::Complete);
+    REQUIRE(classifyFgCopyStatus(UINT64_MAX,5,S_OK)==
+        FgCopyStatus::DeviceRemoved);
+    REQUIRE(classifyFgCopyStatus(5,5,DXGI_ERROR_DEVICE_REMOVED)==
+        FgCopyStatus::DeviceRemoved);
+    REQUIRE(classifyFgCopyStatus(5,UINT64_MAX,S_OK)==FgCopyStatus::Unknown);
+}
+
+TEST_CASE("FG producer cannot certify a delayed consumer queue",
+    "[fg_interop]") {
+    ComPtr<IDXGIFactory4> factory;
+    REQUIRE(SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))));
+    ComPtr<IDXGIAdapter> adapter;
+    REQUIRE(SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&adapter))));
+    ComPtr<ID3D11Device> d11;
+    ComPtr<ID3D11DeviceContext> context;
+    D3D_FEATURE_LEVEL level{};
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,
+        nullptr,0,nullptr,0,D3D11_SDK_VERSION,&d11,&level,&context)));
+    ComPtr<ID3D12Device> d12;
+    REQUIRE(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
+        IID_PPV_ARGS(&d12))));
+    D3D12_COMMAND_QUEUE_DESC queueDesc{};
+    ComPtr<ID3D12CommandQueue> queue;
+    REQUIRE(SUCCEEDED(d12->CreateCommandQueue(&queueDesc,IID_PPV_ARGS(&queue))));
+    auto made=rk::FgSharedInputs::create(d11.Get(),d12.Get(),queue.Get());
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgSharedInputs>>(made));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgSharedInputs>>(made));
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=8;desc.Height=8;desc.MipLevels=1;desc.ArraySize=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> source;
+    REQUIRE(SUCCEEDED(d11->CreateTexture2D(&desc,nullptr,&source)));
+    auto surfaceResult=bridge->makeSurface(desc);
+    REQUIRE(std::holds_alternative<rk::FgSharedSurface>(surfaceResult));
+    auto surface=std::move(std::get<rk::FgSharedSurface>(surfaceResult));
+    ComPtr<ID3D12Fence> gate;
+    REQUIRE(SUCCEEDED(d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&gate))));
+    REQUIRE(SUCCEEDED(queue->Wait(gate.Get(),1)));
+    struct GateRelease {
+        ID3D12Fence* fence;
+        ~GateRelease() { if(fence)fence->Signal(1); }
+    } releaseOnFailure{gate.Get()};
+    const auto first=bridge->copy(context.Get(),source.Get(),surface);
+    const auto second=bridge->copy(context.Get(),source.Get(),surface);
+    REQUIRE(std::holds_alternative<rk::FgCopyTicket>(first));
+    REQUIRE(std::holds_alternative<rk::FgCopyTicket>(second));
+    const auto a=std::get<rk::FgCopyTicket>(first);
+    const auto b=std::get<rk::FgCopyTicket>(second);
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!bridge->producerComplete(b.producer)&&
+        std::chrono::steady_clock::now()<deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const bool producerRan=bridge->producerComplete(b.producer);
+    const bool consumerStillPending=!bridge->copyComplete(a.copy);
+    REQUIRE(SUCCEEDED(gate->Signal(1)));
+    releaseOnFailure.fence=nullptr;
+    REQUIRE(producerRan);
+    REQUIRE(consumerStillPending);
+    REQUIRE(bridge->waitCopy(a.copy));
+    REQUIRE(bridge->waitCopy(b.copy));
 }

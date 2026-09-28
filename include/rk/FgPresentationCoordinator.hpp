@@ -29,6 +29,8 @@ public:
     virtual ~IFgPresentBackend()=default;
     virtual FgCapability capability() const noexcept=0;
     virtual Result<bool> setMode(bool enabled)=0;
+    // The enabled argument is per-call generation eligibility. A TEST call
+    // passes false without changing persistent mode through setMode().
     virtual Result<FgBackendPresent> presentReal(const FgSourceFrame& frame,
         bool enabled,const FgPresentCall& call)=0;
 };

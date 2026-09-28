@@ -26,9 +26,20 @@ Result<FgPresentOutcome> FgPresentationCoordinator::present(
     const bool presentTest=(call.flags&DXGI_PRESENT_TEST)!=0;
     if(!presentTest&&!ledger_.canAcceptReal(frame))
         return Error{ErrorCode::Conflict,"FG source frame was already presented or is stale"};
-    auto decision=session_.decide(frame,capability,
-        requestedEnabled&&!presentTest);
-    if(presentTest)decision.reason=FgReason::PresentTest;
+    if(presentTest) {
+        auto decision=session_.decide(frame,capability,false);
+        decision.reason=FgReason::PresentTest;
+        // DXGI tests swap status without submitting a real source. Keep the
+        // persistent provider mode and input leases untouched.
+        const auto tested=backend_.presentReal(frame,false,call);
+        if(const auto error=std::get_if<Error>(&tested))return *error;
+        const auto& result=std::get<FgBackendPresent>(tested);
+        if(result.actualGeneratedFrames)
+            return Error{ErrorCode::Conflict,
+                "FG backend generated a frame for DXGI_PRESENT_TEST"};
+        return FgPresentOutcome{decision,result.resultCode,0};
+    }
+    auto decision=session_.decide(frame,capability,requestedEnabled);
     const bool wanted=decision.effective!=FgProvider::Off;
     if(wanted!=enabled_) {
         const auto changed=backend_.setMode(wanted);
@@ -49,7 +60,7 @@ Result<FgPresentOutcome> FgPresentationCoordinator::present(
     }
     // An attempted lower Present consumes the token even if DXGI later
     // reports failure: retrying it could submit a real frame twice.
-    if(!presentTest&&!ledger_.acceptReal(frame))
+    if(!ledger_.acceptReal(frame))
         return Error{ErrorCode::Conflict,"FG source frame changed before Present"};
     const auto presented=backend_.presentReal(frame,enabled_,call);
     if(const auto error=std::get_if<Error>(&presented))return *error;

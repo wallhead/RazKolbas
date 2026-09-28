@@ -20,6 +20,9 @@ template<class T> sl::Result useProxy(T* original,
     Microsoft::WRL::ComPtr<T>& proxy,const char* label) {
     void* native{};
     const auto unwrapped=slGetNativeInterface(original,&native);
+    ComPtr<IUnknown> nativeOwner;
+    if(unwrapped==sl::Result::eOk&&native)
+        nativeOwner.Attach(static_cast<IUnknown*>(native));
     std::cout<<"slGetNativeInterface("<<label<<")="<<code(unwrapped)<<
         " distinct="<<(native&&native!=original)<<'\n';
     if(unwrapped==sl::Result::eOk&&native&&native!=original) {
@@ -63,6 +66,9 @@ int probeSwap(IDXGIFactory6* factory,ID3D12Device* device) {
     else {
         void* nativeSwap{};
         const auto native=slGetNativeInterface(swap.Get(),&nativeSwap);
+        ComPtr<IUnknown> nativeSwapOwner;
+        if(native==sl::Result::eOk&&nativeSwap)
+            nativeSwapOwner.Attach(static_cast<IUnknown*>(nativeSwap));
         std::cout<<"slGetNativeInterface(swap)="<<code(native)<<
             " distinct="<<(nativeSwap&&nativeSwap!=swap.Get())<<'\n';
         if(native!=sl::Result::eOk)result=14;
