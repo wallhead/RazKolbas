@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## Streamline 2.14.1 lower-swap Off probe (2026-09-28)
+
+The optional standalone `RazKolbasFgStreamlineProbe --swap` now exercises a
+real NVIDIA-owned D3D12 swap proxy on the local RTX 4080 SUPER without starting
+Skyrim. The import-library-created D3D12 device was already a Streamline proxy:
+`slGetNativeInterface(device)=0 distinct=1`. Attempting to upgrade it again
+returned result `19` (`eErrorInvalidIntegration`), so the probe detects that
+case and only upgrades the native DXGI factory. The corrected run reported
+`slInit=0`, `slIsFeatureSupported(DLSS-G)=0`,
+`slUpgradeInterface(factory)=0`, `CreateCommandQueue=0x0`,
+`CreateSwapChainForHwnd=0x0`, a distinct native interface beneath the swap,
+`slDLSSGSetOptions(Off)=0`, `Present(TEST)=0x0`, `Present=0x0`,
+`slDLSSGGetState=0 status=0x0 actualPresented=1 maxExtra=1`,
+`ResizeBuffers=0x0`, `slShutdown=0`, and process exit 0. The single presented
+frame was the real frame with FG Off; no generated frame was requested or
+observed. This proves the matched public SDK can own a lower D3D12 swap and
+forward an Off Present/resize locally. Skyrim/ENB/ReShade ownership and FG On
+remain **NOT RUN**. The installed V5.4 0.1.115 DLL is unchanged by this
+harness-only work; its creation-time COM trace is still the next live gate.
+
 ## 0.1.115 read-only FG swap-owner preflight installed (2026-09-28)
 
 Existing V5.4 owner-started logs show a ReShade 6.8 nested
