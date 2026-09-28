@@ -14,12 +14,22 @@ an expected compile failure for the missing contract, then an expected config
 test failure before restart classification, followed by a Release build and
 46/46 passing CTest groups. See `docs/design/FG_PROVIDER_ARCHITECTURE.md`.
 
+The first GPU transport is now source-only: it validates D3D11/D3D12 adapter
+LUID and queue identity, copies a single-sample D3D11 texture to a shared
+surface, signals the D3D11 producer fence, waits on D3D12, and returns a
+copy-completion ticket. A WARP integration test reads the copied pixels back
+through D3D12 at an odd 37x19 extent, and rejects cross-bridge and mismatched
+source textures. Release build and **47/47** CTest groups pass. This proves
+one shared input and its producer/copy synchronization in an offline harness;
+the five-input source frame, provider consumption and Present fences are not
+yet connected.
+
 **Actual FG backend creation, generated GPU output, Skyrim runtime result and
 FSR-on-NVIDIA SR pairing: NOT RUN.** This work has no presentation owner or
 vendor FG submission yet and has not been installed into V5.4 MO2. The next
-implementation step is a same-adapter, generation-safe D3D11-to-D3D12 input
-lease and offline presentation-owner harness; only after that should the
-owner-started game verify a backend.
+implementation step is a complete generation-safe input lease and offline
+presentation-owner harness; only after that should the owner-started game
+verify a backend.
 
 ## 0.1.114 cold loading UI and first-world hitch candidate (2026-09-28)
 
