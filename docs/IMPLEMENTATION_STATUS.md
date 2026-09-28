@@ -1,5 +1,18 @@
 # Implementation checkpoint
 
+## FG D3D11-to-D3D12 lower-colour bridge (2026-09-28)
+
+The source-only `FgD3D11PresentBridge` now moves a D3D11-rendered colour frame
+through a same-adapter shared surface into the current D3D12 lower swap
+buffer, then forwards one real Present. A hidden-window WARP test read back
+the correct colours on two successive swap indices, checked D3D11 texture
+device ownership, TEST Present preservation and duplicate-Present rejection.
+Debug and Release **52/52** CTest groups passed. See
+`docs/re/FG_D3D11_PRESENT_BRIDGE_2026-09-28.md` for exact scope. This is
+offline pixel-transfer evidence; a game-facing COM facade, resize, provider
+integration, generated frames and Skyrim runtime verification are still open.
+The installed V5.4 0.1.115 DLL is unchanged, and no game was started.
+
 ## V5.4 FG swap facade live trace (2026-09-28)
 
 The user-started 0.1.115 read-only preflight captured both the ReShade nested

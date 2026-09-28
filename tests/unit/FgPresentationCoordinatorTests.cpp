@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgPresentationCoordinator.hpp"
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -18,7 +19,7 @@ rk::FgSourceFrame frame(std::uint64_t source) {
     return f;
 }
 struct Backend final : rk::IFgPresentBackend {
-    std::vector<const char*> calls;
+    std::vector<std::string_view> calls;
     bool failEnable{};
     bool failDisable{};
     bool failPresent{};
@@ -59,7 +60,7 @@ TEST_CASE("FG toggle configures Off before one real Present", "[fg_presentation]
     REQUIRE(std::get<rk::FgPresentOutcome>(off).decision.reason==
         rk::FgReason::Disabled);
     REQUIRE(std::get<rk::FgPresentOutcome>(off).actualGeneratedFrames==0);
-    REQUIRE(backend.calls==std::vector<const char*>{"on","present","off-drain","present"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"on","present","off-drain","present"});
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(2),false)));
     REQUIRE(backend.calls.size()==4);
 }
@@ -76,7 +77,7 @@ TEST_CASE("Failed FG enable presents the real frame with FG Off",
     const auto& outcome=std::get<rk::FgPresentOutcome>(result);
     REQUIRE(outcome.decision.effective==rk::FgProvider::Off);
     REQUIRE(outcome.actualGeneratedFrames==0);
-    REQUIRE(backend.calls==std::vector<const char*>{"on","off-drain","present"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"on","off-drain","present"});
 }
 
 TEST_CASE("Missing native UI turns an active FG backend Off before Present",
@@ -92,7 +93,7 @@ TEST_CASE("Missing native UI turns an active FG backend Off before Present",
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(result));
     REQUIRE(std::get<rk::FgPresentOutcome>(result).decision.reason==
         rk::FgReason::MissingNativeUi);
-    REQUIRE(backend.calls==std::vector<const char*>{"on","present","off-drain","present"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"on","present","off-drain","present"});
 }
 
 TEST_CASE("A failed Off drain does not call the lower Present", "[fg_presentation]") {
@@ -103,10 +104,10 @@ TEST_CASE("A failed Off drain does not call the lower Present", "[fg_presentatio
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(1),true)));
     backend.failDisable=true;
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(2),false)));
-    REQUIRE(backend.calls==std::vector<const char*>{"on","present","off-drain"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"on","present","off-drain"});
     backend.failDisable=false;
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(2),false)));
-    REQUIRE(backend.calls==std::vector<const char*>{
+    REQUIRE(backend.calls==std::vector<std::string_view>{
         "on","present","off-drain","off-drain","present"});
 }
 
@@ -151,14 +152,14 @@ TEST_CASE("DXGI test Present bypasses generation and does not consume a source",
         rk::FgReason::PresentTest);
     REQUIRE(backend.lastCall.flags==DXGI_PRESENT_TEST);
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(1),true)));
-    REQUIRE(backend.calls==std::vector<const char*>{"present","on","present"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"present","on","present"});
     const auto probeWhileOn=owner.present(frame(2),true,test);
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(probeWhileOn));
     REQUIRE(owner.enabled());
-    REQUIRE(backend.calls==std::vector<const char*>{
+    REQUIRE(backend.calls==std::vector<std::string_view>{
         "present","on","present","present"});
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(2),true)));
-    REQUIRE(backend.calls==std::vector<const char*>{
+    REQUIRE(backend.calls==std::vector<std::string_view>{
         "present","on","present","present","present"});
 }
 
@@ -172,7 +173,7 @@ TEST_CASE("An uncertain lower Present error consumes its source token",
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(1),false)));
     backend.failPresent=false;
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(1),false)));
-    REQUIRE(backend.calls==std::vector<const char*>{"present"});
+    REQUIRE(backend.calls==std::vector<std::string_view>{"present"});
 }
 
 TEST_CASE("Backend-generated count cannot exceed the requested count",
@@ -200,7 +201,7 @@ TEST_CASE("FG suspension drains once and leaves failed drain active",
     REQUIRE(std::holds_alternative<bool>(owner.suspend()));
     REQUIRE_FALSE(owner.enabled());
     REQUIRE(std::holds_alternative<bool>(owner.suspend()));
-    REQUIRE(backend.calls==std::vector<const char*>{
+    REQUIRE(backend.calls==std::vector<std::string_view>{
         "on","present","off-drain","off-drain"});
     REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(2),true)));
 }

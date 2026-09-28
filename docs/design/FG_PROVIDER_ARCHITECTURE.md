@@ -45,6 +45,10 @@ device identity, while D3D12 `GetDevice` returns `E_NOINTERFACE`. The
 game-facing facade must preserve that D3D11 contract, expose D3D11 backbuffer
 textures and hide the D3D12 lower owner. See
 `docs/re/FG_V54_SWAP_FACADE_LIVE_2026-09-28.md`.
+An offline WARP bridge now proves the physical D3D11 colour-to-D3D12 lower
+backbuffer transfer and one real Present across two successive buffers. It
+does not implement the COM facade or game resize path; see
+`docs/re/FG_D3D11_PRESENT_BRIDGE_2026-09-28.md`.
 The End-menu FG tab and configured toggle hotkey can request On/Off during a
 session. Until a backend connects them to the lower Present, the menu must
 report Effective Off. The in-game provider selector writes a restart-pending
