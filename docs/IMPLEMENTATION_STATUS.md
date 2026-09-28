@@ -1,5 +1,17 @@
 # Implementation checkpoint
 
+## FG D3D11 swap COM facade (2026-09-28)
+
+The source-only `FgD3D11SwapFacade` now exposes SwapChain1/3/4, virtual
+D3D11 backbuffers and original D3D11 device identity above a D3D12 lower
+swap. WARP tested pixel readback after Present/Present1, D3D12 query hiding,
+held-buffer and invalid resize rejection, ResizeBuffers/1, and twelve repeated
+resize/present cycles. Debug and Release each passed **52/52** CTest groups.
+See `docs/re/FG_D3D11_COM_FACADE_2026-09-28.md`. Wrapper-chain integration,
+zero-size resize, private-data lifetime, nonblocking pacing, provider tags,
+FG On and generated output remain open. No game installation changed; Skyrim
+runtime verification for this facade is **NOT RUN**.
+
 ## FG D3D11-to-D3D12 lower-colour bridge (2026-09-28)
 
 The source-only `FgD3D11PresentBridge` now moves a D3D11-rendered colour frame
@@ -9,8 +21,8 @@ the correct colours on two successive swap indices, checked D3D11 texture
 device ownership, TEST Present preservation and duplicate-Present rejection.
 Debug and Release **52/52** CTest groups passed. See
 `docs/re/FG_D3D11_PRESENT_BRIDGE_2026-09-28.md` for exact scope. This is
-offline pixel-transfer evidence; a game-facing COM facade, resize, provider
-integration, generated frames and Skyrim runtime verification are still open.
+offline pixel-transfer evidence; the subsequent facade, provider integration,
+generated frames and Skyrim runtime verification are separate work.
 The installed V5.4 0.1.115 DLL is unchanged, and no game was started.
 
 ## V5.4 FG swap facade live trace (2026-09-28)

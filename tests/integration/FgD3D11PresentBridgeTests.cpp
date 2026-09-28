@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgD3D11PresentBridge.hpp"
+#include "rk/FgD3D11SwapFacade.hpp"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -149,4 +150,115 @@ TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
     const auto secondPixel=readPixel(gpu,next);
     REQUIRE((secondPixel==std::array<std::uint8_t,4>{255,0,0,255}));
     REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
+}
+
+TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    auto made=rk::FgD3D11SwapFacade::create(gpu.d11.Get(),gpu.context.Get(),
+        gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get());
+    REQUIRE(std::holds_alternative<ComPtr<IDXGISwapChain4>>(made));
+    auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
+    ComPtr<IDXGISwapChain1> one;
+    ComPtr<IDXGISwapChain3> three;
+    REQUIRE(SUCCEEDED(facade.As(&one)));
+    REQUIRE(SUCCEEDED(facade.As(&three)));
+    ComPtr<IUnknown> identityOne,identityThree;
+    REQUIRE(SUCCEEDED(one.As(&identityOne)));
+    REQUIRE(SUCCEEDED(three.As(&identityThree)));
+    REQUIRE(identityOne.Get()==identityThree.Get());
+    ComPtr<ID3D11Device> gameDevice;
+    REQUIRE(SUCCEEDED(facade->GetDevice(IID_PPV_ARGS(&gameDevice))));
+    REQUIRE(gameDevice.Get()==gpu.d11.Get());
+    ComPtr<ID3D12Device> hiddenDevice;
+    REQUIRE(facade->GetDevice(IID_PPV_ARGS(&hiddenDevice))==E_NOINTERFACE);
+    const auto index=facade->GetCurrentBackBufferIndex();
+    ComPtr<ID3D11Texture2D> gameBuffer;
+    REQUIRE(SUCCEEDED(facade->GetBuffer(index,IID_PPV_ARGS(&gameBuffer))));
+    ComPtr<ID3D11Device> bufferDevice;
+    gameBuffer->GetDevice(&bufferDevice);
+    REQUIRE(bufferDevice.Get()==gpu.d11.Get());
+    ComPtr<ID3D12Resource> hiddenBuffer;
+    REQUIRE(facade->GetBuffer(index,IID_PPV_ARGS(&hiddenBuffer))==E_NOINTERFACE);
+    ComPtr<ID3D11RenderTargetView> view;
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(gameBuffer.Get(),nullptr,&view)));
+    const float green[]{0.0f,1.0f,0.0f,1.0f};
+    gpu.context->ClearRenderTargetView(view.Get(),green);
+    REQUIRE(SUCCEEDED(facade->Present(0,DXGI_PRESENT_TEST)));
+    REQUIRE(SUCCEEDED(facade->Present(0,0)));
+    REQUIRE((readPixel(gpu,index)==std::array<std::uint8_t,4>{0,255,0,255}));
+    REQUIRE(SUCCEEDED(facade->Present(0,0)));
+    REQUIRE(facade->ResizeBuffers(2,80,60,DXGI_FORMAT_R8G8B8A8_UNORM,0)==
+        DXGI_ERROR_INVALID_CALL);
+    view.Reset();
+    gameBuffer.Reset();
+    bufferDevice.Reset();
+    gpu.context->ClearState();
+    gpu.context->Flush();
+    REQUIRE(facade->ResizeBuffers(7,80,60,
+        DXGI_FORMAT_R8G8B8A8_UNORM,0)==DXGI_ERROR_INVALID_CALL);
+    DXGI_SWAP_CHAIN_DESC unchanged{};
+    REQUIRE(SUCCEEDED(facade->GetDesc(&unchanged)));
+    REQUIRE(unchanged.BufferDesc.Width==64);
+    REQUIRE(unchanged.BufferDesc.Height==48);
+    REQUIRE(SUCCEEDED(facade->ResizeBuffers(2,80,60,
+        DXGI_FORMAT_R8G8B8A8_UNORM,0)));
+    DXGI_SWAP_CHAIN_DESC resized{};
+    REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
+    REQUIRE(resized.BufferDesc.Width==80);
+    REQUIRE(resized.BufferDesc.Height==60);
+    const auto resizedIndex=facade->GetCurrentBackBufferIndex();
+    REQUIRE(SUCCEEDED(facade->GetBuffer(resizedIndex,
+        IID_PPV_ARGS(&gameBuffer))));
+    D3D11_TEXTURE2D_DESC resizedTexture{};
+    gameBuffer->GetDesc(&resizedTexture);
+    REQUIRE(resizedTexture.Width==80);
+    REQUIRE(resizedTexture.Height==60);
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(gameBuffer.Get(),
+        nullptr,&view)));
+    const float blue[]{0.0f,0.0f,1.0f,1.0f};
+    gpu.context->ClearRenderTargetView(view.Get(),blue);
+    REQUIRE(SUCCEEDED(facade->Present(0,0)));
+    REQUIRE((readPixel(gpu,resizedIndex)==
+        std::array<std::uint8_t,4>{0,0,255,255}));
+    view.Reset();
+    gameBuffer.Reset();
+    gpu.context->ClearState();
+    gpu.context->Flush();
+    const UINT nodes[]{0,0};
+    IUnknown* queues[]{gpu.queue.Get(),gpu.queue.Get()};
+    REQUIRE(SUCCEEDED(facade->ResizeBuffers1(2,96,64,
+        DXGI_FORMAT_R8G8B8A8_UNORM,0,nodes,queues)));
+    REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
+    REQUIRE(resized.BufferDesc.Width==96);
+    REQUIRE(resized.BufferDesc.Height==64);
+    const auto third=facade->GetCurrentBackBufferIndex();
+    REQUIRE(SUCCEEDED(facade->GetBuffer(third,IID_PPV_ARGS(&gameBuffer))));
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(gameBuffer.Get(),
+        nullptr,&view)));
+    const float yellow[]{1.0f,1.0f,0.0f,1.0f};
+    gpu.context->ClearRenderTargetView(view.Get(),yellow);
+    DXGI_PRESENT_PARAMETERS parameters{};
+    REQUIRE(SUCCEEDED(facade->Present1(0,0,&parameters)));
+    REQUIRE((readPixel(gpu,third)==
+        std::array<std::uint8_t,4>{255,255,0,255}));
+    for(UINT n=0;n<12;++n) {
+        view.Reset();
+        gameBuffer.Reset();
+        gpu.context->ClearState();
+        gpu.context->Flush();
+        REQUIRE(SUCCEEDED(facade->ResizeBuffers(2,100+n,70+n,
+            DXGI_FORMAT_R8G8B8A8_UNORM,0)));
+        const auto current=facade->GetCurrentBackBufferIndex();
+        REQUIRE(SUCCEEDED(facade->GetBuffer(current,
+            IID_PPV_ARGS(&gameBuffer))));
+        D3D11_TEXTURE2D_DESC extent{};
+        gameBuffer->GetDesc(&extent);
+        REQUIRE(extent.Width==100+n);
+        REQUIRE(extent.Height==70+n);
+        REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(gameBuffer.Get(),
+            nullptr,&view)));
+        gpu.context->ClearRenderTargetView(view.Get(),yellow);
+        REQUIRE(SUCCEEDED(facade->Present(0,0)));
+    }
 }

@@ -23,11 +23,11 @@ that test now compares the call text through `std::string_view`.
 This is a same-adapter pixel-transfer and ordering result, not a DLSS-G or FSR
 generated-frame result. No Skyrim process was started for this test.
 
-The component is intentionally **not installed**. It is not an
-`IDXGISwapChain` COM facade, does not expose virtual D3D11 `GetBuffer` or
-`GetDevice` to the V5.4 wrappers, does not handle ResizeBuffers or device
-recovery, and currently blocks the CPU for completion in the offline proof.
-The next source task is a WARP-tested D3D11-facing COM facade with the exact
-observed `SwapChain1/3/4`, `GetDevice(D3D11)`, `GetBuffer`, Present and resize
-contracts. Only after that survives wrapper-chain testing should the installed
-path change. FG On and generated output in Skyrim remain **NOT RUN**.
+The component is intentionally **not installed**. The bridge itself is not an
+`IDXGISwapChain` COM facade and currently blocks the CPU for completion. Its
+resize transaction now prepares replacement D3D11 buffers before forwarding
+an explicit-size lower ResizeBuffers/1 and rejects held virtual buffers.
+The subsequent source-only COM facade and its WARP result are recorded in
+`docs/re/FG_D3D11_COM_FACADE_2026-09-28.md`. Wrapper-chain testing and device
+recovery remain before any installed replacement. FG On and generated output
+in Skyrim remain **NOT RUN**.

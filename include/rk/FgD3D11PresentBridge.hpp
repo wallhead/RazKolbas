@@ -20,6 +20,7 @@ public:
     ID3D11Texture2D* renderBuffer(UINT index) const noexcept;
     HRESULT copyToCurrent() noexcept;
     HRESULT presentPrepared(const FgPresentCall& call) noexcept;
+    HRESULT resize(const FgResizeCall& call) noexcept;
     bool prepared() const noexcept { return prepared_; }
 private:
     FgD3D11PresentBridge(FgLowerSwap lower,

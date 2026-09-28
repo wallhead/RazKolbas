@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <exception>
 #include <mutex>
+#include <new>
 #include <variant>
 
 namespace rk {
@@ -209,5 +210,67 @@ HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcep
         return DXGI_ERROR_INVALID_CALL;
     prepared_=false;
     return lower_.present(call);
+}
+HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
+    try {
+    if(prepared_||poisoned_)return DXGI_ERROR_INVALID_CALL;
+    if(!call.width||!call.height)
+        return DXGI_ERROR_UNSUPPORTED;
+    DXGI_SWAP_CHAIN_DESC old{};
+    auto hr=lower_.getDesc(&old);
+    if(FAILED(hr))return hr;
+    const auto count=call.buffers?call.buffers:old.BufferCount;
+    const auto format=call.format==DXGI_FORMAT_UNKNOWN?
+        old.BufferDesc.Format:call.format;
+    if(count<2||count>4||format==DXGI_FORMAT_UNKNOWN)
+        return DXGI_ERROR_INVALID_CALL;
+    if(call.method==FgResizeMethod::ResizeBuffers) {
+        if(call.creationNodeMask||call.presentQueue)return E_INVALIDARG;
+    } else if(call.method==FgResizeMethod::ResizeBuffers1) {
+        if(call.presentQueue)
+            for(UINT i=0;i<count;++i)
+                if(!sameIdentity(call.presentQueue[i],queue_.Get()))
+                    return DXGI_ERROR_INVALID_CALL;
+    } else return E_INVALIDARG;
+    for(const auto& texture:render_) {
+        // The bridge owns one reference. A caller-held buffer or view prevents
+        // replacing this generation, just as DXGI rejects held backbuffers.
+        const auto refs=texture->AddRef();
+        texture->Release();
+        if(refs>2)return DXGI_ERROR_INVALID_CALL;
+    }
+    D3D11_TEXTURE2D_DESC source{};
+    render_.front()->GetDesc(&source);
+    source.Width=call.width;
+    source.Height=call.height;
+    source.Format=format;
+    std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> nextRender;
+    std::vector<FgSharedSurface> nextShared;
+    nextRender.reserve(count);
+    nextShared.reserve(count);
+    for(UINT i=0;i<count;++i) {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        if(FAILED(hr=d11_->CreateTexture2D(&source,nullptr,&texture)))return hr;
+        auto shared=interop_->makeSurface(source);
+        if(!std::holds_alternative<FgSharedSurface>(shared))return E_FAIL;
+        nextRender.push_back(std::move(texture));
+        nextShared.push_back(std::move(std::get<FgSharedSurface>(shared)));
+    }
+    hr=lower_.resize(call);
+    if(FAILED(hr))return hr;
+    DXGI_SWAP_CHAIN_DESC actual{};
+    if(FAILED(lower_.getDesc(&actual))||actual.BufferCount!=count||
+       actual.BufferDesc.Width!=call.width||
+       actual.BufferDesc.Height!=call.height||
+       actual.BufferDesc.Format!=format) {
+        poisoned_=true;
+        return E_FAIL;
+    }
+    render_.swap(nextRender);
+    shared_.swap(nextShared);
+    return S_OK;
+    } catch(const std::bad_alloc&) {
+        return E_OUTOFMEMORY;
+    }
 }
 }
