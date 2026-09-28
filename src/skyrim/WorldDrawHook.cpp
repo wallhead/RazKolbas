@@ -32,6 +32,7 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -142,6 +143,7 @@ struct WorldState {
     OwnedSceneAdmissionGate menuSceneGate;
     bool ownedInputCaptureOnly{};
     bool ownedSpatialBaseline{};
+    bool captureFirstDlssFrame{};
     UpscaleQuality earlyQuality{UpscaleQuality::Quality};
     double manualRenderScale{};
     bool automaticMipBias{true};
@@ -151,7 +153,7 @@ struct WorldState {
     bool ownedInputCaptureAttempted{};
     std::uint64_t ownedNgxCreatedAt{};
     bool ownedNgxInitFailed{};
-    bool nativeUiRouteActivated{},coldTitleUiRouteLogged{};
+    bool nativeUiRouteActivated{},coldTitleUiRouteLogged{},coldLoadingUiRouteLogged{};
     std::uint64_t menuProviderAdmissionGeneration{};
     std::uint64_t deferredUiFlushRebinds{};
     std::uint64_t hudUiTraceFrame{};
@@ -1078,7 +1080,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 stats?std::optional<ColorSampleStats>{stats->color}:std::nullopt,
                 stats?std::optional<DepthSampleStats>{stats->depth}:std::nullopt);
             const bool ready=state->ownedSceneGate.ready();
-            if(ready&&!wasReady) {
+            if(ready&&!wasReady&&state->captureFirstDlssFrame) {
                 state->ownedPrePresentProbes.store(2,std::memory_order_release);
                 state->ownedPostEnbProbes.store(2,std::memory_order_release);
             }
@@ -1127,6 +1129,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     return Error{ErrorCode::Unavailable,"Owned NGX feature creation previously failed"};
                 if(!state->ownedNgxCreatedAt) {
                     spdlog::info("Owned NGX stage frame {}: before feature creation",sequence);
+                    const auto started=std::chrono::steady_clock::now();
                     const auto initialized=state->srPresenter.createReducedFeature(device,context);
                     if(const auto error=std::get_if<Error>(&initialized)) {
                         state->ownedNgxInitFailed=true;
@@ -1139,8 +1142,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         return Error{ErrorCode::Unavailable,"Owned NGX feature was not created"};
                     }
                     state->ownedNgxCreatedAt=sequence;
-                    spdlog::info("Owned NGX stage frame {}: feature created; waiting 120 frames before evaluation",
-                        sequence);
+                    const auto elapsed=std::chrono::duration<double,std::milli>(
+                        std::chrono::steady_clock::now()-started).count();
+                    spdlog::info("Owned NGX stage frame {}: feature created in {:.3f} ms; waiting 120 frames before evaluation",
+                        sequence,elapsed);
                 }
                 if(sequence<state->ownedNgxCreatedAt||
                    sequence-state->ownedNgxCreatedAt<120)
@@ -1159,6 +1164,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 if(firstAttempt)
                     spdlog::info("Owned NGX stage frame {}: before pooled evaluation",
                         sequence);
+                const auto evaluationStarted=std::chrono::steady_clock::now();
                 if(firstAttempt) {
                     const auto jitter=std::get<NgxJitter>(renderJitter);
                     spdlog::info("Owned NGX evaluation parameters: jitter=({},{}); MVScale={}x{}; ngxSharpness=0; postSharpness={}; autoExposure=true; reset=true",
@@ -1173,14 +1179,16 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                             SrSourcePhase::MenuDisplay:SrSourcePhase::PrePresent},
                     std::get<NgxJitter>(renderJitter));
                 if(firstAttempt)
-                    spdlog::info("Owned NGX stage frame {}: first evaluation returned",sequence);
+                    spdlog::info("Owned NGX stage frame {}: first evaluation returned in {:.3f} ms",
+                        sequence,std::chrono::duration<double,std::milli>(
+                            std::chrono::steady_clock::now()-evaluationStarted).count());
                 if(const auto error=std::get_if<Error>(&evaluated)) {
                     if(error->code==ErrorCode::DeviceRemoved)return *error;
                     return Error{ErrorCode::Unavailable,error->message};
                 }
                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
                 if(!token)return false;
-                if(!state->ownedSrStageAttempted) {
+                if(state->captureFirstDlssFrame&&!state->ownedSrStageAttempted) {
                     state->ownedSrStageAttempted=true;
                     auto stages=state->srPresenter.captureEvaluated(context,*token);
                     if(const auto error=std::get_if<Error>(&stages))
@@ -1230,7 +1238,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->ownedFallbacks.emplace_back(std::move(outcome));
             ++state->srSkipped;
         }
-        if(sequence==1) {
+        if(sequence==1&&state->captureFirstDlssFrame) {
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
@@ -1343,36 +1351,60 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                             frame,std::get<Error>(sample).message);
                 } catch(...) {}
             }
-            bool coldTitleReady=false;
+            const bool coldTitle=titleMenuOnStack(state);
+            const bool coldLoading=namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
+            bool coldMenuReady=false;
             if(frame>12&&!state->ownedSceneGate.ready()&&
-               titleMenuOnStack(state)&&ui->latePassRoutingAvailable()&&
+               (coldTitle||coldLoading)&&ui->latePassRoutingAvailable()&&
                !ui->compatibilityFault()) {
-                // The title has no world-like depth, so NGX stays gated. A
-                // verified renderer/guide chain still permits the existing
-                // spatial scene publication before native Scaleform drawing.
+                // Cold title/loading has no world-like depth, so NGX stays
+                // gated. Publish its scene spatially before native Scaleform.
                 const auto numbers=readWorldNumbers(
                     reinterpret_cast<void*>(state->expectedRenderer),
                     state->expectedRenderer);
-                coldTitleReady=numbers.valid&&
+                coldMenuReady=numbers.valid&&
                     numbers.lockOwner==GetCurrentThreadId()&&
                     numbers.lockRecursion>0&&
                     numbers.device==state->createdDevice.load(std::memory_order_acquire)&&
                     numbers.context==state->createdContext.load(std::memory_order_acquire)&&
                     numbers.swap==state->createdSwap.load(std::memory_order_acquire)&&
                     numbers.motion&&numbers.depth&&activeOwnedSceneTexture();
+                if(coldMenuReady&&coldTitle&&!state->ownedNgxCreatedAt&&
+                   !state->ownedNgxInitFailed&&!state->ownedSpatialBaseline&&
+                   !state->ownedInputCaptureOnly) {
+                    const auto started=std::chrono::steady_clock::now();
+                    auto created=state->srPresenter.createReducedFeature(
+                        reinterpret_cast<ID3D11Device*>(numbers.device),
+                        reinterpret_cast<ID3D11DeviceContext*>(numbers.context));
+                    if(const auto error=std::get_if<Error>(&created)) {
+                        state->ownedNgxInitFailed=true;
+                        spdlog::warn("Owned NGX cold-title prewarm failed at frame {}: {}",
+                            frame,error->message);
+                    } else if(std::get<bool>(created)) {
+                        state->ownedNgxCreatedAt=frame;
+                        spdlog::info("Owned NGX feature prewarmed on cold title at frame {} in {:.3f} ms; evaluation remains gated until world admission and 120 frames",
+                            frame,std::chrono::duration<double,std::milli>(
+                                std::chrono::steady_clock::now()-started).count());
+                    } else state->ownedNgxInitFailed=true;
+                }
             }
-            if(frame>12&&(coldTitleReady||shouldUseMenuPublication(
+            if(frame>12&&(coldMenuReady||shouldUseMenuPublication(
                    state->nativeUiRouteActivated,state->menuSceneGate.ready(),
                    ui->latePassRoutingAvailable()))) {
                 if(processOwnedWorldFrame(state,
                     reinterpret_cast<void*>(state->expectedRenderer),frame,
                     OwnedPublicationBoundary::MenuDisplay)&&
                    domain->phase()==ScenePhase::NativeUi) {
-                    if(coldTitleReady&&!state->coldTitleUiRouteLogged) {
+                    if(coldMenuReady&&coldTitle&&!state->coldTitleUiRouteLogged) {
                         state->coldTitleUiRouteLogged=true;
                         try {spdlog::info("Owned cold Main Menu spatial publication entered native UI at frame {}; provider remains gated until world admission",
                             frame);}catch(...) {}
-                    } else if(!coldTitleReady&&!state->nativeUiRouteActivated) {
+                    } else if(coldMenuReady&&coldLoading&&
+                              !state->coldLoadingUiRouteLogged) {
+                        state->coldLoadingUiRouteLogged=true;
+                        try {spdlog::info("Owned cold Loading Menu spatial publication entered native UI at frame {}; provider remains gated until world admission",
+                            frame);}catch(...) {}
+                    } else if(!coldMenuReady&&!state->nativeUiRouteActivated) {
                         state->nativeUiRouteActivated=true;
                         try {spdlog::info("Owned native UI resource route activated at frame {} after same-boundary colour/depth admission; DLSS submissions={}",
                             frame,state->srPresenter.submittedFrames());}catch(...) {}
@@ -1433,7 +1465,11 @@ void beforeDeferredUiFlush(void*) noexcept {
             menuInstanceOnStack(state,RE::MagicMenu::MENU_NAME);
         preservedMagicComposite=magicMenu&&magicMenu->uiMovie;
         preservedMainMenuComposite=!preservedInventoryComposite&&
-            !preservedMagicComposite&&titleMenuOnStack(state);
+            !preservedMagicComposite&&
+            (titleMenuOnStack(state)||
+             (namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)&&
+              state->srPresenter.submittedFrames()==0&&
+              !state->ownedSceneGate.ready()));
         if(preservedInventoryComposite||preservedMagicComposite||
            preservedMainMenuComposite) {
             // The MagicMenu capture showed its movie only in the reduced
@@ -2966,6 +3002,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     pending->manualMipBias=settings.get<double>("Upscaling.ManualMipBias");
     pending->ownedSpatialBaseline=
         settings.get<bool>("Diagnostics.SpatialBaselineOnly");
+    pending->captureFirstDlssFrame=
+        settings.get<bool>("Diagnostics.CaptureFirstDlssFrame");
     if(pending->ownedSpatialBaseline)
         spdlog::info("Owned reduced route configured for spatial baseline; NGX submissions disabled");
 #endif

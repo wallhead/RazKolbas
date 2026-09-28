@@ -10,7 +10,8 @@ Settings nrLiveSettingsForSession(const Settings& requested,const Settings& acti
 ChangeCategory classifyChange(const Settings& before, const Settings& after) {
     for (const auto key : {"General.Presentation", "General.SafeMode",
         "NeuralRendering.RuntimeProfile", "NeuralRendering.AllowExperimentalRuntime",
-        "Diagnostics.CaptureHotkey", "Diagnostics.SpatialBaselineOnly",
+        "Diagnostics.CaptureHotkey", "Diagnostics.CaptureFirstDlssFrame",
+        "Diagnostics.SpatialBaselineOnly",
         "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches",
         "Patching.DisabledPatchIds"})
         if (before.values.at(key) != after.values.at(key)) return ChangeCategory::RestartRequired;

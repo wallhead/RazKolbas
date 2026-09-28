@@ -1,5 +1,31 @@
 # DLSS Quality HUD resolution boundary: evidence before a shared fix
 
+## 0.1.114 cold loading candidate (2026-09-28)
+
+Source extends the cold-title pre-Scaleform spatial publication to cold
+`Loading Menu` while the world colour/depth gate is false. The already-good
+post-DLSS loading route remains unchanged. A reduced late-menu pass is held
+from overwriting the native loading composite, matching the existing title
+handling. The earlier 0.1.113 build was installed but not game-tested, and is
+superseded by 0.1.114. Build and 45/45 CTest groups pass; the 0.1.114 DLL is
+installed in V5.4 MO2 with all eight manifest payload hashes verified.
+**Game rendering is NOT RUN**.
+
+## 0.1.112 loading boundary observed (2026-09-28)
+
+In the owner-started 0.1.112 session, loading frames 1–3 had a 1485x835
+scene, `Loading Menu` and `LoadWaitSpinner` full-screen movie viewports, and
+1485x835 RTV/DSV/viewport before and after Scaleform EndFrame. The resulting
+pre-Present path spatially stretched that composite to 2560x1440. Both the
+movie rasterization and target were reduced before publication; changing the
+movie viewport alone would crop content. The existing cold-title native-UI
+handoff deliberately skips `Loading Menu`. A dedicated pre-UI handoff for cold
+loading is the candidate. On a later loading transition (frames 8517–8519)
+after 953–955 DLSS submissions, the Scaleform target and viewport were native
+2560x1440 at `PostDisplay`; the owner reported that this second loading screen
+looked good. Its movie viewport remained 1485x835, so changing every loading
+movie is not supported by the visual result. No repair has been game-tested.
+
 ## 0.1.111 game result and remaining loading UI (2026-09-28)
 
 In the owner-started 0.1.111 run, the live scene was 1485x835 and display

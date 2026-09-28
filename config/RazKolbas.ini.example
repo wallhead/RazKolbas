@@ -128,6 +128,7 @@ LogResourceGenerations = false
 GraphicsDebugValidation = false
 ; Retired ratio-only experiment. A true value is rejected without changing the renderer.
 ProbeReducedWorld = false
+CaptureFirstDlssFrame = false
 ; Diagnostic comparison mode: retain reduced rendering and final UI routing,
 ; but publish the current frame with the spatial scaler instead of DLSS.
 SpatialBaselineOnly = false

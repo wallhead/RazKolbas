@@ -51,6 +51,15 @@ TEST_CASE("Schema defaults preserve user intent and unknown INI data", "[config]
     REQUIRE(std::get<std::string>(text).find("; keep this") != std::string::npos);
     REQUIRE(std::get<rk::Settings>(rk::parseIni(std::get<std::string>(text))).values == settings.values);
 }
+TEST_CASE("First DLSS frame capture is explicit and restart-scoped", "[config]") {
+    const auto defaults=rk::defaultSettings();
+    REQUIRE_FALSE(defaults.get<bool>("Diagnostics.CaptureFirstDlssFrame"));
+    const auto parsed=rk::parseIni("[Diagnostics]\nCaptureFirstDlssFrame=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& enabled=std::get<rk::Settings>(parsed);
+    REQUIRE(enabled.get<bool>("Diagnostics.CaptureFirstDlssFrame"));
+    REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+}
 TEST_CASE("Invalid input rejects whole snapshot rather than publishing partial values", "[config]") {
     for (const auto input : {"[Upscaling]\nProvider=Magic\n", "[Upscaling]\nSharpness=nan\n", "[Upscaling]\nSharpness=inf\n", "[Upscaling]\nSharpness=0.5garbage\n", "[Upscaling]\nManualMipBias=-3.01\n", "[Upscaling]\nManualMipBias=3.01\n", "[Interface]\nFontScale=0\n", "[General]\nEnabled=true\nEnabled=false\n"})
         REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni(input)));

@@ -1,5 +1,55 @@
 # Implementation checkpoint
 
+## 0.1.114 cold loading UI and first-world hitch candidate (2026-09-28)
+
+Source 0.1.114 extends the already-working cold-title spatial pre-UI handoff
+to `Loading Menu` only while world colour/depth admission has not succeeded.
+It preserves the resulting native menu composite against a later reduced menu
+copy; loading after DLSS admission retains its prior route. The cold title now
+creates the planned NGX feature before save loading, while evaluation still
+requires world-like colour/depth and the existing 120-frame post-creation
+interval. This should remove that interval from the visible first world when
+the title remains open long enough. First feature creation and evaluation
+CPU durations are logged to narrow the reported stutter; GPU time is not
+measured by these timestamps. The automatic first-DLSS-frame 24 MiB input/output
+readback, final-composition readback, UI sequence capture, and first-world
+pixel probes are now guarded by `Diagnostics.CaptureFirstDlssFrame`, which
+defaults to false and needs a restart to change. The config test failed before
+this setting existed, then passed; Release build and 45/45 CTest groups pass.
+An earlier 0.1.113 candidate was installed but never game-tested and was
+superseded. With Skyrim closed, 0.1.114 DLL SHA-256
+`bd1ea4c1a1f5ce1db8a1c0d633a844eb57cd50f47ef3d23682fb2bedd7f56645`
+was installed into V5.4 MO2. All eight manifest payload hashes match. The
+user's INI and vendor runtimes were preserved; the superseded DLL, INI and
+manifest are backed up under ignored
+`artifacts/local/v54-0.1.114-first-frame-capture-gate-backup`. The 0.1.112
+DLL/INI/manifest backup also remains under ignored
+`artifacts/local/v54-0.1.113-cold-loading-prewarm-backup`. **Early loading
+visual result, first-world transition and stutter timing: NOT RUN** at this
+checkpoint.
+
+## 0.1.112 loading UI and save-load transition trace (2026-09-28)
+
+The owner ran installed 0.1.112 and loaded a save, reporting blurry loading
+text/logo/UI and a visible low-resolution world followed by a stutter when
+DLSS starts. Loading frames 1–3 show `Loading Menu` and `LoadWaitSpinner`
+Scaleform movies with 1485x835 full-screen viewports, drawn into a 1485x835
+RTV/DSV and D3D11 viewport before the 2560x1440 spatial pre-Present
+publication. This confirms that early loading text is already reduced before
+the final stretch; the world-HUD viewport window cannot repair it alone. In a
+second user-started run, a later loading transition at frames 8517–8519 had
+DLSS active, a native 2560x1440 RTV/DSV and viewport at `PostDisplay`, and
+the owner reports that screen looked good. Its Scaleform movie viewports still
+read 1485x835, and scissor was reduced by EndFrame, so the candidate fix must
+target the cold loading path only.
+
+The first world-like colour/depth admission was at frame 10678 (08:55:24).
+The NGX feature was created on that frame, a hard-coded 120-frame startup
+interval kept spatial fallback active, and first evaluation/publication was
+at frame 10798 (08:55:26). The trace establishes the two-second delayed
+switch and reduced interim image. It does not measure which GPU operation
+caused the perceived stutter. No loading UI or stutter repair is claimed yet.
+
 ## 0.1.112 loading-screen UI boundary diagnostic (2026-09-28)
 
 The owner reports that the 0.1.111 HUD bars and compass are sharper with no
@@ -17,7 +67,8 @@ was installed into V5.4 MO2. All eight installed manifest payload hashes
 match. The game-updated INI and SR/NR runtimes were preserved; the prior DLL,
 INI and manifest are backed up under ignored
 `artifacts/local/v54-0.1.112-loading-ui-probe-backup`. **0.1.112 Skyrim loading
-UI trace and visual result: NOT RUN.** See
+UI trace and visual result were pending at installation; the later actual
+game trace is recorded above.** See
 `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
 
 ## 0.1.111 HUD viewport game result (2026-09-28)
