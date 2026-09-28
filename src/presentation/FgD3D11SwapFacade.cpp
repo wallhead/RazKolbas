@@ -109,6 +109,7 @@ HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::GetCoreWindow(REFIID iid,
     void** window) { return lower_->GetCoreWindow(iid,window); }
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::Present1(UINT interval,UINT flags,
     const DXGI_PRESENT_PARAMETERS* parameters) {
+    if(!parameters)return E_INVALIDARG;
     const FgPresentCall call{FgPresentMethod::Present1,interval,flags,parameters};
     if(!(flags&DXGI_PRESENT_TEST)) {
         const auto hr=bridge_->copyToCurrent();

@@ -1,5 +1,19 @@
 # Implementation checkpoint
 
+## FG review 27 correction (2026-09-28)
+
+The source-only FG bridge now copies one cached D3D11 logical buffer zero to
+the rotating lower D3D12 backbuffer. A new WARP regression failed before the
+fix and passed afterwards for two- and three-buffer flip chains. Debug and
+Release passed **52/52** CTest groups. The Streamline 2.14.1 FG-Off facade
+probe exited 0 after the change. Earlier entries below claiming colour
+validation from *post-Present* FLIP_DISCARD readback are superseded: that
+buffer content is not guaranteed. Current pixel validation is the bridge
+WARP readback **before** Present; full facade pixel validation remains open.
+The installed V5.4 0.1.115 remains unchanged. Skyrim and FG-On/generated
+output remain **NOT RUN** for this change. See
+`docs/re/FG_REVIEW_27_TRIAGE.md`.
+
 ## Streamline lower-swap D3D11 facade, FG Off (2026-09-28)
 
 The hash-pinned Streamline 2.14.1 standalone probe now binds the D3D11

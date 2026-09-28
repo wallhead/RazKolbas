@@ -1,5 +1,14 @@
 # Streamline 2.14.1 D3D11 facade over D3D12 lower swap: FG-Off probe
 
+**Review 27 correction (2026-09-28):** The historical pixel readback below
+occurred *after* a FLIP_DISCARD Present, when DXGI does not guarantee buffer
+contents. Its observed value is recorded accurately but is not valid proof of
+the colour path. The probe no longer asserts that pixel. A WARP test now
+checks the lower destination *before* Present over repeated rotations of a
+cached D3D11 buffer zero. The Streamline probe still verifies proxy/native
+identity, FG-Off Present, state and resize, but no Streamline pixel result is
+currently claimed. See `FG_REVIEW_27_TRIAGE.md`.
+
 The standalone probe ran on the local RTX 4080 SUPER (vendor `0x10de`,
 device `0x2702`) with the hash-pinned Streamline 2.14.1 headers and signed
 runtime. It did not start Skyrim and did not change the V5.4 MO2 installation.
@@ -30,8 +39,8 @@ A subsequent probe changed the hidden window to 144x88 and passed zero for
 both ResizeBuffers dimensions. The facade derived the current client extent,
 and the Streamline lower swap returned `S_OK` with a 144x88 description.
 
-This verifies one real FG-Off pixel path through Streamline's proxied D3D12
-queue and lower swap. It does **not** verify FG On, generated frames, resource
+This verifies an FG-Off Present and resize path through Streamline's proxied
+D3D12 queue and lower swap. It does **not** verify FG On, generated frames, resource
 tags, Reflex pacing, Skyrim wrapper compatibility, UI separation, or
 performance. The bridge currently waits on the CPU for every transfer.
 The next gate is a guarded ENB/ReShade wrapper-chain integration and live

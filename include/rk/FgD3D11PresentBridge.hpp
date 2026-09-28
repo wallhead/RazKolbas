@@ -8,8 +8,10 @@
 #include <vector>
 
 namespace rk {
-// Offline proof of the physical D3D11-to-D3D12 colour path. The game-facing
-// IDXGISwapChain facade, resize handling and provider integration are separate.
+// Offline D3D11-to-D3D12 colour path. D3D11 callers render to one stable
+// logical buffer zero; valid facade indices alias it while the lower D3D12
+// chain rotates physical destinations.
+// Provider integration is separate.
 class FgD3D11PresentBridge {
 public:
     ~FgD3D11PresentBridge() noexcept;

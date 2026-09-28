@@ -31,6 +31,27 @@ bool sameIdentity(IUnknown* a,IUnknown* b) noexcept {
     return a&&b&&SUCCEEDED(a->QueryInterface(IID_PPV_ARGS(&ia)))&&
         SUCCEEDED(b->QueryInterface(IID_PPV_ARGS(&ib)))&&ia.Get()==ib.Get();
 }
+bool boundAsOutput(ID3D11DeviceContext* context,ID3D11Texture2D* texture) noexcept {
+    ID3D11RenderTargetView* views[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
+    ID3D11DepthStencilView* depth{};
+    context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT,
+        views,&depth);
+    bool found=false;
+    for(auto* view:views) {
+        if(!view)continue;
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+        view->GetResource(&resource);
+        found|=sameIdentity(resource.Get(),texture);
+        view->Release();
+    }
+    if(depth) {
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+        depth->GetResource(&resource);
+        found|=sameIdentity(resource.Get(),texture);
+        depth->Release();
+    }
+    return found;
+}
 D3D12_RESOURCE_BARRIER transition(ID3D12Resource* resource,
     D3D12_RESOURCE_STATES before,D3D12_RESOURCE_STATES after) noexcept {
     D3D12_RESOURCE_BARRIER barrier{};
@@ -68,6 +89,8 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     context->GetDevice(&contextDevice);
     if(!sameIdentity(contextDevice.Get(),d11))
         return Error{ErrorCode::Conflict,"FG bridge context belongs to a different D3D11 device"};
+    if(context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::Unsupported,"FG bridge requires an immediate D3D11 context"};
     Microsoft::WRL::ComPtr<ID3D12Device> lowerDevice;
     if(FAILED(lower->GetDevice(IID_PPV_ARGS(&lowerDevice)))||
        !sameIdentity(lowerDevice.Get(),
@@ -82,6 +105,8 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     if(FAILED(queue->GetDevice(IID_PPV_ARGS(&queueDevice)))||
        !sameIdentity(queueDevice.Get(),d12))
         return Error{ErrorCode::Conflict,"FG copy queue belongs to a different D3D12 device"};
+    if(queue->GetDesc().Type!=D3D12_COMMAND_LIST_TYPE_DIRECT)
+        return Error{ErrorCode::Unsupported,"FG bridge requires a DIRECT D3D12 queue"};
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap3;
     if(FAILED(lower->QueryInterface(IID_PPV_ARGS(&swap3))))
         return Error{ErrorCode::Unsupported,"FG lower swap needs IDXGISwapChain3 backbuffer indexing"};
@@ -114,14 +139,14 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     source.SampleDesc.Count=1;
     source.Usage=D3D11_USAGE_DEFAULT;
     source.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> render;
+    if(FAILED(d11->CreateTexture2D(&source,nullptr,&render)))
+        return Error{ErrorCode::Unavailable,"Cannot create FG D3D11 render buffer"};
+    bridge->render_.push_back(std::move(render));
     for(UINT i=0;i<desc.BufferCount;++i) {
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> render;
-        if(FAILED(d11->CreateTexture2D(&source,nullptr,&render)))
-            return Error{ErrorCode::Unavailable,"Cannot create FG D3D11 render buffer"};
         auto shared=bridge->interop_->makeSurface(source);
         if(!std::holds_alternative<FgSharedSurface>(shared))
             return std::get<Error>(std::move(shared));
-        bridge->render_.push_back(std::move(render));
         bridge->shared_.push_back(std::move(std::get<FgSharedSurface>(shared)));
     }
     return bridge;
@@ -130,13 +155,15 @@ UINT FgD3D11PresentBridge::currentIndex() const noexcept {
     return swap3_->GetCurrentBackBufferIndex();
 }
 ID3D11Texture2D* FgD3D11PresentBridge::renderBuffer(UINT index) const noexcept {
-    return index<render_.size()?render_[index].Get():nullptr;
+    return index<shared_.size()?render_[0].Get():nullptr;
 }
 HRESULT FgD3D11PresentBridge::copyToCurrent() noexcept {
     if(prepared_||poisoned_)return DXGI_ERROR_INVALID_CALL;
     const auto index=currentIndex();
-    if(index>=render_.size())return DXGI_ERROR_INVALID_CALL;
-    auto ticket=interop_->copy(context_.Get(),render_[index].Get(),shared_[index]);
+    if(index>=shared_.size())return DXGI_ERROR_INVALID_CALL;
+    // D3D11 exposes one stable logical back buffer; DXGI rotates physical
+    // D3D12 destinations after Present.
+    auto ticket=interop_->copy(context_.Get(),render_[0].Get(),shared_[index]);
     if(!std::holds_alternative<FgCopyTicket>(ticket)) {
         poisoned_=true;
         return E_FAIL;
@@ -212,6 +239,10 @@ HRESULT FgD3D11PresentBridge::copyToCurrent() noexcept {
 }
 HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcept {
     if(poisoned_)return DXGI_ERROR_DEVICE_REMOVED;
+    if((call.method==FgPresentMethod::Present&&call.parameters)||
+       (call.method==FgPresentMethod::Present1&&!call.parameters)||
+       (call.method!=FgPresentMethod::Present&&
+        call.method!=FgPresentMethod::Present1))return E_INVALIDARG;
     if(call.flags&DXGI_PRESENT_TEST)return lower_.present(call);
     if(!prepared_||currentIndex()!=preparedIndex_)
         return DXGI_ERROR_INVALID_CALL;
@@ -250,8 +281,10 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
                     return DXGI_ERROR_INVALID_CALL;
     } else return E_INVALIDARG;
     for(const auto& texture:render_) {
-        // The bridge owns one reference. A caller-held buffer or view prevents
-        // replacing this generation, just as DXGI rejects held backbuffers.
+        if(boundAsOutput(context_.Get(),texture.Get()))
+            return DXGI_ERROR_INVALID_CALL;
+        // The bridge owns one public reference. A caller-held texture adds a
+        // reference; an unbound view may not and remains a production gap.
         const auto refs=texture->AddRef();
         texture->Release();
         if(refs>2)return DXGI_ERROR_INVALID_CALL;
@@ -263,14 +296,14 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     source.Format=format;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> nextRender;
     std::vector<FgSharedSurface> nextShared;
-    nextRender.reserve(count);
+    nextRender.reserve(1);
     nextShared.reserve(count);
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    if(FAILED(hr=d11_->CreateTexture2D(&source,nullptr,&texture)))return hr;
+    nextRender.push_back(std::move(texture));
     for(UINT i=0;i<count;++i) {
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-        if(FAILED(hr=d11_->CreateTexture2D(&source,nullptr,&texture)))return hr;
         auto shared=interop_->makeSurface(source);
         if(!std::holds_alternative<FgSharedSurface>(shared))return E_FAIL;
-        nextRender.push_back(std::move(texture));
         nextShared.push_back(std::move(std::get<FgSharedSurface>(shared)));
     }
     hr=lower_.resize(call);

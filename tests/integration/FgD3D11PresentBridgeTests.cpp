@@ -19,7 +19,7 @@ struct Devices {
     ComPtr<ID3D12Device> d12;
     ComPtr<ID3D12CommandQueue> queue;
     ComPtr<IDXGISwapChain1> swap;
-    Devices() {
+    explicit Devices(UINT count=2) {
         window=CreateWindowExW(0,L"STATIC",L"FG bridge WARP",WS_POPUP,
             0,0,64,48,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
         REQUIRE(window!=nullptr);
@@ -37,7 +37,7 @@ struct Devices {
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width=64;desc.Height=48;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        desc.BufferCount=2;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc.BufferCount=count;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
         REQUIRE(SUCCEEDED(factory->CreateSwapChainForHwnd(queue.Get(),window,
             &desc,nullptr,nullptr,&swap)));
     }
@@ -115,7 +115,7 @@ TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
     auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
     const auto index=bridge->currentIndex();
     REQUIRE(index<2);
-    auto* source=bridge->renderBuffer(index);
+    auto* source=bridge->renderBuffer(0);
     REQUIRE(source!=nullptr);
     ComPtr<ID3D11Device> owner;
     source->GetDevice(&owner);
@@ -133,6 +133,13 @@ TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
     REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,
         0,DXGI_PRESENT_TEST})));
     REQUIRE(bridge->prepared());
+    DXGI_PRESENT_PARAMETERS parameters{};
+    REQUIRE(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0,
+        &parameters})==E_INVALIDARG);
+    REQUIRE(bridge->prepared());
+    REQUIRE(bridge->presentPrepared({rk::FgPresentMethod::Present1,0,0,
+        nullptr})==E_INVALIDARG);
+    REQUIRE(bridge->prepared());
     REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
     REQUIRE_FALSE(bridge->prepared());
     REQUIRE(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})==
@@ -140,7 +147,7 @@ TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
     const auto next=bridge->currentIndex();
     REQUIRE(next<2);
     REQUIRE(next!=index);
-    auto* second=bridge->renderBuffer(next);
+    auto* second=bridge->renderBuffer(0);
     REQUIRE(second!=nullptr);
     view.Reset();
     REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(second,nullptr,&view)));
@@ -150,6 +157,53 @@ TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
     const auto secondPixel=readPixel(gpu,next);
     REQUIRE((secondPixel==std::array<std::uint8_t,4>{255,0,0,255}));
     REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
+}
+
+TEST_CASE("FG bridge presents a cached D3D11 buffer zero across physical rotation",
+    "[fg_d3d11_present_bridge]") {
+    for(const auto buffers:{2u,3u}) {
+    Devices gpu(buffers);
+    auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get());
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    auto* cached=bridge->renderBuffer(0);
+    REQUIRE(cached!=nullptr);
+    ComPtr<ID3D11RenderTargetView> view;
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(cached,nullptr,&view)));
+    for(unsigned frame=0;frame<8;++frame) {
+        const float colour[]{frame%2?1.0f:0.0f,
+            frame%3?0.0f:1.0f,frame%4?0.0f:1.0f,1.0f};
+        gpu.context->ClearRenderTargetView(view.Get(),colour);
+        const auto physical=bridge->currentIndex();
+        REQUIRE(bridge->renderBuffer(physical)==cached);
+        REQUIRE(SUCCEEDED(bridge->copyToCurrent()));
+        const auto pixel=readPixel(gpu,physical); // Before Present: flip-discard is undefined afterwards.
+        REQUIRE(pixel[0]==(frame%2?255:0));
+        REQUIRE(pixel[1]==(frame%3?0:255));
+        REQUIRE(pixel[2]==(frame%4?0:255));
+        REQUIRE(pixel[3]==255);
+        REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
+    }
+    }
+}
+
+TEST_CASE("FG bridge rejects deferred contexts and non-direct queues",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    ComPtr<ID3D11DeviceContext> deferred;
+    REQUIRE(SUCCEEDED(gpu.d11->CreateDeferredContext(0,&deferred)));
+    auto wrongContext=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+        deferred.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get());
+    REQUIRE(std::holds_alternative<rk::Error>(wrongContext));
+    D3D12_COMMAND_QUEUE_DESC desc{};
+    desc.Type=D3D12_COMMAND_LIST_TYPE_COPY;
+    ComPtr<ID3D12CommandQueue> copyQueue;
+    REQUIRE(SUCCEEDED(gpu.d12->CreateCommandQueue(&desc,
+        IID_PPV_ARGS(&copyQueue))));
+    auto wrongQueue=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+        gpu.context.Get(),gpu.d12.Get(),copyQueue.Get(),gpu.swap.Get());
+    REQUIRE(std::holds_alternative<rk::Error>(wrongQueue));
 }
 
 TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers",
@@ -172,7 +226,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     REQUIRE(gameDevice.Get()==gpu.d11.Get());
     ComPtr<ID3D12Device> hiddenDevice;
     REQUIRE(facade->GetDevice(IID_PPV_ARGS(&hiddenDevice))==E_NOINTERFACE);
-    const auto index=facade->GetCurrentBackBufferIndex();
+    const auto index=0u; // D3D11 callers cache the logical back buffer.
     ComPtr<ID3D11Texture2D> gameBuffer;
     REQUIRE(SUCCEEDED(facade->GetBuffer(index,IID_PPV_ARGS(&gameBuffer))));
     ComPtr<ID3D11Device> bufferDevice;
@@ -186,13 +240,21 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     gpu.context->ClearRenderTargetView(view.Get(),green);
     REQUIRE(SUCCEEDED(facade->Present(0,DXGI_PRESENT_TEST)));
     REQUIRE(SUCCEEDED(facade->Present(0,0)));
-    REQUIRE((readPixel(gpu,index)==std::array<std::uint8_t,4>{0,255,0,255}));
+    ComPtr<ID3D11Texture2D> indexedBuffer;
+    REQUIRE(SUCCEEDED(facade->GetBuffer(facade->GetCurrentBackBufferIndex(),
+        IID_PPV_ARGS(&indexedBuffer))));
+    REQUIRE(indexedBuffer.Get()==gameBuffer.Get());
+    indexedBuffer.Reset();
     REQUIRE(SUCCEEDED(facade->Present(0,0)));
     REQUIRE(facade->ResizeBuffers(2,80,60,DXGI_FORMAT_R8G8B8A8_UNORM,0)==
         DXGI_ERROR_INVALID_CALL);
-    view.Reset();
+    ID3D11RenderTargetView* bound[]{view.Get()};
+    gpu.context->OMSetRenderTargets(1,bound,nullptr);
     gameBuffer.Reset();
     bufferDevice.Reset();
+    view.Reset();
+    REQUIRE(facade->ResizeBuffers(2,80,60,DXGI_FORMAT_R8G8B8A8_UNORM,0)==
+        DXGI_ERROR_INVALID_CALL); // Context binding retains the view.
     gpu.context->ClearState();
     gpu.context->Flush();
     REQUIRE(facade->ResizeBuffers(7,80,60,
@@ -207,7 +269,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
     REQUIRE(resized.BufferDesc.Width==80);
     REQUIRE(resized.BufferDesc.Height==60);
-    const auto resizedIndex=facade->GetCurrentBackBufferIndex();
+    const auto resizedIndex=0u;
     REQUIRE(SUCCEEDED(facade->GetBuffer(resizedIndex,
         IID_PPV_ARGS(&gameBuffer))));
     D3D11_TEXTURE2D_DESC resizedTexture{};
@@ -219,8 +281,6 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     const float blue[]{0.0f,0.0f,1.0f,1.0f};
     gpu.context->ClearRenderTargetView(view.Get(),blue);
     REQUIRE(SUCCEEDED(facade->Present(0,0)));
-    REQUIRE((readPixel(gpu,resizedIndex)==
-        std::array<std::uint8_t,4>{0,0,255,255}));
     view.Reset();
     gameBuffer.Reset();
     gpu.context->ClearState();
@@ -232,7 +292,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
     REQUIRE(resized.BufferDesc.Width==96);
     REQUIRE(resized.BufferDesc.Height==64);
-    const auto third=facade->GetCurrentBackBufferIndex();
+    const auto third=0u;
     REQUIRE(SUCCEEDED(facade->GetBuffer(third,IID_PPV_ARGS(&gameBuffer))));
     REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(gameBuffer.Get(),
         nullptr,&view)));
@@ -240,8 +300,6 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     gpu.context->ClearRenderTargetView(view.Get(),yellow);
     DXGI_PRESENT_PARAMETERS parameters{};
     REQUIRE(SUCCEEDED(facade->Present1(0,0,&parameters)));
-    REQUIRE((readPixel(gpu,third)==
-        std::array<std::uint8_t,4>{255,255,0,255}));
     for(UINT n=0;n<12;++n) {
         view.Reset();
         gameBuffer.Reset();
@@ -249,7 +307,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
         gpu.context->Flush();
         REQUIRE(SUCCEEDED(facade->ResizeBuffers(2,100+n,70+n,
             DXGI_FORMAT_R8G8B8A8_UNORM,0)));
-        const auto current=facade->GetCurrentBackBufferIndex();
+        const auto current=0u;
         REQUIRE(SUCCEEDED(facade->GetBuffer(current,
             IID_PPV_ARGS(&gameBuffer))));
         D3D11_TEXTURE2D_DESC extent{};
@@ -272,7 +330,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
     REQUIRE(resized.BufferDesc.Width==120);
     REQUIRE(resized.BufferDesc.Height==84);
-    const auto windowIndex=facade->GetCurrentBackBufferIndex();
+    const auto windowIndex=0u;
     REQUIRE(SUCCEEDED(facade->GetBuffer(windowIndex,
         IID_PPV_ARGS(&gameBuffer))));
     D3D11_TEXTURE2D_DESC windowTexture{};
