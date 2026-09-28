@@ -1,5 +1,20 @@
 # Implementation checkpoint
 
+## FG native UI plane snapshot, source only (2026-09-28)
+
+`FgUiPlanes` now preserves a display-sized HUD-less snapshot before UI draw,
+then separately snapshots an alpha-capable UI source and final colour for the
+same source/generation/presentation token/reset epoch. It rejects absent,
+reduced, stale or aliased UI sources and an invalid UI region without
+modifying the final frame. A WARP test measured distinct pre-UI, UI-alpha and
+final pixels, including the case where the final source is overwritten after
+the pre-UI copy. Debug and Release passed **53/53** CTest groups. This is a
+source-only capture boundary: the current Skyrim route still draws UI into
+the final backbuffer and has no verified separate transparent UI producer.
+Consequently no FG UI tags or FG-On game integration were enabled. The
+installed V5.4 0.1.115 DLL is unchanged; Skyrim verification is **NOT RUN**
+for this change. See `docs/re/FG_UI_PLANES_OFFLINE_2026-09-28.md`.
+
 ## AIO FG deep dive RE28 audit (2026-09-28)
 
 The supplied RE28 archive passed a read-only 84-file manifest hash check.
