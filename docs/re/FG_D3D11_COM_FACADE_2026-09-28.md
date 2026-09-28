@@ -4,9 +4,10 @@
 read FLIP_DISCARD buffers after Present and were not a valid pixel oracle.
 Those assertions were removed. The separate bridge WARP regression now reads
 the lower destination before Present while a single cached D3D11 buffer zero
-is rendered across two- and three-buffer rotations. Facade COM, Present and
-resize results remain valid; full facade colour verification with a
-pre-Present snapshot is still open. See `FG_REVIEW_27_TRIAGE.md`.
+is rendered across two- and three-buffer rotations. A follow-up test-only
+lower-swap observer now reads four distinct facade frames before the real
+lower Present, including Present1. Facade COM, Present and resize results
+remain valid; 100 resize/present cycles passed. See `FG_REVIEW_27_TRIAGE.md`.
 
 The live V5.4 trace found that the ReShade nested and ENB outer swaps expose
 `IDXGISwapChain1/3/4`, return the original D3D11 device, and reject D3D12

@@ -21,8 +21,13 @@ The review correctly identified the post-Present FLIP_DISCARD test oracle as
 invalid. The facade integration test no longer reads a presented lower
 buffer. The standalone Streamline FG-Off probe no longer reports a pixel
 readback as validation. Its proxy/native identity, Present, state and resize
-checks remain. A full facade pixel test using an owned pre-Present snapshot
-is still needed; the bridge WARP test proves the copy path in isolation.
+checks remain. A follow-up test-only lower-swap observer now reads the WARP
+destination inside the lower Present call, before DXGI may discard it. Four
+distinct cached-buffer frames, TEST Present, and Present1 all passed through
+the facade. The same observer then captured three distinct frames at physical
+indices 0, 1, 0 through the Streamline 2.14.1 FG-Off proxy on RTX 4080 SUPER.
+This validates real-frame colour submission to the proxy before Present; it
+is not an FG-On or generated-output result.
 
 Malformed Present/Present1 shapes now fail without consuming a prepared
 frame; the WARP test verifies a valid retry. Creation now rejects deferred
@@ -49,3 +54,9 @@ The standalone Streamline 2.14.1 FG-Off facade probe exited 0 on RTX 4080
 SUPER after the oracle removal, including Present(TEST), real Present,
 state, explicit and zero-size resize. It did not enable FG or inspect a
 generated frame.
+
+Follow-up verification: the facade observer test and 100 resize/present
+cycles passed in Debug and Release, with **52/52** CTest groups in each
+configuration. The three-frame Streamline FG-Off probe exited 0. Only test
+and harness code plus documentation changed in this follow-up; the installed
+game DLL remains unchanged.

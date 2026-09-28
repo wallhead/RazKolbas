@@ -3,11 +3,20 @@
 **Review 27 correction (2026-09-28):** The historical pixel readback below
 occurred *after* a FLIP_DISCARD Present, when DXGI does not guarantee buffer
 contents. Its observed value is recorded accurately but is not valid proof of
-the colour path. The probe no longer asserts that pixel. A WARP test now
-checks the lower destination *before* Present over repeated rotations of a
-cached D3D11 buffer zero. The Streamline probe still verifies proxy/native
-identity, FG-Off Present, state and resize, but no Streamline pixel result is
-currently claimed. See `FG_REVIEW_27_TRIAGE.md`.
+the colour path. The probe no longer asserts that post-Present pixel. A WARP
+test checks the lower destination *before* Present over repeated rotations of
+a cached D3D11 buffer zero. See `FG_REVIEW_27_TRIAGE.md`.
+
+**Follow-up (2026-09-28):** A test-only observer now wraps the actual
+Streamline lower swap and reads its current D3D12 backbuffer *inside* the
+forwarded Present, before the proxy can discard it. On RTX 4080 SUPER with
+DLSS-G Off, three consecutive cached-buffer frames read red, green and blue
+at physical indices 0, 1 and 0. Present(TEST), real Present, state, explicit
+and zero-size resize, and shutdown returned success; the probe exited 0.
+This is valid real-frame colour routing evidence through a Streamline proxy,
+but it does not show a generated frame or prove the displayed post-Present
+image. The `actualPresented=1` state value is interval telemetry, not a
+total count of the three submitted frames.
 
 The standalone probe ran on the local RTX 4080 SUPER (vendor `0x10de`,
 device `0x2702`) with the hash-pinned Streamline 2.14.1 headers and signed
@@ -39,8 +48,8 @@ A subsequent probe changed the hidden window to 144x88 and passed zero for
 both ResizeBuffers dimensions. The facade derived the current client extent,
 and the Streamline lower swap returned `S_OK` with a 144x88 description.
 
-This verifies an FG-Off Present and resize path through Streamline's proxied
-D3D12 queue and lower swap. It does **not** verify FG On, generated frames, resource
+This verifies an FG-Off real-frame colour, Present and resize path through
+Streamline's proxied D3D12 queue and lower swap. It does **not** verify FG On, generated frames, resource
 tags, Reflex pacing, Skyrim wrapper compatibility, UI separation, or
 performance. The bridge currently waits on the CPU for every transfer.
 The next gate is a guarded ENB/ReShade wrapper-chain integration and live

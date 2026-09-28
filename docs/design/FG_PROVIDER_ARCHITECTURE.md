@@ -52,10 +52,13 @@ explicit-size ResizeBuffers/1 WARP tests. The facade is not installed or
 validated under the ENB/ReShade wrapper chain; see
 `docs/re/FG_D3D11_PRESENT_BRIDGE_2026-09-28.md` and
 `docs/re/FG_D3D11_COM_FACADE_2026-09-28.md`.
-The pinned Streamline 2.14.1 FG-Off probe additionally confirms a real colour
-pixel passes through the facade into its lower swap. Its proxy queue and
-native lower device have distinct COM identities, resolved through a verified
-`slGetNativeInterface` pair; see
+The pinned Streamline 2.14.1 FG-Off probe confirms proxy/native identity,
+Present, state and resize. Its earlier post-Present FLIP_DISCARD pixel readback
+was not a valid colour oracle. A test-only lower observer now reads the buffer
+before each Present and verified three real-frame colours across physical
+indices 0, 1, 0 through the Streamline proxy; WARP also covers the facade.
+The Streamline proxy queue and native lower device have distinct COM
+identities, resolved through a verified `slGetNativeInterface` pair; see
 `docs/re/FG_STREAMLINE_FACADE_OFF_2026-09-28.md`.
 The End-menu FG tab and configured toggle hotkey can request On/Off during a
 session. Until a backend connects them to the lower Present, the menu must

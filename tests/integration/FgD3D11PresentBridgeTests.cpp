@@ -1,11 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgD3D11PresentBridge.hpp"
 #include "rk/FgD3D11SwapFacade.hpp"
+#include "../support/FgObservedSwap.hpp"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <array>
+#include <exception>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
@@ -43,9 +45,10 @@ struct Devices {
     }
     ~Devices() { swap.Reset();if(window)DestroyWindow(window); }
 };
-std::array<std::uint8_t,4> readPixel(Devices& gpu,unsigned index) {
+bool tryReadPixel(Devices& gpu,unsigned index,
+    std::array<std::uint8_t,4>& result) noexcept {
     ComPtr<ID3D12Resource> back;
-    REQUIRE(SUCCEEDED(gpu.swap->GetBuffer(index,IID_PPV_ARGS(&back))));
+    if(FAILED(gpu.swap->GetBuffer(index,IID_PPV_ARGS(&back))))return false;
     const auto desc=back->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
     UINT64 bytes{};
@@ -58,16 +61,16 @@ std::array<std::uint8_t,4> readPixel(Devices& gpu,unsigned index) {
     buffer.MipLevels=1;buffer.SampleDesc.Count=1;
     buffer.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     ComPtr<ID3D12Resource> readback;
-    REQUIRE(SUCCEEDED(gpu.d12->CreateCommittedResource(&heap,
+    if(FAILED(gpu.d12->CreateCommittedResource(&heap,
         D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,IID_PPV_ARGS(&readback))));
+        nullptr,IID_PPV_ARGS(&readback))))return false;
     ComPtr<ID3D12CommandAllocator> allocator;
     ComPtr<ID3D12GraphicsCommandList> commands;
-    REQUIRE(SUCCEEDED(gpu.d12->CreateCommandAllocator(
-        D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&allocator))));
-    REQUIRE(SUCCEEDED(gpu.d12->CreateCommandList(0,
+    if(FAILED(gpu.d12->CreateCommandAllocator(
+        D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&allocator))))return false;
+    if(FAILED(gpu.d12->CreateCommandList(0,
         D3D12_COMMAND_LIST_TYPE_DIRECT,allocator.Get(),nullptr,
-        IID_PPV_ARGS(&commands))));
+        IID_PPV_ARGS(&commands))))return false;
     D3D12_RESOURCE_BARRIER barrier{};
     barrier.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Transition={back.Get(),D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
@@ -84,26 +87,33 @@ std::array<std::uint8_t,4> readPixel(Devices& gpu,unsigned index) {
     barrier.Transition.StateBefore=D3D12_RESOURCE_STATE_COPY_SOURCE;
     barrier.Transition.StateAfter=D3D12_RESOURCE_STATE_PRESENT;
     commands->ResourceBarrier(1,&barrier);
-    REQUIRE(SUCCEEDED(commands->Close()));
+    if(FAILED(commands->Close()))return false;
+    ComPtr<ID3D12Fence> done;
+    if(FAILED(gpu.d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&done))))return false;
+    const auto event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+    if(!event)return false;
     ID3D12CommandList* lists[]{commands.Get()};
     gpu.queue->ExecuteCommandLists(1,lists);
-    ComPtr<ID3D12Fence> done;
-    REQUIRE(SUCCEEDED(gpu.d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
-        IID_PPV_ARGS(&done))));
-    REQUIRE(SUCCEEDED(gpu.queue->Signal(done.Get(),1)));
-    const auto event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
-    REQUIRE(event!=nullptr);
-    REQUIRE(SUCCEEDED(done->SetEventOnCompletion(1,event)));
-    const auto waited=WaitForSingleObject(event,5000);
+    if(FAILED(gpu.queue->Signal(done.Get(),1)))std::terminate();
+    const auto armed=done->SetEventOnCompletion(1,event);
+    const auto waited=SUCCEEDED(armed)?WaitForSingleObject(event,5000):WAIT_FAILED;
     CloseHandle(event);
-    REQUIRE(waited==WAIT_OBJECT_0);
+    if(waited!=WAIT_OBJECT_0||done->GetCompletedValue()!=1||
+       FAILED(gpu.d12->GetDeviceRemovedReason()))std::terminate();
     void* data{};
-    REQUIRE(SUCCEEDED(readback->Map(0,nullptr,&data)));
+    if(FAILED(readback->Map(0,nullptr,&data)))return false;
     const auto* p=static_cast<const std::uint8_t*>(data);
-    const std::array<std::uint8_t,4> result{p[0],p[1],p[2],p[3]};
+    result={p[0],p[1],p[2],p[3]};
     readback->Unmap(0,nullptr);
+    return true;
+}
+std::array<std::uint8_t,4> readPixel(Devices& gpu,unsigned index) {
+    std::array<std::uint8_t,4> result{};
+    REQUIRE(tryReadPixel(gpu,index,result));
     return result;
 }
+
 }
 
 TEST_CASE("FG D3D11 colour reaches one D3D12 lower Present",
@@ -206,6 +216,58 @@ TEST_CASE("FG bridge rejects deferred contexts and non-direct queues",
     REQUIRE(std::holds_alternative<rk::Error>(wrongQueue));
 }
 
+TEST_CASE("FG facade submits cached D3D11 colour before each lower Present",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    ComPtr<IDXGISwapChain4> native;
+    REQUIRE(SUCCEEDED(gpu.swap.As(&native)));
+    struct ObservedFrame {
+        UINT index{};
+        std::array<std::uint8_t,4> pixel{};
+        bool read{};
+    };
+    std::array<ObservedFrame,4> submitted{};
+    std::size_t submittedCount{};
+    ComPtr<IDXGISwapChain4> observed;
+    observed.Attach(new rk_test::FgObservedSwap(native.Get(),[&](UINT index) noexcept {
+        if(submittedCount>=submitted.size())return E_FAIL;
+        auto& frame=submitted[submittedCount++];
+        frame.index=index;
+        frame.read=tryReadPixel(gpu,index,frame.pixel);
+        return frame.read?S_OK:E_FAIL;
+    }));
+    auto made=rk::FgD3D11SwapFacade::create(gpu.d11.Get(),gpu.context.Get(),
+        gpu.d12.Get(),gpu.queue.Get(),observed.Get());
+    REQUIRE(std::holds_alternative<ComPtr<IDXGISwapChain4>>(made));
+    auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
+    ComPtr<ID3D11Texture2D> cached;
+    REQUIRE(SUCCEEDED(facade->GetBuffer(0,IID_PPV_ARGS(&cached))));
+    ComPtr<ID3D11RenderTargetView> view;
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(cached.Get(),nullptr,&view)));
+    const std::array<std::array<std::uint8_t,4>,4> colours{{
+        {{255,0,0,255}},{{0,255,0,255}},{{0,0,255,255}},{{255,255,0,255}}
+    }};
+    for(std::size_t frame=0;frame<colours.size();++frame) {
+        const auto& expected=colours[frame];
+        const float clear[]{expected[0]/255.0f,expected[1]/255.0f,
+            expected[2]/255.0f,1.0f};
+        gpu.context->ClearRenderTargetView(view.Get(),clear);
+        REQUIRE(SUCCEEDED(facade->Present(0,DXGI_PRESENT_TEST)));
+        REQUIRE(submittedCount==frame);
+        if(frame==2) {
+            DXGI_PRESENT_PARAMETERS params{};
+            REQUIRE(SUCCEEDED(facade->Present1(0,0,&params)));
+        } else REQUIRE(SUCCEEDED(facade->Present(0,0)));
+        REQUIRE(submittedCount==frame+1);
+        REQUIRE(submitted[frame].read);
+        REQUIRE(submitted[frame].pixel==expected);
+        REQUIRE(submitted[frame].index<2);
+    }
+    const auto beforeRejected=facade->GetCurrentBackBufferIndex();
+    REQUIRE(facade->Present(0,0)==E_FAIL); // Observer capacity rejects the call.
+    REQUIRE(native->GetCurrentBackBufferIndex()==beforeRejected);
+}
+
 TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers",
     "[fg_d3d11_present_bridge]") {
     Devices gpu;
@@ -300,7 +362,7 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     gpu.context->ClearRenderTargetView(view.Get(),yellow);
     DXGI_PRESENT_PARAMETERS parameters{};
     REQUIRE(SUCCEEDED(facade->Present1(0,0,&parameters)));
-    for(UINT n=0;n<12;++n) {
+    for(UINT n=0;n<100;++n) {
         view.Reset();
         gameBuffer.Reset();
         gpu.context->ClearState();
