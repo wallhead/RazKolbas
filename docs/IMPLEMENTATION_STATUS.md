@@ -1,5 +1,35 @@
 # Implementation checkpoint
 
+## FG presentation audit and SDK ABI boundary (2026-09-28)
+
+An independent review of the source-only FG coordinator found that a failed
+Off/drain had consumed its real-frame token before any lower Present, making a
+safe retry impossible. The token is now checked before the transition and
+consumed only immediately before the lower call. Once that call is attempted,
+even an uncertain failure cannot submit the same source again. The lower
+backend contract now carries Present versus Present1, sync interval, flags,
+borrowed Present1 parameters and the exact HRESULT. A `DXGI_PRESENT_TEST`
+probe forces active generation Off, forwards the test call, and does not consume
+a source token. Invalid backend generated-frame counts are rejected. Mock
+tests cover the failed-drain retry, Present1 argument/HRESULT propagation,
+test Present, uncertain lower failure and invalid generated count.
+
+The FG hotkey is now polled on non-test swap observations even when no world
+diagnostics snapshot exists, so title/loading frames can receive its live
+request. The key latch is scoped to the focused swap window so another swap
+chain cannot reset it and toggle twice while the key is held. **Skyrim hotkey
+and FG runtime result: NOT RUN.** The installed V5.4 MO2 build is still
+0.1.114; this source-only work did not replace its DLL. Release build and
+**48/48** CTest groups pass.
+
+The supplied Streamline binaries under
+`C:\Users\user\Downloads\DLSS310.8.0-Streamline2.13` identify as
+v2.13.0-beta10; locally inspected public `main` headers are 2.14.1. These
+versions must not be mixed for a vendor backend. Matching headers/binaries,
+complete frame input leases and an offline lower-Present owner are still
+required before any DLSS-G or FSR backend can be installed. A D3D11-to-D3D12
+copy fence alone does not prove provider or Present retirement.
+
 ## FG in-game request control and adapter policy (2026-09-28)
 
 The End menu now has a Frame Generation tab with an enable checkbox, provider

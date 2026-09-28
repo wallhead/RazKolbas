@@ -42,6 +42,7 @@ std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
 std::optional<Settings> consumeDiagnosticsNrRuntimeUpdate();
 // Live requested FG state; this does not imply generated output is active.
 bool diagnosticsFgRequestedEnabled() noexcept;
+void pollDiagnosticsFgHotkey(IDXGISwapChain* swap) noexcept;
 bool diagnosticsMenuCapturingInput() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

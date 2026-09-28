@@ -1,16 +1,24 @@
 #pragma once
 #include "rk/FgFrameContract.hpp"
 #include "rk/Result.hpp"
+#include <dxgi1_2.h>
 #include <cstdint>
 
 namespace rk {
+enum class FgPresentMethod { Present, Present1 };
+struct FgPresentCall {
+    FgPresentMethod method{FgPresentMethod::Present};
+    UINT interval{1},flags{};
+    // Borrowed for this call only. The backend forwards the exact parameters.
+    const DXGI_PRESENT_PARAMETERS* parameters{};
+};
 struct FgBackendPresent {
-    std::int32_t resultCode{};
+    HRESULT resultCode{};
     std::uint32_t actualGeneratedFrames{};
 };
 struct FgPresentOutcome {
     FgDecision decision{};
-    std::int32_t resultCode{};
+    HRESULT resultCode{};
     std::uint32_t actualGeneratedFrames{};
 };
 
@@ -22,7 +30,7 @@ public:
     virtual FgCapability capability() const noexcept=0;
     virtual Result<bool> setMode(bool enabled)=0;
     virtual Result<FgBackendPresent> presentReal(const FgSourceFrame& frame,
-        bool enabled)=0;
+        bool enabled,const FgPresentCall& call)=0;
 };
 
 class FgPresentationCoordinator {
@@ -30,7 +38,7 @@ public:
     FgPresentationCoordinator(FgProviderSession session,
         IFgPresentBackend& backend) noexcept;
     Result<FgPresentOutcome> present(const FgSourceFrame& frame,
-        bool requestedEnabled);
+        bool requestedEnabled,const FgPresentCall& call={});
     bool enabled() const noexcept { return enabled_; }
 private:
     FgProviderSession session_;

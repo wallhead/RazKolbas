@@ -7,7 +7,12 @@
 `FgPresentationCoordinator` now controls one backend mode and one lower real
 Present per source frame. Its backend interface requires Off/drain before
 presenting an ordinary frame after FG was active; a failed enable falls back
-to the real frame. These interfaces do not yet create generated frames. A
+to the real frame. The lower call carries the exact DXGI Present or Present1
+method, sync interval, flags, Present1 parameters and HRESULT. Test Presents
+are forwarded with generation Off and do not consume a real-source token.
+Failed Off/drain can retry that source; once lower Present is attempted its
+token is consumed even if the result is uncertain. These interfaces do not
+yet create generated frames. A
 session selects at most one provider
 when its presentation owner is created. Auto prefers a validated DLSS-G
 capability, then a validated FSR 3.1 FG capability on NVIDIA. AMD and Intel
@@ -76,7 +81,9 @@ and [DLSS-G programming guide](https://github.com/NVIDIA-RTX/Streamline/blob/mai
    harness. Prove one real Present, HRESULT propagation, reference lifetime,
    resize and Off/drain before changing Skyrim's owner.
 3. Pin matching vendor SDK/runtime versions, implement each backend behind
-   the owner, and test resource/tag contracts separately. Never infer FG
+   the owner, and test resource/tag contracts separately. The supplied local
+   Streamline v2.13.0-beta10 DLLs must not be paired with public 2.14.1
+   headers. Never infer FG
    support from the NR runtime or GPU name.
 4. Use a user-started game session to establish actual generated output,
    native HUD/menu appearance, ENB/ReShade composition, frame cadence and

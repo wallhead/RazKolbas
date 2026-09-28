@@ -171,10 +171,13 @@ bool FgLeasePool::advanceGeneration(std::uint64_t next,
     generation_=next;
     return true;
 }
+bool FgPresentLedger::canAcceptReal(const FgSourceFrame& frame) const noexcept {
+    return frame.source&&frame.generation&&frame.presentToken&&
+        frame.source>source_&&
+        (frame.generation!=generation_||frame.presentToken!=token_);
+}
 bool FgPresentLedger::acceptReal(const FgSourceFrame& frame) noexcept {
-    if(!frame.source||!frame.generation||!frame.presentToken||
-       frame.source<=source_||
-       (frame.generation==generation_&&frame.presentToken==token_))return false;
+    if(!canAcceptReal(frame))return false;
     source_=frame.source;
     generation_=frame.generation;
     token_=frame.presentToken;

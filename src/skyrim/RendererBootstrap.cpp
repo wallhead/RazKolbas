@@ -709,6 +709,9 @@ void swapObserved(const SwapEvent& event) {
     }
     if(event.before) {
         drainOwnedResizeCleanup();
+        if(!(event.flags&DXGI_PRESENT_TEST))
+            pollDiagnosticsFgHotkey(
+                reinterpret_cast<IDXGISwapChain*>(event.object));
         if(!(event.flags&DXGI_PRESENT_TEST)&&frameProbeBoundary(state->profileId,event.call)) {
             probePresentationTargets(reinterpret_cast<IDXGISwapChain*>(event.object));
             try { probePresentCandidates(reinterpret_cast<IDXGISwapChain*>(event.object)); }

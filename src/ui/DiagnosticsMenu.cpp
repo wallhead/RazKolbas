@@ -36,6 +36,7 @@ struct MenuState {
     float fontScale{1.0f};
     bool enabled{};
     bool visible{},endWasDown{},fgWasDown{},failed{};
+    HWND fgHotkeyWindow{};
     std::uint64_t visibleFrames{};
     Settings activeSettings;
     Settings requestedSettings;
@@ -572,6 +573,36 @@ bool diagnosticsFgRequestedEnabled() noexcept {
     return fgRequestedEnabled.load(std::memory_order_acquire);
 }
 
+void pollDiagnosticsFgHotkey(IDXGISwapChain* swap) noexcept {
+    if(!swap)return;
+    auto& state=menu();
+    std::unique_lock guard(state.mutex,std::try_to_lock);
+    if(!guard||!state.controlsConfigured||!state.fgHotkey)return;
+    try {
+        DXGI_SWAP_CHAIN_DESC desc{};
+        if(FAILED(swap->GetDesc(&desc))||!desc.OutputWindow)return;
+        const auto foreground=GetForegroundWindow();
+        if(state.fgHotkeyWindow&&state.fgHotkeyWindow!=desc.OutputWindow) {
+            if(foreground!=desc.OutputWindow)return;
+            state.fgHotkeyWindow=desc.OutputWindow;
+            state.fgWasDown=false;
+        }
+        if(foreground!=desc.OutputWindow) {
+            state.fgWasDown=false;
+            return;
+        }
+        state.fgHotkeyWindow=desc.OutputWindow;
+        const bool down=(GetAsyncKeyState(state.fgHotkey)&0x8000)!=0;
+        if(down&&!state.fgWasDown)
+            setFgRequested(state,!state.requestedSettings.get<bool>(
+                "FrameGeneration.Enabled"));
+        state.fgWasDown=down;
+    } catch(const std::exception& error) {
+        try { spdlog::warn("FG toggle hotkey failed: {}",error.what()); }
+        catch(...) {}
+    } catch(...) {}
+}
+
 bool diagnosticsMenuCapturingInput() noexcept {
     return inputDispatchCapture.load(std::memory_order_acquire);
 }
@@ -592,12 +623,6 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
             return;
         }
         const bool focused=GetForegroundWindow()==swapDesc.OutputWindow;
-        const bool fgDown=focused&&state.fgHotkey&&
-            (GetAsyncKeyState(state.fgHotkey)&0x8000)!=0;
-        if(fgDown&&!state.fgWasDown&&state.controlsConfigured)
-            setFgRequested(state,!state.requestedSettings.get<bool>(
-                "FrameGeneration.Enabled"));
-        state.fgWasDown=fgDown;
         if(!state.enabled) {
             updateGameInputCapture(state,false);
             return;

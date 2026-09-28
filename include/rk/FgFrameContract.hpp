@@ -13,7 +13,7 @@ constexpr std::uint32_t fgSrMask(FgSrProvider provider) noexcept {
     return 1u<<static_cast<std::uint32_t>(provider);
 }
 enum class FgReason {
-    Ready, LimitedFrameCount, Disabled, UnsupportedAdapter,
+    Ready, LimitedFrameCount, Disabled, PresentTest, UnsupportedAdapter,
     PresentationOwnerUnavailable, InactiveScene, HistoryReset,
     StaleInput, MissingNativeUi, ProviderUnavailable,
     UnvalidatedPairing, UnvalidatedUiContract
@@ -107,6 +107,7 @@ private:
 // output is counted by the provider and never claims a new source frame.
 class FgPresentLedger {
 public:
+    bool canAcceptReal(const FgSourceFrame& frame) const noexcept;
     bool acceptReal(const FgSourceFrame& frame) noexcept;
 private:
     std::uint64_t source_{},generation_{},token_{};
