@@ -1,5 +1,20 @@
 # Implementation checkpoint
 
+## Synthetic DLSS-G On and source-only submission contract (2026-09-29)
+
+The hash-pinned Streamline 2.14.1 standalone probe now presented two frames
+per one real Present for eight consecutive synthetic frames on the local RTX
+4080 SUPER, with `DLSSGState::status=0` and `numFramesToGenerateMax=1`.
+The earlier hidden-window run presented only one and its SDK log explicitly
+said the window was unfocused; the corrected foreground window was required.
+`FgPreparedSubmission` now binds copied input and UI source identities,
+typed camera values, frame token and physical lower output index before any
+provider call. Debug and Release passed **54/54** tests; the FG-Off facade
+and swap probes still pass. See
+`docs/re/FG_SYNTHETIC_ON_AND_SUBMISSION_2026-09-29.md` for exact limits.
+This is synthetic FG output only. The game path remains FG Off, and the
+installed V5.4 0.1.115 build is unchanged. Skyrim FG-On is **NOT RUN**.
+
 ## FG native UI plane snapshot, source only (2026-09-28)
 
 `FgUiPlanes` now preserves a display-sized HUD-less snapshot before UI draw,

@@ -154,6 +154,9 @@ TEST_CASE("FG copied inputs remain bound to their exact real frame",
     changed=lease;
     changed.resources[1]=lease.resources[0];
     REQUIRE_FALSE(ring.submit(changed,retirement));
+    changed=lease;
+    changed.sourceTextures[4]=lease.sourceTextures[0];
+    REQUIRE_FALSE(ring.submit(changed,retirement));
     REQUIRE(gpu.bridge->waitCopy(lease.lastCopy.copy));
     REQUIRE(ring.submit(lease,retirement));
     REQUIRE(ring.stop({7,retirement.producer,retirement.copy,

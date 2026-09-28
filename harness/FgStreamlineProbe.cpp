@@ -1,5 +1,6 @@
 #include <sl.h>
 #include <sl_dlss_g.h>
+#include <sl_reflex.h>
 #include "rk/FgD3D11SwapFacade.hpp"
 #include "../tests/support/FgObservedSwap.hpp"
 #include <d3d11.h>
@@ -10,10 +11,13 @@
 #include <cstdint>
 #include <cwchar>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
+
+int probeSyntheticOn(ID3D12Device*, ID3D12CommandQueue*, IDXGISwapChain1*);
 
 namespace {
 int code(sl::Result result) { return static_cast<int>(result); }
@@ -244,7 +248,7 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         after.BufferDesc.Width==144&&after.BufferDesc.Height==88?0:31;
 }
 int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
-    ID3D12Device* device,bool facadeMode) {
+    ID3D12Device* device,bool facadeMode,bool onMode) {
     ComPtr<ID3D12Device> proxyDevice;
     const auto deviceUpgrade=useProxy(device,proxyDevice,"device");
     if(deviceUpgrade!=sl::Result::eOk)return 9;
@@ -258,11 +262,19 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
     std::cout<<"CreateCommandQueue=0x"<<std::hex<<
         static_cast<std::uint32_t>(madeQueue)<<std::dec<<'\n';
     if(FAILED(madeQueue))return 11;
-    const auto window=CreateWindowExW(0,L"STATIC",L"RazKolbas FG SL probe",
-        WS_POPUP,0,0,96,72,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    const auto module=GetModuleHandleW(nullptr);
+    WNDCLASSW windowClass{};
+    windowClass.lpfnWndProc=DefWindowProcW;
+    windowClass.hInstance=module;
+    windowClass.lpszClassName=L"RazKolbasFgProbeWindow";
+    if(onMode&&!RegisterClassW(&windowClass))return 12;
+    const auto window=CreateWindowExW(0,onMode?windowClass.lpszClassName:L"STATIC",
+        L"RazKolbas FG SL probe",onMode?WS_OVERLAPPEDWINDOW:WS_POPUP,0,0,
+        onMode?1280:96,onMode?720:72,nullptr,nullptr,module,nullptr);
     if(!window)return 12;
     DXGI_SWAP_CHAIN_DESC1 desc{};
-    desc.Width=96;desc.Height=72;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Width=onMode?1280:96;desc.Height=onMode?720:72;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount=2;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
     ComPtr<IDXGISwapChain1> swap;
@@ -284,9 +296,11 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
         const sl::ViewportHandle viewport{0u};
         sl::DLSSGOptions options{};
         options.mode=sl::DLSSGMode::eOff;
-        const auto mode=slDLSSGSetOptions(viewport,options);
-        std::cout<<"slDLSSGSetOptions(Off)="<<code(mode)<<'\n';
-        if(mode!=sl::Result::eOk&&!result)result=15;
+        if(!onMode) {
+            const auto mode=slDLSSGSetOptions(viewport,options);
+            std::cout<<"slDLSSGSetOptions(Off)="<<code(mode)<<'\n';
+            if(mode!=sl::Result::eOk&&!result)result=15;
+        }
         ComPtr<IDXGISwapChain3> swap3;
         const auto qi=swap.As(&swap3);
         std::cout<<"QueryInterface(IDXGISwapChain3)=0x"<<std::hex<<
@@ -296,7 +310,15 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
             std::cout<<"GetCurrentBackBufferIndex="<<
                 swap3->GetCurrentBackBufferIndex()<<'\n';
         }
-        if(facadeMode) {
+        if(onMode) {
+            ShowWindow(window,SW_SHOW);
+            SetForegroundWindow(window);
+            const bool foreground=GetForegroundWindow()==window;
+            std::cout<<"FG-On foreground="<<foreground<<'\n';
+            if(!foreground&&!result)result=59;
+            if(!result)result=probeSyntheticOn(proxyDevice.Get(),queue.Get(),
+                swap.Get());
+        } else if(facadeMode) {
             if(!result)result=probeFacade(adapter,proxyDevice.Get(),
                 queue.Get(),swap.Get());
         } else {
@@ -328,6 +350,7 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
     proxyFactory.Reset();
     proxyDevice.Reset();
     DestroyWindow(window);
+    if(onMode)UnregisterClassW(windowClass.lpszClassName,module);
     return result;
 }
 }
@@ -335,17 +358,19 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
 int wmain(int argc,wchar_t** argv) {
     if((argc!=2&&argc!=3)||(argc==3&&
        std::wcscmp(argv[2],L"--swap")&&
-       std::wcscmp(argv[2],L"--facade"))) {
-        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade]\n";
+       std::wcscmp(argv[2],L"--facade")&&
+       std::wcscmp(argv[2],L"--on"))) {
+        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on]\n";
         return 1;
     }
     const wchar_t* pluginPaths[]{argv[1]};
-    const sl::Feature features[]{sl::kFeatureDLSS_G,sl::kFeatureReflex};
+    const sl::Feature features[]{sl::kFeatureDLSS_G,sl::kFeatureReflex,
+        sl::kFeaturePCL};
     sl::Preferences preferences{};
     preferences.pathsToPlugins=pluginPaths;
     preferences.numPathsToPlugins=1;
     preferences.featuresToLoad=features;
-    preferences.numFeaturesToLoad=2;
+    preferences.numFeaturesToLoad=3;
     preferences.flags=sl::PreferenceFlags::eDisableCLStateTracking|
         sl::PreferenceFlags::eUseManualHooking|
         sl::PreferenceFlags::eUseFrameBasedResourceTagging;
@@ -353,6 +378,15 @@ int wmain(int argc,wchar_t** argv) {
     preferences.engineVersion="0.1.115";
     preferences.projectId="b3340e44-a57e-4b98-9318-d7150829d110";
     preferences.renderAPI=sl::RenderAPI::eD3D12;
+    std::wstring logPath;
+    if(argc==3&&!std::wcscmp(argv[2],L"--on")) {
+        const auto path=std::filesystem::current_path()/
+            "artifacts"/"local"/"fg-on-probe";
+        std::filesystem::create_directories(path);
+        logPath=path.wstring();
+        preferences.logLevel=sl::LogLevel::eVerbose;
+        preferences.pathToLogsAndData=logPath.c_str();
+    }
     const auto initialized=slInit(preferences);
     std::cout<<"slInit="<<code(initialized)<<'\n';
     if(initialized!=sl::Result::eOk)return 2;
@@ -400,7 +434,8 @@ int wmain(int argc,wchar_t** argv) {
                 std::cout<<"slSetD3DDevice="<<code(bound)<<'\n';
                 if(bound!=sl::Result::eOk)exitCode=6;
                 else if(argc==3)exitCode=probeSwap(factory.Get(),adapter.Get(),
-                    device.Get(),!std::wcscmp(argv[2],L"--facade"));
+                    device.Get(),!std::wcscmp(argv[2],L"--facade"),
+                    !std::wcscmp(argv[2],L"--on"));
             }
             if(support!=sl::Result::eOk||queried!=sl::Result::eOk)
                 if(!exitCode)exitCode=7;

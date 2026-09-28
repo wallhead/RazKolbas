@@ -99,6 +99,10 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     slot.resetEpoch=lease.resetEpoch;
     slot.prepared=true;
     slot.lastCopy={};
+    for(std::size_t i=0;i<sources.textures.size();++i) {
+        slot.sourceTextures[i]=sources.textures[i];
+        lease.sourceTextures[i]=sources.textures[i];
+    }
     for(std::size_t i=0;i<descs.size();++i) {
         const auto copied=bridge_.copy(context,sources.textures[i],*slot.surfaces[i]);
         if(const auto error=std::get_if<Error>(&copied)) {
@@ -124,6 +128,7 @@ bool FgInputLeaseRing::current(const FgInputLease& lease) const noexcept {
        slot.lastCopy.copy!=lease.lastCopy.copy)return false;
     for(std::size_t i=0;i<lease.resources.size();++i)
         if(!slot.surfaces[i]||
+           slot.sourceTextures[i].Get()!=lease.sourceTextures[i].Get()||
            slot.surfaces[i]->d12()!=lease.resources[i].Get())return false;
     return true;
 }
