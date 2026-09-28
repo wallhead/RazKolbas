@@ -15,6 +15,7 @@
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/SpatialFallback.hpp"
+#include "rk/FgSwapFacadeProbe.hpp"
 #include "rk/RendererLogicalSize.hpp"
 #include "rk/SamplerBiasCache.hpp"
 #include "rk/RipCall6.hpp"
@@ -585,6 +586,15 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
             methodId.hash,methodOwner?reinterpret_cast<std::uintptr_t>(method)-
                 reinterpret_cast<std::uintptr_t>(methodOwner):0,
             static_cast<std::uint32_t>(got),desc.BufferDesc.Width,desc.BufferDesc.Height);
+        const auto fgFacts=inspectFgSwapFacade(swap,device);
+        spdlog::info("FG nested-swap preflight #{}: GetDesc=0x{:08x}; IDXGISwapChain1/3/4=0x{:08x}/0x{:08x}/0x{:08x}; GetDevice D3D11/D3D12=0x{:08x}/0x{:08x}; creation-device identity={}; read-only",
+            sequence,static_cast<std::uint32_t>(fgFacts.getDesc),
+            static_cast<std::uint32_t>(fgFacts.swap1),
+            static_cast<std::uint32_t>(fgFacts.swap3),
+            static_cast<std::uint32_t>(fgFacts.swap4),
+            static_cast<std::uint32_t>(fgFacts.getD3D11Device),
+            static_cast<std::uint32_t>(fgFacts.getD3D12Device),
+            fgFacts.expectedDeviceIdentity);
         const auto traced=installSwapGetBufferTrace(swap);
         if(const auto error=std::get_if<Error>(&traced))
             spdlog::warn("Nested GetBuffer trace not installed: {}",error->message);
@@ -964,6 +974,15 @@ void observed(const DeviceCreationArgs& args,HRESULT result) {
     spdlog::info("Actual swap chain: {}x{}; format={}; buffers={}; samples={}; swapEffect={}; windowed={}; deviceFlags=0x{:x}",
         snapshot.width,snapshot.height,static_cast<unsigned>(snapshot.format),snapshot.bufferCount,snapshot.sampleCount,
         static_cast<unsigned>(snapshot.swapEffect),snapshot.windowed,snapshot.deviceFlags);
+    const auto fgFacts=inspectFgSwapFacade(*args.swapChain,*args.device);
+    spdlog::info("FG outer-swap preflight: GetDesc=0x{:08x}; IDXGISwapChain1/3/4=0x{:08x}/0x{:08x}/0x{:08x}; GetDevice D3D11/D3D12=0x{:08x}/0x{:08x}; creation-device identity={}; read-only",
+        static_cast<std::uint32_t>(fgFacts.getDesc),
+        static_cast<std::uint32_t>(fgFacts.swap1),
+        static_cast<std::uint32_t>(fgFacts.swap3),
+        static_cast<std::uint32_t>(fgFacts.swap4),
+        static_cast<std::uint32_t>(fgFacts.getD3D11Device),
+        static_cast<std::uint32_t>(fgFacts.getD3D12Device),
+        fgFacts.expectedDeviceIdentity);
     {
         const auto hooked=installSwapObserver(*args.swapChain,state->disabledPatchIds);
         if(const auto error=std::get_if<Error>(&hooked))spdlog::warn("Swap observation not installed: {}",error->message);

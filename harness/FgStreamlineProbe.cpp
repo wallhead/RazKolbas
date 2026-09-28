@@ -28,7 +28,7 @@ int wmain(int argc,wchar_t** argv) {
         sl::PreferenceFlags::eUseManualHooking|
         sl::PreferenceFlags::eUseFrameBasedResourceTagging;
     preferences.engine=sl::EngineType::eCustom;
-    preferences.engineVersion="0.1.114";
+    preferences.engineVersion="0.1.115";
     preferences.projectId="b3340e44-a57e-4b98-9318-d7150829d110";
     preferences.renderAPI=sl::RenderAPI::eD3D12;
     const auto initialized=slInit(preferences);

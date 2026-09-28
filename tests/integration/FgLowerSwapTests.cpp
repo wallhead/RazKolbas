@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgLowerSwap.hpp"
 #include "rk/FgNativePresentBackend.hpp"
+#include "rk/FgSwapFacadeProbe.hpp"
 #include <d3d11.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -117,4 +118,19 @@ TEST_CASE("FG native owner presents one real source and preserves DXGI result",
     REQUIRE(std::holds_alternative<rk::Error>(
         coordinator.present(source,false,real)));
     REQUIRE(backend.realPresentCalls()==1);
+}
+
+TEST_CASE("FG facade probe identifies the DXGI and D3D11 ownership boundary",
+    "[fg_lower_swap]") {
+    WarpSwap warp;
+    const auto facts=rk::inspectFgSwapFacade(warp.swap.Get(),warp.device.Get());
+    REQUIRE(SUCCEEDED(facts.getDesc));
+    REQUIRE(facts.desc.BufferDesc.Width==64);
+    REQUIRE(SUCCEEDED(facts.swap1));
+    REQUIRE(SUCCEEDED(facts.swap3));
+    REQUIRE(SUCCEEDED(facts.getD3D11Device));
+    REQUIRE(facts.expectedDeviceIdentity);
+    REQUIRE(FAILED(facts.getD3D12Device));
+    const auto missing=rk::inspectFgSwapFacade(nullptr,warp.device.Get());
+    REQUIRE(missing.getDesc==E_POINTER);
 }

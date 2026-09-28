@@ -1,5 +1,28 @@
 # Implementation checkpoint
 
+## 0.1.115 read-only FG swap-owner preflight installed (2026-09-28)
+
+Existing V5.4 owner-started logs show a ReShade 6.8 nested
+`CreateSwapChain` within ENB 0.505's D3D11 creation, followed by the ENB
+outer swap returned to Skyrim. They do not establish the COM device/interface
+contract a D3D12 lower owner must preserve. A bounded read-only probe now
+queries the nested and outer swaps once at creation for `IDXGISwapChain1/3/4`,
+D3D11/D3D12 `GetDevice`, `GetDesc`, and the identity of the creation device.
+The probe retains no COM references after returning and does not route FG,
+replace a swap, or change user settings. Its WARP test passed. The Release
+build and **51/51** CTest groups pass; the standalone Streamline 2.14.1
+capability probe again exited 0 on the local RTX 4080 SUPER.
+
+With Skyrim closed, the 0.1.115 DLL SHA-256
+`bd775e7ae9f6dd76492fc5fd1e8958f26fb780fa12dc2d9d0653196796f77db4`
+was installed to the V5.4 MO2 RazKolbas mod. All eight manifest payloads
+match. The prior 0.1.114 DLL and manifest are backed up under ignored
+`artifacts/local/v54-0.1.115-fg-owner-preflight-backup`; the user's INI and
+SR/NR runtimes were preserved. **Skyrim runtime result: NOT RUN.** The next
+action requires the owner to start Skyrim once; inspect the fresh `FG
+nested-swap preflight` and `FG outer-swap preflight` lines before attempting
+any D3D12 facade under ENB/ReShade. FG remains effectively Off.
+
 ## FG offline input, presentation and Streamline probe (2026-09-28)
 
 Source-only FG infrastructure now leases five same-frame, correctly sized
@@ -38,8 +61,9 @@ hashes and never stages them. On the local NVIDIA RTX 4080 SUPER
 This is a real local capability/bootstrap probe, **not** proof of a
 Streamline-upgraded swap chain or generated frames. The older supplied
 2.13.0-beta10 binaries remain separate. Release build and **51/51** CTest
-groups pass; FG in Skyrim remains **NOT RUN** and the installed V5.4 MO2 DLL
-remains 0.1.114. The next owner-dependent step is a bounded live creation
+groups pass; FG in Skyrim remains **NOT RUN**. At this checkpoint the installed
+V5.4 MO2 DLL remained 0.1.114; the newer preflight candidate above supersedes
+that installed-state statement. The next owner-dependent step is a bounded live creation
 and wrapper trace before replacing Skyrim/ENB/ReShade's D3D11-facing swap.
 
 ## FG presentation audit and SDK ABI boundary (2026-09-28)
