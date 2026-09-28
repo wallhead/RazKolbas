@@ -1,5 +1,23 @@
 # Implementation checkpoint
 
+## One-shot V5.4 UI capture armed (2026-09-29)
+
+With Skyrim closed, the installed V5.4 `RazKolbas.ini` now has only
+`Diagnostics.CaptureFirstDlssFrame = true` changed for the next launch.
+Its pre-change SHA-256 is
+`e05eed4f2a80237608f9c4e6a4a595bb7c36a4c19248239b38d827504f56ff5b`,
+and the byte-for-byte backup is in ignored
+`artifacts/local/fg-ui-probe-2026-09-29/RazKolbas.ini.before-capture`.
+The active INI SHA-256 is
+`0a322215401ce23406a6ec7bd6697ff0f3edeebbf69b49c2c033df2710f43b7b`.
+The installed plugin DLL SHA-256 remains
+`bd775e7ae9f6dd76492fc5fd1e8958f26fb780fa12dc2d9d0653196796f77db4`.
+The existing diagnostic collects prepared/raw/final DLSS images and a
+same-frame native UI menu sequence on its first evaluated world frame.
+Skyrim collection is **NOT RUN**; this setting must be restored after the
+evidence is collected. This capture cannot itself prove a transparent UI
+source or a complete camera record.
+
 ## Synthetic DLSS-G On and source-only submission contract (2026-09-29)
 
 The hash-pinned Streamline 2.14.1 standalone probe now presented two frames
