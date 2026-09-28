@@ -1,5 +1,36 @@
 # Implementation checkpoint
 
+## 0.1.112 loading-screen UI boundary diagnostic (2026-09-28)
+
+The owner reports that the 0.1.111 HUD bars and compass are sharper with no
+new visual issue, but loading-screen text/logo/UI remains blurry. The loading
+screen is excluded from the world-HUD viewport window, and the existing
+cold-title native route explicitly excludes `Loading Menu`. Source 0.1.112
+adds bounded read-only movie-viewport and D3D11 target snapshots before the
+first loading-menu `PostDisplay`, before Scaleform `EndFrame`, and after its
+flush. It captures up to three early loading frames and three after DLSS has
+submitted, so one owner-started session can distinguish startup/save loading
+from a later world transition. The Release build and all 45 CTest groups pass.
+With Skyrim closed, the DLL SHA-256
+`b9a1547667f2e727765ffeb8c2f0817b9c1a5c94906699a1c1c42b48645ed135`
+was installed into V5.4 MO2. All eight installed manifest payload hashes
+match. The game-updated INI and SR/NR runtimes were preserved; the prior DLL,
+INI and manifest are backed up under ignored
+`artifacts/local/v54-0.1.112-loading-ui-probe-backup`. **0.1.112 Skyrim loading
+UI trace and visual result: NOT RUN.** See
+`docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
+
+## 0.1.111 HUD viewport game result (2026-09-28)
+
+In the owner-started run, frame 154977 showed 14 HUD/widget movies changing
+from 1485x835 to 2560x1440 before the Scaleform flush and all 14 restoring
+afterward with zero conflicts. Periodic records through more than 11,400 HUD
+frames continued to report 14 restored and zero conflicts, while DLSS
+publication reached over 11,000 submitted frames with zero fallbacks in flight.
+The owner confirms the bars and compass are sharper and reports no new HUD
+shift or flicker. This verifies the world-HUD path in the current V5.4 setup;
+it does not cover the loading screen or F1 cursor interaction.
+
 ## 0.1.111 native world-HUD movie viewport candidate (2026-09-28)
 
 The owner-started 0.1.110 game trace found all 14 active HUD/widget movie
@@ -16,8 +47,8 @@ Release build and 45/45 CTest groups pass afterward. The DLL SHA-256
 was installed into V5.4 MO2 after Skyrim closed; all eight manifest payloads
 match. The game-updated INI was preserved and its new hash recorded. The
 previous DLL, INI and manifest are backed up under ignored
-`artifacts/local/v54-0.1.111-hud-viewport-backup`. **Skyrim visual result,
-restoration trace and cursor interaction: NOT RUN** for 0.1.111. See
+`artifacts/local/v54-0.1.111-hud-viewport-backup`. That was the install
+checkpoint; the subsequent game result is recorded above. See
 `docs/re/HUD_RESOLUTION_BOUNDARY_2026-09-27.md`.
 
 ## 0.1.110 HUD movie viewport probe installed (2026-09-28)

@@ -161,6 +161,8 @@ struct WorldState {
     std::uint64_t hudViewportFrame{},hudViewportWindows{};
     unsigned hudViewportRestoreCount{};
     bool hudViewportConflictLogged{};
+    std::uint64_t loadingUiTraceFrame{},loadingUiTraceLastFrame{};
+    unsigned loadingUiEarlyTraceCount{},loadingUiWorldTraceCount{};
     std::uint64_t deferredMenuPublications{},preservedInventoryComposites{},
         preservedMagicComposites{},preservedMainMenuComposites{},
         magicMovieReplays{},cursorReplays{};
@@ -749,7 +751,8 @@ void beginNativeHudMovieViewportWindow(WorldState* state,
     if(state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
        !namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)||
        inventoryMenuOnStack(state)||magicMenuOnStack(state)||
-       titleMenuOnStack(state))return;
+       titleMenuOnStack(state)||
+       namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME))return;
     auto* domain=activeOwnedSceneDomain();
     if(!domain||domain->phase()!=ScenePhase::NativeUi||
        domain->frame()!=frame||domain->renderThread()!=GetCurrentThreadId())return;
@@ -793,7 +796,8 @@ void logHudMovieViewports(WorldState* state,std::uint64_t frame) noexcept {
        state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
        !namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)||
        inventoryMenuOnStack(state)||magicMenuOnStack(state)||
-       titleMenuOnStack(state))return;
+       titleMenuOnStack(state)||
+       namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME))return;
     RE::UI* ui{};
     if(!state->uiSingletonCell||
        !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return;
@@ -815,6 +819,65 @@ void logHudMovieViewports(WorldState* state,std::uint64_t frame) noexcept {
     }
     try {spdlog::info("HUD movie viewport snapshot complete: frame={} movies={}; read-only",
         frame,logged);}catch(...) {}
+}
+bool armLoadingUiTrace(WorldState* state,std::uint64_t frame) noexcept {
+    if(!state||!frame||state->loadingUiTraceLastFrame==frame)return false;
+    auto* loading=menuInstanceOnStack(state,RE::LoadingMenu::MENU_NAME);
+    if(!loading||!loading->uiMovie)return false;
+    auto& count=state->srPresenter.submittedFrames()>0?
+        state->loadingUiWorldTraceCount:state->loadingUiEarlyTraceCount;
+    if(count>=3)return false;
+    state->loadingUiTraceLastFrame=frame;
+    state->loadingUiTraceFrame=frame;
+    ++count;
+    return true;
+}
+void logLoadingUiBoundary(WorldState* state,std::uint64_t frame,
+    std::string_view stage) noexcept {
+    if(!state||!state->loadingUiTraceFrame||
+       state->loadingUiTraceFrame!=frame)return;
+    auto* domain=activeOwnedSceneDomain();
+    const auto render=domain?domain->plan().render:Extent{};
+    const auto display=domain?domain->plan().display:Extent{};
+    auto* context=reinterpret_cast<ID3D11DeviceContext*>(
+        state->createdContext.load(std::memory_order_relaxed));
+    ID3D11RenderTargetView* rawColor{};
+    ID3D11DepthStencilView* rawDepth{};
+    if(context)context->OMGetRenderTargets(1,&rawColor,&rawDepth);
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> color;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth;
+    color.Attach(rawColor);depth.Attach(rawDepth);
+    const auto target=boundUiView(color.Get());
+    const auto stencil=boundUiView(depth.Get());
+    UINT viewportCount=1,scissorCount=1;
+    D3D11_VIEWPORT viewport{};
+    D3D11_RECT scissor{};
+    if(context) {
+        context->RSGetViewports(&viewportCount,&viewport);
+        context->RSGetScissorRects(&scissorCount,&scissor);
+    }
+    try {spdlog::info("Loading UI boundary frame {} {}: scene={}x{} display={}x{} domainPhase={} mode={} providerSubmissions={} RTV0={}x{} DSV={}x{} viewport={}x{} scissor=({}, {}, {}, {})",
+        frame,stage,render.width,render.height,display.width,display.height,
+        domain?static_cast<int>(domain->phase()):-1,
+        static_cast<int>(state->displayedMode.load(std::memory_order_relaxed)),
+        state->srPresenter.submittedFrames(),
+        target.width,target.height,stencil.width,stencil.height,
+        viewportCount?viewport.Width:0,viewportCount?viewport.Height:0,
+        scissorCount?scissor.left:0,scissorCount?scissor.top:0,
+        scissorCount?scissor.right:0,scissorCount?scissor.bottom:0);}catch(...) {}
+    if(stage!="before-first-PostDisplay")return;
+    RE::UI* ui{};
+    if(!state->uiSingletonCell||
+       !read(state->uiSingletonCell,&ui,sizeof(ui))||!ui)return;
+    for(unsigned ordinal=0;ordinal<ui->menuStack.size()&&ordinal<32;++ordinal) {
+        auto* item=ui->menuStack[ordinal].get();
+        if(!item||!item->uiMovie)continue;
+        const auto view=getHudMovieViewport(item->uiMovie.get());
+        const auto [identity,name]=menuAtOrdinal(state,ordinal);
+        try {spdlog::info("Loading UI movie frame {} ordinal {} menu={} id=0x{:x} buffer={}x{} rect=({}, {}, {}x{}) flags=0x{:x}",
+            frame,ordinal,name,identity,view.bufferWidth,view.bufferHeight,
+            view.left,view.top,view.width,view.height,view.flags);}catch(...) {}
+    }
 }
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
@@ -1337,6 +1400,8 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                 error.what());}catch(...) {}
         } catch(...) {}
     }
+    if(armLoadingUiTrace(state,frame))
+        logLoadingUiBoundary(state,frame,"before-first-PostDisplay");
     beginNativeHudMovieViewportWindow(state,frame);
 #endif
 }
@@ -1352,6 +1417,8 @@ void beforeDeferredUiFlush(void*) noexcept {
 #ifdef RK_WITH_NGX
     auto* state=active.load(std::memory_order_acquire);
     auto* domain=activeOwnedSceneDomain();
+    const auto loadingFrame=state?state->forwarded.load(std::memory_order_relaxed):0;
+    logLoadingUiBoundary(state,loadingFrame,"before-Scaleform-EndFrame");
     if(!state||!domain||domain->phase()!=ScenePhase::NativeUi)return;
     auto* ui=ownedUiRedirector();
     if(!ui)return;
@@ -1620,6 +1687,7 @@ void deferredUiFlushProxy(void* renderer) noexcept {
 #ifdef RK_WITH_NGX
     finishNativeHudMovieViewportWindow(state);
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    logLoadingUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logHudUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logInventoryBinding(state,frame,"after-EndFrame");
     if(state->cursorReplayCapture&&

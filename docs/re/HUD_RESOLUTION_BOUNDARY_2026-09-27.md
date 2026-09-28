@@ -1,5 +1,23 @@
 # DLSS Quality HUD resolution boundary: evidence before a shared fix
 
+## 0.1.111 game result and remaining loading UI (2026-09-28)
+
+In the owner-started 0.1.111 run, the live scene was 1485x835 and display
+2560x1440. At frame 154977, all 14 active world HUD/widget movies reported
+native 2560x1440 viewports before Scaleform `EndFrame`; the window restored
+all 14 afterward with zero conflicts. Periodic restoration records continued
+past 11,400 windows, and DLSS publication passed 11,000 submitted frames. The
+owner observed sharper health bars and compass without new HUD issues. The
+shared world-HUD repair is therefore game-verified for this setup.
+
+The owner separately reports blurry loading-screen text/logo/UI. The existing
+cold-title route excludes `Loading Menu`, and the world-HUD viewport window
+does too. Source 0.1.112 adds a bounded read-only loading-menu movie and
+D3D11 boundary trace. The Release build and 45/45 CTest groups pass; the
+read-only probe is installed in V5.4 MO2 with all eight manifest hashes
+verified. A loading-screen fix requires this distinct producer and publication
+evidence; **0.1.112 game trace and loading-screen repair are NOT RUN**.
+
 ## 0.1.110 game viewport finding and 0.1.111 candidate
 
 The owner started the installed 0.1.110 build and loaded a world with a
