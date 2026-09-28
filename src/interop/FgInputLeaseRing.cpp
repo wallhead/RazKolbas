@@ -1,4 +1,5 @@
 #include "rk/FgInputLeaseRing.hpp"
+#include <exception>
 
 namespace rk {
 namespace {
@@ -17,12 +18,40 @@ bool sameDesc(const D3D11_TEXTURE2D_DESC& a,
 }
 }
 FgInputLeaseRing::FgInputLeaseRing(FgSharedInputs& bridge,
-    std::uint64_t generation) noexcept : bridge_(bridge),pool_(generation) {}
+    std::uint64_t generation) noexcept : bridge_(bridge),
+    lifetime_(bridge.retainLifetime()),pool_(generation) {}
+
+std::vector<FgInputLeaseRing::Quarantined>&
+FgInputLeaseRing::quarantine() {
+    // Deliberately process-lifetime: an uncertain GPU/provider read must not
+    // be released by a transient owner destructor.
+    static auto* owners=new std::vector<Quarantined>;
+    return *owners;
+}
+std::mutex& FgInputLeaseRing::quarantineMutex() {
+    static auto* mutex=new std::mutex;
+    return *mutex;
+}
+FgInputLeaseRing::~FgInputLeaseRing() noexcept {
+    if(stopped_||(!failed_&&!pool_.hasOutstanding()))return;
+    try {
+        std::scoped_lock lock(quarantineMutex());
+        quarantine().push_back({std::move(lifetime_),std::move(slots_)});
+    } catch(...) {
+        // Releasing an uncertain GPU resource is worse than failing closed.
+        std::terminate();
+    }
+}
+std::size_t FgInputLeaseRing::quarantinedOwners() noexcept {
+    std::scoped_lock lock(quarantineMutex());
+    return quarantine().size();
+}
 
 Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     const FgInputSources& sources,ID3D11DeviceContext* context,
     const FgFenceProgress& progress) {
-    if(failed_||!bridge_.healthy()||!context||!frame.source||!frame.resetEpoch||
+    if(stopped_||failed_||!bridge_.healthy()||!context||!frame.source||
+       !frame.resetEpoch||
        frame.generation!=pool_.generation()||
        progress.generation!=frame.generation||
        !frame.render.valid()||!frame.display.valid())
@@ -63,6 +92,7 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     lease.serial=++nextSerial_;
     slot.serial=lease.serial;
     slot.prepared=true;
+    slot.lastCopy={};
     for(std::size_t i=0;i<descs.size();++i) {
         const auto copied=bridge_.copy(context,sources.textures[i],*slot.surfaces[i]);
         if(const auto error=std::get_if<Error>(&copied)) {
@@ -72,18 +102,20 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
             return *error;
         }
         lease.lastCopy=std::get<FgCopyTicket>(copied);
+        slot.lastCopy=lease.lastCopy;
         lease.resources[i]=slot.surfaces[i]->d12();
     }
     return lease;
 }
 bool FgInputLeaseRing::current(const FgInputLease& lease) const noexcept {
-    return lease.slot<slots_.size()&&lease.generation==pool_.generation()&&
+    return !stopped_&&lease.slot<slots_.size()&&
+        lease.generation==pool_.generation()&&
         lease.serial&&slots_[lease.slot].serial==lease.serial&&
         slots_[lease.slot].prepared;
 }
 bool FgInputLeaseRing::submit(const FgInputLease& lease,
     const FgRetirementSet& retirement) noexcept {
-    if(failed_||!bridge_.healthy()||!current(lease)||
+    if(stopped_||failed_||!bridge_.healthy()||!current(lease)||
        retirement.generation!=lease.generation||
        retirement.producer<lease.lastCopy.producer||
        retirement.copy<lease.lastCopy.copy||
@@ -93,7 +125,7 @@ bool FgInputLeaseRing::submit(const FgInputLease& lease,
     return true;
 }
 bool FgInputLeaseRing::discard(const FgInputLease& lease) noexcept {
-    if(failed_||!current(lease))return false;
+    if(stopped_||failed_||!current(lease))return false;
     if(bridge_.copyStatus(lease.lastCopy.copy)==FgCopyStatus::DeviceRemoved) {
         failed_=true;
         return false;
@@ -103,16 +135,28 @@ bool FgInputLeaseRing::discard(const FgInputLease& lease) noexcept {
     slots_[lease.slot].prepared=false;
     return true;
 }
+bool FgInputLeaseRing::stop(const FgFenceProgress& progress) noexcept {
+    if(stopped_)return true;
+    if(failed_||!bridge_.healthy())return false;
+    for(const auto& slot:slots_)
+        if(slot.lastCopy.copy&&
+           !bridge_.copyComplete(slot.lastCopy.copy))return false;
+    if(!pool_.drain(progress))return false;
+    for(auto& slot:slots_)slot=Slot{};
+    stopped_=true;
+    return true;
+}
 bool FgInputLeaseRing::advanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) noexcept {
-    if(failed_||!bridge_.healthy()||!pool_.advanceGeneration(next,progress))
+    if(stopped_||failed_||!bridge_.healthy()||
+       !pool_.advanceGeneration(next,progress))
         return false;
     for(auto& slot:slots_)slot=Slot{};
     return true;
 }
 bool FgInputLeaseRing::canAdvanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) const noexcept {
-    return !failed_&&bridge_.healthy()&&
+    return !stopped_&&!failed_&&bridge_.healthy()&&
         pool_.canAdvanceGeneration(next,progress);
 }
 }

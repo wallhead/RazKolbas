@@ -1,5 +1,21 @@
 # Implementation checkpoint
 
+## V5.4 FG swap facade live trace (2026-09-28)
+
+The user-started 0.1.115 read-only preflight captured both the ReShade nested
+swap and the ENB outer swap. Each supports `IDXGISwapChain1/3/4`, returns the
+same D3D11 creation-device COM identity, and rejects D3D12 `GetDevice` with
+`E_NOINTERFACE`. The full bounded evidence and exact owner hashes are in
+`docs/re/FG_V54_SWAP_FACADE_LIVE_2026-09-28.md`. This closes the interface
+discovery gate: the game-facing swap must remain D3D11-facing while a future
+D3D12 lower owner is hidden beneath it. The current game path presented
+successfully; **FG On / generated output: NOT RUN**. Skyrim was closed after
+capture. No installed files changed.
+The source-only FG lease ring now has an explicit normal stop with actual copy
+completion checks and process-lifetime quarantine for unfinished or failed
+work; a partial-copy failure WARP test passed. Provider/Present progress still
+needs a real owner, so this does not validate generation or live teardown.
+
 ## FG review 26 corrections (2026-09-28)
 
 The supplied FG-vs-AIO review was checked against source and public SDK/API

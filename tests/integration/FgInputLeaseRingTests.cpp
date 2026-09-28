@@ -120,3 +120,54 @@ TEST_CASE("FG input lease rejects stale stamps and mismatched guide sizes",
         gpu.context.Get(),{7,0,0,0,0,0})));
     REQUIRE(ring.advanceGeneration(8,{7,0,0,0,0,0}));
 }
+
+TEST_CASE("FG lease shutdown drains completed copies and quarantines partial copies",
+    "[fg_input_lease]") {
+    WarpDevices gpu;
+    const auto before=rk::FgInputLeaseRing::quarantinedOwners();
+    const auto input=frame(1);
+    SourceTextures sources(gpu.d11.Get(),input);
+    {
+        auto ring=std::make_unique<rk::FgInputLeaseRing>(*gpu.bridge,7);
+        const auto prepared=ring->prepare(input,sources.inputs,gpu.context.Get(),
+            {7,0,0,0,0,0});
+        REQUIRE(std::holds_alternative<rk::FgInputLease>(prepared));
+        const auto lease=std::get<rk::FgInputLease>(prepared);
+        REQUIRE(ring->discard(lease));
+        REQUIRE(ring->stop({7,0,0,0,0,0}));
+    }
+    REQUIRE(rk::FgInputLeaseRing::quarantinedOwners()==before);
+
+    ComPtr<ID3D11Device> foreign;
+    ComPtr<ID3D11DeviceContext> foreignContext;
+    D3D_FEATURE_LEVEL level{};
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(gpu.adapter.Get(),
+        D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,nullptr,0,D3D11_SDK_VERSION,
+        &foreign,&level,&foreignContext)));
+    sources.owned[1]=texture(foreign.Get(),input.render);
+    sources.inputs.textures[1]=sources.owned[1].Get();
+    {
+        auto ring=std::make_unique<rk::FgInputLeaseRing>(*gpu.bridge,7);
+        REQUIRE(std::holds_alternative<rk::Error>(ring->prepare(input,
+            sources.inputs,gpu.context.Get(),{7,0,0,0,0,0})));
+        REQUIRE(ring->failed());
+        REQUIRE_FALSE(ring->stop({7,UINT64_MAX,UINT64_MAX,0,0,0}));
+        REQUIRE_FALSE(ring->advanceGeneration(8,{7,100,100,100,100,100}));
+    }
+    REQUIRE(rk::FgInputLeaseRing::quarantinedOwners()==before+1);
+
+    SourceTextures validSources(gpu.d11.Get(),input);
+    {
+        auto ring=std::make_unique<rk::FgInputLeaseRing>(*gpu.bridge,7);
+        const auto prepared=ring->prepare(input,validSources.inputs,
+            gpu.context.Get(),{7,0,0,0,0,0});
+        REQUIRE(std::holds_alternative<rk::FgInputLease>(prepared));
+        const auto lease=std::get<rk::FgInputLease>(prepared);
+        REQUIRE(gpu.bridge->waitCopy(lease.lastCopy.copy));
+        REQUIRE(ring->submit(lease,{7,lease.lastCopy.producer,
+            lease.lastCopy.copy,9,10,11}));
+        REQUIRE_FALSE(ring->stop({7,lease.lastCopy.producer,
+            lease.lastCopy.copy,8,10,11}));
+    }
+    REQUIRE(rk::FgInputLeaseRing::quarantinedOwners()==before+2);
+}

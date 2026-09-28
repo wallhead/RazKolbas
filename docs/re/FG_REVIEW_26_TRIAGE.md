@@ -28,6 +28,14 @@ Skyrim addresses or a wire contract to copy verbatim.
   producer. A WARP test blocks the D3D12 queue, completes two D3D11 producer
   tickets, and confirms the first consumer ticket remains incomplete until
   the queue is released. No provider consumes these textures yet.
+- F5: the ring now has an explicit `stop(progress)` path that checks actual
+  copy-fence completion before releasing normally. An unfinished or failed
+  ring destructor transfers its surfaces and bridge devices/queue/fences to a
+  process-lifetime quarantine. WARP tests inject a second-input copy error
+  after the first copy was queued and a separate blocked provider retirement;
+  both owners are quarantined, while a drained owner is not. A live provider
+  must still supply real provider/Present progress to `stop`; fabricated
+  progress remains unsafe.
 - F6: DXGI TEST Present forwards exactly one test call with per-call
   generation suppressed. It does not consume a source ID or cycle persistent
   On/Off state. Off/drain remains mandatory for real transitions and resize.
@@ -38,10 +46,6 @@ Skyrim addresses or a wire contract to copy verbatim.
   Streamline frame token/viewport, actual camera constants, queue submissions
   and the **previously presented** input-consumption fence. Numeric
   retirement fields alone cannot prove this association.
-- F5: a partially queued copy stops ring reuse, but the ring has no explicit
-  owning stop/drain/quarantine lifetime. Its destructor may still release
-  resources with work in flight. It must not be embedded in a live FG owner
-  until this lifetime is implemented and failure-injection tested.
 - F7: Streamline's `numFramesActuallyPresented` is interval telemetry, not a
   generated-frame count attributable to the current source. The current
   backend's per-call count is only from native fallback or test mocks; no
@@ -54,7 +58,7 @@ Skyrim addresses or a wire contract to copy verbatim.
 
 The installed V5.4 0.1.115 DLL is the read-only swap-owner preflight from
 before this audit. This source work does not enable FG in Skyrim and did not
-replace the installed DLL. The next game evidence is still the nested/outer
-swap COM trace from a user-started title-screen session. A standalone FG-On
-experiment needs coherent guides/camera and a real provider retirement path;
-success codes alone will not count as generated output.
+replace the installed DLL. The user-started nested/outer swap COM trace is
+now captured in `FG_V54_SWAP_FACADE_LIVE_2026-09-28.md`. A standalone FG-On
+experiment still needs coherent guides/camera and a real provider retirement
+path; success codes alone will not count as generated output.

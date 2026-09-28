@@ -39,6 +39,12 @@ presentation path. Its provider implementation is either a Streamline-managed
 DLSS-G lower swap or an FSR 3.1 frame-interpolation swap chain, never both.
 The provider interface will expose capability query, real-frame input
 submission, one real Present, telemetry, Off/drain, resize, and teardown.
+The user-started V5.4 preflight confirmed both the ReShade nested and ENB
+outer swap chains support `IDXGISwapChain1/3/4` and return the original D3D11
+device identity, while D3D12 `GetDevice` returns `E_NOINTERFACE`. The
+game-facing facade must preserve that D3D11 contract, expose D3D11 backbuffer
+textures and hide the D3D12 lower owner. See
+`docs/re/FG_V54_SWAP_FACADE_LIVE_2026-09-28.md`.
 The End-menu FG tab and configured toggle hotkey can request On/Off during a
 session. Until a backend connects them to the lower Present, the menu must
 report Effective Off. The in-game provider selector writes a restart-pending
@@ -47,8 +53,9 @@ Those methods operate on a common frame/lease record, with provider-specific
 tagging and API calls behind the interface. The current D3D11 observer is not
 that owner. An offline WARP lower-chain forwarder now proves real
 Present/Present1, COM identity and resize HRESULTs, but it does not expose a
-D3D11-facing D3D12 proxy. A matching live ENB/ReShade wrapper trace must
-precede replacement in the game.
+D3D11-facing D3D12 proxy. The live ENB/ReShade wrapper trace is captured;
+offline COM/backbuffer/resize tests and game validation remain before any
+replacement in the game.
 
 For each real source frame, the coordinator supplies display-sized final
 colour, HUD-less colour and native UI colour/alpha, plus correctly sized

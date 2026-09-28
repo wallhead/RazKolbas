@@ -140,6 +140,9 @@ bool FgSharedInputs::healthy() const noexcept {
         producerGate_&&producerGate_->GetCompletedValue()!=UINT64_MAX&&
         consumerFence_&&consumerFence_->GetCompletedValue()!=UINT64_MAX;
 }
+FgInteropLifetime FgSharedInputs::retainLifetime() const noexcept {
+    return {d11_,d12_,queue_,producerFence_,producerGate_,consumerFence_};
+}
 bool FgSharedInputs::producerComplete(std::uint64_t value) const noexcept {
     return producerGate_&&d12_&&classifyFgCopyStatus(
         producerGate_->GetCompletedValue(),value,

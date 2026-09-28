@@ -175,6 +175,19 @@ bool FgLeasePool::releaseUnsubmitted(std::size_t index) noexcept {
     slots_[index]={};
     return true;
 }
+bool FgLeasePool::hasOutstanding() const noexcept {
+    return std::any_of(slots_.begin(),slots_.end(),[](const Slot& slot) {
+        return slot.state!=State::Free;
+    });
+}
+bool FgLeasePool::drain(const FgFenceProgress& progress) noexcept {
+    if(progress.generation!=generation_||
+       progress.producer==UINT64_MAX||progress.copy==UINT64_MAX||
+       progress.providerInput==UINT64_MAX||progress.present==UINT64_MAX||
+       progress.allocator==UINT64_MAX)return false;
+    retire(progress);
+    return !hasOutstanding();
+}
 bool FgLeasePool::advanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) noexcept {
     if(!canAdvanceGeneration(next,progress))return false;

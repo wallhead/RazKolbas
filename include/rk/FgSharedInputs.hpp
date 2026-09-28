@@ -14,6 +14,15 @@ struct FgCopyTicket {
 enum class FgCopyStatus { Pending, Complete, DeviceRemoved, Unknown };
 FgCopyStatus classifyFgCopyStatus(std::uint64_t completed,
     std::uint64_t requested,HRESULT deviceHealth) noexcept;
+// Holds the interop devices, queue and fences when work has uncertain
+// retirement and its shared surfaces must outlive the bridge object.
+struct FgInteropLifetime {
+    Microsoft::WRL::ComPtr<ID3D11Device5> d11;
+    Microsoft::WRL::ComPtr<ID3D12Device> d12;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
+    Microsoft::WRL::ComPtr<ID3D11Fence> producer;
+    Microsoft::WRL::ComPtr<ID3D12Fence> producerGate,consumer;
+};
 
 class FgSharedSurface {
 public:
@@ -42,6 +51,7 @@ public:
     bool copyComplete(std::uint64_t value) const noexcept;
     bool waitCopy(std::uint64_t value) const noexcept;
     bool healthy() const noexcept;
+    FgInteropLifetime retainLifetime() const noexcept;
 private:
     FgSharedInputs()=default;
     Microsoft::WRL::ComPtr<ID3D11Device5> d11_;

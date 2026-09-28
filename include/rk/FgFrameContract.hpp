@@ -92,6 +92,8 @@ public:
     std::optional<std::size_t> acquire(const FgFenceProgress& progress) noexcept;
     bool submit(std::size_t slot,const FgRetirementSet& retirement) noexcept;
     bool releaseUnsubmitted(std::size_t slot) noexcept;
+    bool drain(const FgFenceProgress& progress) noexcept;
+    bool hasOutstanding() const noexcept;
     bool advanceGeneration(std::uint64_t next,
         const FgFenceProgress& progress) noexcept;
     bool canAdvanceGeneration(std::uint64_t next,
