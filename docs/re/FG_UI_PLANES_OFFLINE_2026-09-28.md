@@ -7,11 +7,15 @@ source, generation, presentation token and reset epoch. A changed token,
 generation or source cannot finish the pending capture. The separate UI
 source must have an alpha-capable format, must not alias either the pre-UI
 source or the final source, and must supply a nonempty in-bounds region.
+R10G10B10A2 is rejected for the UI plane because its two-bit alpha does not
+meet the pinned Streamline 2.14.1 guide's UI precision recommendation.
 Failure discards the pending FG capture without writing to final colour.
 
-A WARP test cleared pre-UI colour red, changed the final source to green,
-cleared a distinct UI texture blue at half alpha, and read back red, green
-and blue/half-alpha from the respective snapshots. It also exercised missing,
+A WARP test cleared pre-UI colour red, changed final colour to purple,
+and supplied premultiplied blue UI at half alpha. Readback measured red,
+purple and blue/half-alpha from the respective snapshots. That sample obeys
+`final RGB = UI RGB + (1 - UI alpha) * HUD-less RGB`, the pinned guide's
+required blend relationship. The test also exercised missing,
 aliased, reduced-size and stale-frame inputs and generation rollover. Debug
 and Release builds each passed 53/53 CTest groups. These are offline D3D11
 copy and validation results, not native Skyrim UI capture evidence.
@@ -22,7 +26,8 @@ path, native UI still draws into the final backbuffer; that composite cannot
 reliably recover an independent UI colour/alpha plane. The class therefore
 has no game caller, no Streamline tags, and no FG-On effect. A valid region
 and alpha-capable texture descriptor do not prove nonempty or correctly
-composited Skyrim UI pixels. Same-context command ordering is required when
+composited Skyrim UI pixels. This class does not validate premultiplication
+or the blend relationship for arbitrary inputs. Same-context command ordering is required when
 passing these snapshots to the later D3D11-to-D3D12 input lease.
 
 Next, establish an actual native-size transparent UI producer at the verified

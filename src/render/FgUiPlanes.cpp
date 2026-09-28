@@ -24,7 +24,6 @@ bool alphaFormat(DXGI_FORMAT format) noexcept {
     case DXGI_FORMAT_B8G8R8A8_UNORM:
     case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
-    case DXGI_FORMAT_R10G10B10A2_UNORM:
         return true;
     default:return false;
     }

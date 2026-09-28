@@ -7,8 +7,9 @@ then separately snapshots an alpha-capable UI source and final colour for the
 same source/generation/presentation token/reset epoch. It rejects absent,
 reduced, stale or aliased UI sources and an invalid UI region without
 modifying the final frame. A WARP test measured distinct pre-UI, UI-alpha and
-final pixels, including the case where the final source is overwritten after
-the pre-UI copy. Debug and Release passed **53/53** CTest groups. This is a
+final pixels with premultiplied UI content, including the case where the
+final source is overwritten after the pre-UI copy. It also rejects a
+two-bit-alpha UI format. Debug and Release passed **53/53** CTest groups. This is a
 source-only capture boundary: the current Skyrim route still draws UI into
 the final backbuffer and has no verified separate transparent UI producer.
 Consequently no FG UI tags or FG-On game integration were enabled. The

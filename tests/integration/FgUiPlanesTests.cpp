@@ -16,10 +16,11 @@ struct Warp {
             nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
     }
     ComPtr<ID3D11Texture2D> colour(std::uint32_t width=32,
-        std::uint32_t height=20) {
+        std::uint32_t height=20,
+        DXGI_FORMAT format=DXGI_FORMAT_R8G8B8A8_UNORM) {
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width=width;desc.Height=height;desc.MipLevels=1;desc.ArraySize=1;
-        desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+        desc.Format=format;desc.SampleDesc.Count=1;
         desc.Usage=D3D11_USAGE_DEFAULT;
         desc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
         ComPtr<ID3D11Texture2D> texture;
@@ -65,8 +66,9 @@ TEST_CASE("FG UI planes preserve pre-UI, separate UI and final pixels",
     gpu.clear(final.Get(),{1,0,0,1});
     REQUIRE(std::holds_alternative<bool>(planes.captureBeforeUi(source,
         gpu.context.Get(),final.Get())));
-    gpu.clear(final.Get(),{0,1,0,1});
-    gpu.clear(ui.Get(),{0,0,1,0.5f});
+    gpu.clear(final.Get(),{0.5f,0,0.5f,1});
+    // Premultiplied blue UI at half alpha over the red HUD-less scene.
+    gpu.clear(ui.Get(),{0,0,0.5f,0.5f});
     auto captured=planes.finish(source,gpu.context.Get(),ui.Get(),
         final.Get(),{0,0,32,20});
     REQUIRE(std::holds_alternative<rk::FgUiPlaneFrame>(captured));
@@ -74,9 +76,9 @@ TEST_CASE("FG UI planes preserve pre-UI, separate UI and final pixels",
     REQUIRE(gpu.pixel(result.hudless.Get())==
         std::array<std::uint8_t,4>{255,0,0,255});
     REQUIRE(gpu.pixel(result.uiColorAlpha.Get())==
-        std::array<std::uint8_t,4>{0,0,255,128});
+        std::array<std::uint8_t,4>{0,0,128,128});
     REQUIRE(gpu.pixel(result.finalColor.Get())==
-        std::array<std::uint8_t,4>{0,255,0,255});
+        std::array<std::uint8_t,4>{128,0,128,255});
     REQUIRE(result.hudlessStamp.source==1);
     REQUIRE(result.uiStamp.source==1);
     REQUIRE(result.presentToken==source.presentToken);
@@ -110,6 +112,11 @@ TEST_CASE("FG UI capture rejects absent, aliased and stale UI planes",
         gpu.context.Get(),final.Get())));
     REQUIRE(std::holds_alternative<rk::Error>(planes.finish(source,
         gpu.context.Get(),reduced.Get(),final.Get(),{0,0,32,20})));
+    auto lowAlpha=gpu.colour(32,20,DXGI_FORMAT_R10G10B10A2_UNORM);
+    REQUIRE(std::holds_alternative<bool>(planes.captureBeforeUi(source,
+        gpu.context.Get(),final.Get())));
+    REQUIRE(std::holds_alternative<rk::Error>(planes.finish(source,
+        gpu.context.Get(),lowAlpha.Get(),final.Get(),{0,0,32,20})));
     REQUIRE(std::holds_alternative<bool>(planes.captureBeforeUi(source,
         gpu.context.Get(),final.Get())));
     REQUIRE_FALSE(planes.advanceGeneration(8));
