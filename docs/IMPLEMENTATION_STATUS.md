@@ -6,8 +6,12 @@ The supplied RE28 archive passed a read-only 84-file manifest hash check.
 Its reference CPU probes distinguish cached D3D11 colour, guide lease and
 rotating D3D12 destination, consistent with our corrected source routing.
 They do not establish live guide freshness, typed SL camera constants or
-provider-input completion. The current lease ring stamps source/generation/
-reset epoch but has no bound Streamline token/camera/previous-input fence
+provider-input completion. The offline lease ring now rejects a missing
+presentation token and binds each copied set to source, generation, token,
+reset epoch, exact D3D12 resources and producer/copy ticket. A WARP test
+rejects altered lease identities while accepting the original. Debug and
+Release passed 52/52 CTest groups. This is a preparation/submission integrity
+check, not a bound Streamline camera/viewport/previous-input completion
 record. See `docs/re/AIO_DLSS_FG_RE28_AUDIT.md`. No Skyrim runtime test was
 performed for this audit.
 

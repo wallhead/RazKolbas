@@ -14,7 +14,7 @@ struct FgInputSources {
 };
 struct FgInputLease {
     std::size_t slot{};
-    std::uint64_t generation{},serial{},source{};
+    std::uint64_t generation{},serial{},source{},presentToken{},resetEpoch{};
     FgCopyTicket lastCopy{};
     std::array<Microsoft::WRL::ComPtr<ID3D12Resource>,5> resources{};
 };
@@ -47,7 +47,7 @@ private:
         std::array<std::optional<FgSharedSurface>,5> surfaces{};
         std::array<D3D11_TEXTURE2D_DESC,5> descs{};
         FgCopyTicket lastCopy{};
-        std::uint64_t serial{};
+        std::uint64_t serial{},source{},presentToken{},resetEpoch{};
         bool prepared{};
     };
     struct Quarantined {

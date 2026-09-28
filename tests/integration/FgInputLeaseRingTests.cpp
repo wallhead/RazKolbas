@@ -121,6 +121,45 @@ TEST_CASE("FG input lease rejects stale stamps and mismatched guide sizes",
     REQUIRE(ring.advanceGeneration(8,{7,0,0,0,0,0}));
 }
 
+TEST_CASE("FG copied inputs remain bound to their exact real frame",
+    "[fg_input_lease]") {
+    WarpDevices gpu;
+    rk::FgInputLeaseRing ring(*gpu.bridge,7);
+    auto input=frame(1);
+    SourceTextures sources(gpu.d11.Get(),input);
+    input.presentToken=0;
+    REQUIRE(std::holds_alternative<rk::Error>(ring.prepare(input,
+        sources.inputs,gpu.context.Get(),{7,0,0,0,0,0})));
+    input=frame(1);
+    auto result=ring.prepare(input,sources.inputs,gpu.context.Get(),
+        {7,0,0,0,0,0});
+    REQUIRE(std::holds_alternative<rk::FgInputLease>(result));
+    const auto lease=std::get<rk::FgInputLease>(std::move(result));
+    REQUIRE(lease.presentToken==input.presentToken);
+    REQUIRE(lease.resetEpoch==input.resetEpoch);
+    const rk::FgRetirementSet retirement{7,lease.lastCopy.producer,
+        lease.lastCopy.copy,1,2,3};
+    auto changed=lease;
+    changed.source++;
+    REQUIRE_FALSE(ring.submit(changed,retirement));
+    changed=lease;
+    changed.presentToken++;
+    REQUIRE_FALSE(ring.submit(changed,retirement));
+    changed=lease;
+    changed.resetEpoch++;
+    REQUIRE_FALSE(ring.submit(changed,retirement));
+    changed=lease;
+    changed.lastCopy.copy++;
+    REQUIRE_FALSE(ring.submit(changed,retirement));
+    changed=lease;
+    changed.resources[1]=lease.resources[0];
+    REQUIRE_FALSE(ring.submit(changed,retirement));
+    REQUIRE(gpu.bridge->waitCopy(lease.lastCopy.copy));
+    REQUIRE(ring.submit(lease,retirement));
+    REQUIRE(ring.stop({7,retirement.producer,retirement.copy,
+        retirement.providerInput,retirement.present,retirement.allocator}));
+}
+
 TEST_CASE("FG lease shutdown drains completed copies and quarantines partial copies",
     "[fg_input_lease]") {
     WarpDevices gpu;

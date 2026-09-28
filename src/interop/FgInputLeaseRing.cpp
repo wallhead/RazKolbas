@@ -51,6 +51,7 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     const FgInputSources& sources,ID3D11DeviceContext* context,
     const FgFenceProgress& progress) {
     if(stopped_||failed_||!bridge_.healthy()||!context||!frame.source||
+       !frame.presentToken||
        !frame.resetEpoch||
        frame.generation!=pool_.generation()||
        progress.generation!=frame.generation||
@@ -89,8 +90,13 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     lease.slot=*acquired;
     lease.generation=frame.generation;
     lease.source=frame.source;
+    lease.presentToken=frame.presentToken;
+    lease.resetEpoch=frame.resetEpoch;
     lease.serial=++nextSerial_;
     slot.serial=lease.serial;
+    slot.source=lease.source;
+    slot.presentToken=lease.presentToken;
+    slot.resetEpoch=lease.resetEpoch;
     slot.prepared=true;
     slot.lastCopy={};
     for(std::size_t i=0;i<descs.size();++i) {
@@ -108,10 +114,18 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
     return lease;
 }
 bool FgInputLeaseRing::current(const FgInputLease& lease) const noexcept {
-    return !stopped_&&lease.slot<slots_.size()&&
-        lease.generation==pool_.generation()&&
-        lease.serial&&slots_[lease.slot].serial==lease.serial&&
-        slots_[lease.slot].prepared;
+    if(stopped_||lease.slot>=slots_.size()||
+       lease.generation!=pool_.generation()||!lease.serial)return false;
+    const auto& slot=slots_[lease.slot];
+    if(!slot.prepared||slot.serial!=lease.serial||
+       slot.source!=lease.source||slot.presentToken!=lease.presentToken||
+       slot.resetEpoch!=lease.resetEpoch||
+       slot.lastCopy.producer!=lease.lastCopy.producer||
+       slot.lastCopy.copy!=lease.lastCopy.copy)return false;
+    for(std::size_t i=0;i<lease.resources.size();++i)
+        if(!slot.surfaces[i]||
+           slot.surfaces[i]->d12()!=lease.resources[i].Get())return false;
+    return true;
 }
 bool FgInputLeaseRing::submit(const FgInputLease& lease,
     const FgRetirementSet& retirement) noexcept {

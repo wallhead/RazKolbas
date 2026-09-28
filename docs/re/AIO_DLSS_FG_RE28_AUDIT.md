@@ -39,9 +39,14 @@ The packet's deliberately manipulated CPU fixture shows that a new frame
 number alone does not prove fresh guide contents; it is **not** a claim of a
 live stale-frame bug. RazKolbas `FgResourceStamp` and `FgInputLeaseRing`
 already require matching source, generation, reset epoch and extents before
-copying guide resources. They do not yet bind that lease to a typed camera
-payload, Streamline token/viewport, physical output index and the provider's
-returned previous-input completion. No provider currently consumes the ring.
+copying guide resources. The following offline change also binds the copied
+lease to its presentation token, reset epoch, source, exact D3D12 resource
+identities and producer/copy ticket; altered lease copies cannot be submitted.
+The WARP regression passed with Debug and Release 52/52 CTest groups. This
+does not prove source texture contents or guide freshness in Skyrim. The lease
+still lacks a typed camera payload, Streamline token/viewport, physical output
+index and the provider's returned previous-input completion. No provider
+currently consumes the ring.
 
 The packet traces a named SetCameraData export to a separate singleton; it
 does not establish that export as the producer of Streamline's full current
