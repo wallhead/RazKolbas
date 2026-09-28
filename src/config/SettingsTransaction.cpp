@@ -9,7 +9,7 @@ Settings nrLiveSettingsForSession(const Settings& requested,const Settings& acti
 }
 ChangeCategory classifyChange(const Settings& before, const Settings& after) {
     for (const auto key : {"General.Presentation", "General.SafeMode",
-        "FrameGeneration.Enabled", "FrameGeneration.Provider",
+        "FrameGeneration.Provider",
         "NeuralRendering.RuntimeProfile", "NeuralRendering.AllowExperimentalRuntime",
         "Diagnostics.CaptureHotkey", "Diagnostics.CaptureFirstDlssFrame",
         "Diagnostics.SpatialBaselineOnly",
@@ -19,7 +19,8 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
     for (const auto& [key, value] : before.values) {
         if (value == after.values.at(key)) continue;
         if (!key.starts_with("Interface.") && !key.starts_with("Diagnostics.") &&
-            key != "General.LogLevel" && key != "Upscaling.Sharpening" &&
+            key != "General.LogLevel" && key != "FrameGeneration.Enabled" &&
+            key != "Upscaling.Sharpening" &&
             key != "Upscaling.Sharpness") return ChangeCategory::Recreate;
     }
     return ChangeCategory::Live;

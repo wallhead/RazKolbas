@@ -28,12 +28,22 @@ FgReason capabilityReason(const FgCapability* capability,
         return FgReason::UnvalidatedUiContract;
     return FgReason::Ready;
 }
+bool allowedOnAdapter(FgProvider provider,std::uint32_t vendor) noexcept {
+    if(vendor==0x10de)return provider==FgProvider::Dlss||provider==FgProvider::Fsr;
+    if(vendor==0x1002||vendor==0x8086)return provider==FgProvider::Fsr;
+    return false;
+}
 }
 FgDecision decideFg(const FgSourceFrame& frame,const FgRequest& request,
     std::initializer_list<FgCapability> capabilities) noexcept {
     FgDecision decision{request.provider,FgProvider::Off,0,FgReason::Disabled};
     if(!request.enabled||request.provider==FgProvider::Off)return decision;
-    if(frame.renderVendor!=0x10de) {
+    if(frame.renderVendor!=0x10de&&frame.renderVendor!=0x1002&&
+       frame.renderVendor!=0x8086) {
+        decision.reason=FgReason::UnsupportedAdapter;return decision;
+    }
+    if(request.provider!=FgProvider::Auto&&
+       !allowedOnAdapter(request.provider,frame.renderVendor)) {
         decision.reason=FgReason::UnsupportedAdapter;return decision;
     }
     if(!frame.ownerReady) {
@@ -60,6 +70,7 @@ FgDecision decideFg(const FgSourceFrame& frame,const FgRequest& request,
     const FgCapability* selected=nullptr;
     if(request.provider==FgProvider::Auto) {
         for(const auto provider:{FgProvider::Dlss,FgProvider::Fsr}) {
+            if(!allowedOnAdapter(provider,frame.renderVendor))continue;
             const auto* candidate=find(capabilities,provider);
             if(capabilityReason(candidate,frame.sr)==FgReason::Ready) {
                 selected=candidate;break;
@@ -84,25 +95,34 @@ FgDecision decideFg(const FgSourceFrame& frame,const FgRequest& request,
     return decision;
 }
 FgProviderSession::FgProviderSession(FgRequest request,FgSrProvider sr,
+    std::uint32_t renderVendor,
     std::initializer_list<FgCapability> capabilities) noexcept : request_(request) {
-    if(!request.enabled||request.provider==FgProvider::Off)return;
+    if(request.provider==FgProvider::Off)return;
     if(request.provider==FgProvider::Auto) {
         for(const auto provider:{FgProvider::Dlss,FgProvider::Fsr}) {
-            if(capabilityReason(find(capabilities,provider),sr)==FgReason::Ready) {
+            if(allowedOnAdapter(provider,renderVendor)&&
+               capabilityReason(find(capabilities,provider),sr)==FgReason::Ready) {
                 bound_=provider;
                 return;
             }
         }
-    } else if(capabilityReason(find(capabilities,request.provider),sr)==FgReason::Ready) {
+    } else if(allowedOnAdapter(request.provider,renderVendor)&&
+        capabilityReason(find(capabilities,request.provider),sr)==FgReason::Ready) {
         bound_=request.provider;
     }
 }
 FgDecision FgProviderSession::decide(const FgSourceFrame& frame,
     const FgCapability& liveCapability) const noexcept {
+    return decide(frame,liveCapability,request_.enabled);
+}
+FgDecision FgProviderSession::decide(const FgSourceFrame& frame,
+    const FgCapability& liveCapability,bool enabled) const noexcept {
+    auto request=request_;
+    request.enabled=enabled;
+    if(!enabled)return {request.provider,FgProvider::Off,0,FgReason::Disabled};
     if(bound_==FgProvider::Off||liveCapability.provider!=bound_)
-        return {request_.provider,FgProvider::Off,0,
-            request_.enabled?FgReason::ProviderUnavailable:FgReason::Disabled};
-    return decideFg(frame,request_,{liveCapability});
+        return {request.provider,FgProvider::Off,0,FgReason::ProviderUnavailable};
+    return decideFg(frame,request,{liveCapability});
 }
 bool FgRetirementSet::ready(const FgFenceProgress& progress) const noexcept {
     return generation!=0&&progress.generation==generation&&

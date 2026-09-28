@@ -41,11 +41,23 @@ TEST_CASE("Auto selects one validated FG provider on the actual NVIDIA adapter",
     REQUIRE(both.reason==rk::FgReason::Ready);
     const auto fsr=rk::decideFg(frame,request,{capability(rk::FgProvider::Fsr)});
     REQUIRE(fsr.effective==rk::FgProvider::Fsr);
-    auto nonNvidia=frame;
-    nonNvidia.renderVendor=0x1002;
-    const auto unsupported=rk::decideFg(nonNvidia,request,{capability(rk::FgProvider::Fsr)});
-    REQUIRE(unsupported.effective==rk::FgProvider::Off);
-    REQUIRE(unsupported.reason==rk::FgReason::UnsupportedAdapter);
+    for(const auto vendor:{0x1002u,0x8086u}) {
+        auto other=frame;
+        other.renderVendor=vendor;
+        REQUIRE(rk::decideFg(other,request,{
+            capability(rk::FgProvider::Dlss),capability(rk::FgProvider::Fsr)}).effective==
+            rk::FgProvider::Fsr);
+        REQUIRE(rk::decideFg(other,{true,rk::FgProvider::Dlss,1},{
+            capability(rk::FgProvider::Dlss)}).reason==
+            rk::FgReason::UnsupportedAdapter);
+        const rk::FgProviderSession session({true,rk::FgProvider::Auto,1},other.sr,
+            vendor,{capability(rk::FgProvider::Dlss),capability(rk::FgProvider::Fsr)});
+        REQUIRE(session.boundProvider()==rk::FgProvider::Fsr);
+    }
+    auto unknown=frame;
+    unknown.renderVendor=0x1234;
+    REQUIRE(rk::decideFg(unknown,request,{capability(rk::FgProvider::Fsr)}).reason==
+        rk::FgReason::UnsupportedAdapter);
 }
 
 TEST_CASE("Explicit FSR request persists when its SR pairing is unvalidated",
@@ -66,7 +78,7 @@ TEST_CASE("FG session pins one provider even when its live capability drops",
     "[fg_contract]") {
     const auto frame=source();
     const rk::FgRequest request{true,rk::FgProvider::Auto,1};
-    const rk::FgProviderSession session(request,frame.sr,{
+    const rk::FgProviderSession session(request,frame.sr,frame.renderVendor,{
         capability(rk::FgProvider::Fsr),capability(rk::FgProvider::Dlss)});
     REQUIRE(session.boundProvider()==rk::FgProvider::Dlss);
     REQUIRE(session.decide(frame,capability(rk::FgProvider::Dlss)).effective==
@@ -79,6 +91,20 @@ TEST_CASE("FG session pins one provider even when its live capability drops",
     REQUIRE(off.reason==rk::FgReason::ProviderUnavailable);
     REQUIRE(session.decide(frame,capability(rk::FgProvider::Fsr)).effective==
         rk::FgProvider::Off);
+}
+
+TEST_CASE("FG session can toggle Off and On without changing its bound provider",
+    "[fg_contract]") {
+    const auto frame=source();
+    const rk::FgRequest startup{false,rk::FgProvider::Auto,1};
+    const rk::FgProviderSession session(startup,frame.sr,frame.renderVendor,{
+        capability(rk::FgProvider::Fsr),capability(rk::FgProvider::Dlss)});
+    REQUIRE(session.boundProvider()==rk::FgProvider::Dlss);
+    const auto cap=capability(rk::FgProvider::Dlss);
+    REQUIRE(session.decide(frame,cap,false).reason==rk::FgReason::Disabled);
+    REQUIRE(session.decide(frame,cap,true).effective==rk::FgProvider::Dlss);
+    REQUIRE(session.decide(frame,cap,false).effective==rk::FgProvider::Off);
+    REQUIRE(session.boundProvider()==rk::FgProvider::Dlss);
 }
 
 TEST_CASE("FG rejects stale guides and a non-native UI plane", "[fg_contract]") {

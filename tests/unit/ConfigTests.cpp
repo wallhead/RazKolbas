@@ -149,13 +149,13 @@ TEST_CASE("Pending NR profile does not block current-session evaluation controls
     REQUIRE(requested.get<rk::Choice>("NeuralRendering.RuntimeProfile").value==
         "ada-fastfp16");
 }
-TEST_CASE("Frame-generation provider and enablement select a startup presentation owner",
+TEST_CASE("FG enablement is live while provider selection remains startup-bound",
     "[config][fg_contract]") {
     const auto defaults=rk::defaultSettings();
     auto enabled=defaults;
     enabled.values["FrameGeneration.Enabled"]=true;
     REQUIRE(rk::classifyChange(defaults,enabled)==
-        rk::ChangeCategory::RestartRequired);
+        rk::ChangeCategory::Live);
     auto fsr=defaults;
     fsr.values["FrameGeneration.Provider"]=rk::Choice{"FSR"};
     REQUIRE(rk::classifyChange(defaults,fsr)==
@@ -166,10 +166,10 @@ TEST_CASE("Frame-generation provider and enablement select a startup presentatio
         prepared=true;
         return true;
     });
-    REQUIRE(std::get<rk::ChangeCategory>(outcome)==rk::ChangeCategory::RestartRequired);
-    REQUIRE_FALSE(prepared);
-    REQUIRE_FALSE(transaction.snapshot()->requested.get<bool>("FrameGeneration.Enabled"));
-    REQUIRE(transaction.pendingRestart()->get<bool>("FrameGeneration.Enabled"));
+    REQUIRE(std::get<rk::ChangeCategory>(outcome)==rk::ChangeCategory::Live);
+    REQUIRE(prepared);
+    REQUIRE(transaction.snapshot()->requested.get<bool>("FrameGeneration.Enabled"));
+    REQUIRE_FALSE(transaction.pendingRestart());
 }
 TEST_CASE("Failed replacement preserves last-good state; restart remains pending", "[config]") {
     rk::SettingsTransaction transaction;

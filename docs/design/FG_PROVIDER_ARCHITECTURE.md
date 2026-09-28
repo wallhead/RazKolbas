@@ -4,18 +4,26 @@
 
 `FgSourceFrame`, `FgCapability`, `FgDecision`, `FgProviderSession`,
 `FgPresentLedger`, and `FgRetirementSet` form a vendor-neutral policy layer.
-They do not yet create generated frames. A session selects at most one provider
+`FgPresentationCoordinator` now controls one backend mode and one lower real
+Present per source frame. Its backend interface requires Off/drain before
+presenting an ordinary frame after FG was active; a failed enable falls back
+to the real frame. These interfaces do not yet create generated frames. A
+session selects at most one provider
 when its presentation owner is created. Auto prefers a validated DLSS-G
-capability, then a validated FSR 3.1 FG capability. A runtime failure turns
-that provider Off; it never hot-swaps to another live swap chain. Requested
-provider, effective provider, and the Off reason remain distinct. Enabling
-FG or changing its provider is restart-scoped in `SettingsTransaction`.
+capability, then a validated FSR 3.1 FG capability on NVIDIA. AMD and Intel
+adapters can select only a validated FSR capability. A runtime failure turns
+the bound provider Off; it never hot-swaps to another live swap chain.
+Requested provider, effective provider, and the Off reason remain distinct.
+Enabling/disabling FG is a live request; changing its provider is restart-
+scoped until a safe drain/rebuild transaction exists.
 
-The render adapter is still required to be NVIDIA, as requested for this
-product. FSR 3.1 FG is a *candidate backend on an NVIDIA adapter*; it is not
-an AMD-render-adapter support path. The pairing with the chosen SR provider
-must be validated before it is enabled. The existing XeSS FG schema choice
-remains reserved and has no bound backend. FSR 4 ML FG is outside this scope.
+This adapter rule supersedes the earlier NVIDIA-only FG policy at the owner's
+request. It is a policy allowance, not a hardware-support claim: the selected
+adapter must pass the actual FSR requirements and backend checks. The pairing
+with the chosen SR provider must be validated. The existing XeSS FG schema
+choice remains reserved and has no bound backend. FSR 4 ML FG is outside this
+scope. NR and the currently shipping DLSS SR path remain separate from this
+FG adapter policy; AMD/Intel do not gain those features through this change.
 
 ## One owner, interchangeable lower backend
 
@@ -25,6 +33,10 @@ presentation path. Its provider implementation is either a Streamline-managed
 DLSS-G lower swap or an FSR 3.1 frame-interpolation swap chain, never both.
 The provider interface will expose capability query, real-frame input
 submission, one real Present, telemetry, Off/drain, resize, and teardown.
+The End-menu FG tab and configured toggle hotkey can request On/Off during a
+session. Until a backend connects them to the lower Present, the menu must
+report Effective Off. The in-game provider selector writes a restart-pending
+choice; it does not pretend to replace a live swap chain.
 Those methods operate on a common frame/lease record, with provider-specific
 tagging and API calls behind the interface. The current D3D11 observer is not
 that owner; a matching COM/ENB/ReShade wrapper trace and harness must precede
@@ -49,7 +61,8 @@ Provider adapters translate the common inputs into their own API contracts:
 
 The common layer must not pretend these APIs have identical resource states,
 marker requirements, or swap-chain creation. FSR 3.1 is the cross-vendor
-candidate documented by AMD; the FSR 4 ML path targets AMD Radeon RX 9000.
+candidate documented by [AMD's SDK compatibility page](https://gpuopen.com/amd-fsr-sdk/);
+the FSR 4 ML path targets AMD Radeon RX 9000.
 See the official [FSR frame-interpolation swap-chain](https://gpuopen.com/manuals/fsr_sdk/techniques/frame-interpolation-swap-chain/),
 [FSR frame interpolation](https://gpuopen.com/manuals/fsr_sdk/techniques/frame-interpolation/),
 and [DLSS-G programming guide](https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_G.md).

@@ -62,10 +62,13 @@ FgDecision decideFg(const FgSourceFrame& frame,const FgRequest& request,
 class FgProviderSession {
 public:
     FgProviderSession(FgRequest request,FgSrProvider sr,
+        std::uint32_t renderVendor,
         std::initializer_list<FgCapability> capabilities) noexcept;
     FgProvider boundProvider() const noexcept { return bound_; }
     FgDecision decide(const FgSourceFrame& frame,
         const FgCapability& liveCapability) const noexcept;
+    FgDecision decide(const FgSourceFrame& frame,
+        const FgCapability& liveCapability,bool enabled) const noexcept;
 private:
     FgRequest request_{};
     FgProvider bound_{FgProvider::Off};

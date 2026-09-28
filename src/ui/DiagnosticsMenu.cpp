@@ -22,6 +22,7 @@ namespace rk {
 namespace {
 using Microsoft::WRL::ComPtr;
 std::atomic<bool> inputDispatchCapture{};
+std::atomic<bool> fgRequestedEnabled{};
 struct MenuState {
     std::mutex mutex;
     ComPtr<ID3D11Device> device;
@@ -30,9 +31,11 @@ struct MenuState {
     ULONGLONG lastFrameTick{};
     int hotkey{VK_END};
     const char* hotkeyName{"End"};
+    int fgHotkey{VK_MULTIPLY};
+    const char* fgHotkeyName{"NumMultiply"};
     float fontScale{1.0f};
     bool enabled{};
-    bool visible{},endWasDown{},failed{};
+    bool visible{},endWasDown{},fgWasDown{},failed{};
     std::uint64_t visibleFrames{};
     Settings activeSettings;
     Settings requestedSettings;
@@ -135,6 +138,15 @@ bool persistSettings(MenuState& state) {
     state.settingsDirty=false;
     state.saveMessage="Saved to RazKolbas.ini";
     return true;
+}
+void setFgRequested(MenuState& state,bool enabled) {
+    state.requestedSettings.values["FrameGeneration.Enabled"]=enabled;
+    state.activeSettings.values["FrameGeneration.Enabled"]=enabled;
+    fgRequestedEnabled.store(enabled,std::memory_order_release);
+    state.settingsDirty=true;
+    persistSettings(state);
+    spdlog::info("Frame generation requested {}; effective Off until an FG backend owns presentation",
+        enabled?"On":"Off");
 }
 struct MenuChoice { const char* value;const char* label; };
 const char* choiceLabel(std::string_view value,std::span<const MenuChoice> choices) {
@@ -389,6 +401,50 @@ void drawNeuralRenderingTab(MenuState& state,const DiagnosticsSnapshot& status) 
     sliderFloat("White Point","NeuralRendering.WhitePoint",0.01f,16.0f,false);
     ImGui::EndDisabled();
 }
+void drawFrameGenerationTab(MenuState& state) {
+    if(!state.controlsConfigured)return;
+    static constexpr MenuChoice nvidiaProviders[]{
+        {"Auto","Auto"},{"DLSS","NVIDIA DLSS-G"},
+        {"FSR","AMD FSR 3.1 FG"}};
+    static constexpr MenuChoice fsrProviders[]{
+        {"Auto","Auto"},{"FSR","AMD FSR 3.1 FG"}};
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgi;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    DXGI_ADAPTER_DESC adapterDesc{};
+    const bool adapterKnown=state.device&&
+        SUCCEEDED(state.device.As(&dxgi))&&
+        SUCCEEDED(dxgi->GetAdapter(&adapter))&&
+        SUCCEEDED(adapter->GetDesc(&adapterDesc));
+    const auto vendor=adapterKnown?adapterDesc.VendorId:0u;
+    const std::span<const MenuChoice> providers=vendor==0x10de?
+        std::span<const MenuChoice>(nvidiaProviders):
+        std::span<const MenuChoice>(fsrProviders);
+    ImGui::TextWrapped("Frame Generation uses one presentation provider per session.");
+    ImGui::TextDisabled("Render adapter vendor: %04X",vendor);
+    ImGui::TextDisabled(vendor==0x10de?"Available choices: DLSS-G or FSR 3.1 FG":
+        vendor==0x1002||vendor==0x8086?"Available choice: FSR 3.1 FG":
+        "Render adapter unknown; FG unavailable");
+    ImGui::SetNextItemWidth(240.0f);
+    if(choiceControl("FG Provider","FrameGeneration.Provider",providers,state)) {
+        state.settingsDirty=true;
+        persistSettings(state);
+    }
+    const auto& requestedProvider=state.requestedSettings.get<Choice>(
+        "FrameGeneration.Provider").value;
+    const auto& startupProvider=state.activeSettings.get<Choice>(
+        "FrameGeneration.Provider").value;
+    if(requestedProvider!=startupProvider)
+        ImGui::TextColored(ImVec4(1.0f,0.75f,0.25f,1.0f),
+            "Provider saved - restart Skyrim to change the swap-chain backend");
+    bool enabled=state.requestedSettings.get<bool>("FrameGeneration.Enabled");
+    if(ImGui::Checkbox("Enable Frame Generation",&enabled))setFgRequested(state,enabled);
+    ImGui::TextDisabled("Toggle hotkey: %s",state.fgHotkeyName);
+    ImGui::Separator();
+    ImGui::Text("Requested: %s / %s",enabled?"On":"Off",
+        choiceLabel(requestedProvider,providers));
+    ImGui::Text("Effective: Off");
+    ImGui::TextWrapped("Reason: no FG presentation owner or vendor backend is connected in this build.");
+}
 void drawDiagnosticsTab(const DiagnosticsSnapshot& status,
     UINT width,UINT height,const char* mode) {
     ImGui::Text("Effective frame: %s",mode);
@@ -435,6 +491,10 @@ void drawStatus(MenuState& state,const DiagnosticsSnapshot& status,
                 drawNeuralRenderingTab(state,status);
                 ImGui::EndTabItem();
             }
+            if(ImGui::BeginTabItem("Frame Generation")) {
+                drawFrameGenerationTab(state);
+                ImGui::EndTabItem();
+            }
             if(ImGui::BeginTabItem("Diagnostics")) {
                 drawDiagnosticsTab(status,width,height,mode);
                 ImGui::EndTabItem();
@@ -470,6 +530,20 @@ void configureDiagnosticsMenu(bool enabled,std::string_view key,double fontScale
     std::scoped_lock guard(state.mutex);
     state.activeSettings=settings;
     state.requestedSettings=settings;
+    fgRequestedEnabled.store(settings.get<bool>("FrameGeneration.Enabled"),
+        std::memory_order_release);
+    const auto& fgKey=settings.get<Text>("Interface.ToggleFrameGenerationKey").value;
+    const struct { std::string_view name; int vk; const char* label; } fgKeys[]{
+        {"NumMultiply",VK_MULTIPLY,"NumMultiply"},
+        {"F6",VK_F6,"F6"},{"F7",VK_F7,"F7"},
+        {"F8",VK_F8,"F8"},{"F9",VK_F9,"F9"}};
+    state.fgHotkey=0;
+    state.fgHotkeyName="Disabled";
+    for(const auto& choice:fgKeys)if(fgKey==choice.name) {
+        state.fgHotkey=choice.vk;
+        state.fgHotkeyName=choice.label;
+        break;
+    }
     state.iniPath=iniPath;
     state.controlMapSingletonRva=controlMapSingletonRva;
     state.ignoreKeyboardMouseOffset=ignoreKeyboardMouseOffset;
@@ -494,6 +568,10 @@ std::optional<Settings> consumeDiagnosticsNrRuntimeUpdate() {
     return update;
 }
 
+bool diagnosticsFgRequestedEnabled() noexcept {
+    return fgRequestedEnabled.load(std::memory_order_acquire);
+}
+
 bool diagnosticsMenuCapturingInput() noexcept {
     return inputDispatchCapture.load(std::memory_order_acquire);
 }
@@ -503,7 +581,7 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
     auto& state=menu();
     std::unique_lock guard(state.mutex,std::try_to_lock);
     if(!guard)return;
-    if(!swap||state.failed||!state.enabled) {
+    if(!swap||state.failed) {
         updateGameInputCapture(state,false);
         return;
     }
@@ -514,6 +592,16 @@ void drawDiagnosticsMenu(IDXGISwapChain* swap,
             return;
         }
         const bool focused=GetForegroundWindow()==swapDesc.OutputWindow;
+        const bool fgDown=focused&&state.fgHotkey&&
+            (GetAsyncKeyState(state.fgHotkey)&0x8000)!=0;
+        if(fgDown&&!state.fgWasDown&&state.controlsConfigured)
+            setFgRequested(state,!state.requestedSettings.get<bool>(
+                "FrameGeneration.Enabled"));
+        state.fgWasDown=fgDown;
+        if(!state.enabled) {
+            updateGameInputCapture(state,false);
+            return;
+        }
         const bool endDown=focused&&(GetAsyncKeyState(state.hotkey)&0x8000)!=0;
         if(endDown&&!state.endWasDown) {
             if(state.visible&&state.settingsDirty)persistSettings(state);

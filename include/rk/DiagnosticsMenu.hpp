@@ -40,6 +40,8 @@ std::optional<SharpeningUpdate> consumeDiagnosticsSharpeningUpdate() noexcept;
 // Returns the most recent menu snapshot containing live NR evaluation controls.
 // Creation-time fields in the snapshot remain restart-bound.
 std::optional<Settings> consumeDiagnosticsNrRuntimeUpdate();
+// Live requested FG state; this does not imply generated output is active.
+bool diagnosticsFgRequestedEnabled() noexcept;
 bool diagnosticsMenuCapturingInput() noexcept;
 void drawDiagnosticsMenu(IDXGISwapChain* swap,const DiagnosticsSnapshot& snapshot) noexcept;
 }

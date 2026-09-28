@@ -1,5 +1,31 @@
 # Implementation checkpoint
 
+## FG in-game request control and adapter policy (2026-09-28)
+
+The End menu now has a Frame Generation tab with an enable checkbox, provider
+selector, requested/effective display and an explicit unavailable reason.
+`Interface.ToggleFrameGenerationKey` (default NumMultiply; F6-F9 also accepted)
+toggles the same request once per keypress while Skyrim has focus, even if
+the End overlay is hidden. The live request is exposed to the future FG
+presentation coordinator. Enable/disable is classified Live; provider choice
+remains restart-scoped because the current owner cannot safely replace a
+live swap chain. The menu saves provider changes and says a restart is needed.
+
+At the owner's updated request, NVIDIA may choose a validated DLSS-G or FSR
+3.1 FG capability, while AMD and Intel may choose only a validated FSR
+capability. The adapter policy alone does not claim AMD/Intel SR or NR support,
+and XeSS FG remains unimplemented. The synthetic provider tests cover all
+three vendor IDs, explicit DLSS rejection on AMD/Intel, unknown-adapter
+rejection and an Off/On/Off sequence with the same bound provider. A new
+provider-neutral presentation coordinator calls one real Present per source,
+applies Off and drains before presenting, and falls back to the real frame
+when backend enable fails. Its mock tests also reject duplicate Presents and
+abort on a failed Off drain. Release build and **48/48** CTest groups pass.
+**In-game menu/hotkey behavior and
+actual FG output: NOT RUN.** No new DLL has been installed to MO2. The
+effective state stays Off because a lower presentation owner and FG backend
+are still missing.
+
 ## Swappable FG policy checkpoint (2026-09-28)
 
 Source now has a vendor-neutral FG frame/guide contract, one-provider-per-session
@@ -8,8 +34,8 @@ adapter), truthful requested/effective/Off reason, one-real-Present ledger and
 independent producer/copy/provider-input/Present/allocator retirement gates.
 The fixed three-slot lease pool refuses reuse before those fences retire and
 refuses resize generation rollover while any lease is still held.
-FG enablement and provider changes now require a restart because the lower
-presentation owner must be selected before swap-chain creation. TDD produced
+At this checkpoint FG enablement and provider changes required a restart;
+the newer live enablement policy above supersedes that part. TDD produced
 an expected compile failure for the missing contract, then an expected config
 test failure before restart classification, followed by a Release build and
 46/46 passing CTest groups. See `docs/design/FG_PROVIDER_ARCHITECTURE.md`.

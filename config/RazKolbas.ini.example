@@ -38,7 +38,10 @@ ManualRenderScale = 0.0
 
 [FrameGeneration]
 Enabled = false
-; Auto / DLSS / FSR / XeSS; a valid SR provider does not imply FG support.
+; Enable/disable is a live request from the End menu or NumMultiply hotkey.
+; Auto / DLSS / FSR / XeSS; provider changes require restart. NVIDIA may use
+; DLSS-G or FSR 3.1 FG; AMD/Intel may use only FSR FG after capability checks.
+; A valid SR provider does not imply FG support. XeSS FG is reserved.
 Provider = Auto
 ; Explicit count: 1 extra frame means 2 total displayed frames per real frame.
 ; Clamp/reject according to the selected runtime's actual capability query.
