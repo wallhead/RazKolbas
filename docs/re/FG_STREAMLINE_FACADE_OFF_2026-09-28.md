@@ -26,6 +26,9 @@ The earlier five fresh-process runs without readback also exited 0.
 The final probe queried `slDLSSGGetState=0` and reported
 `actualPresented=1`, `maxExtra=1`; the one presented frame was the real frame
 while mode remained Off.
+A subsequent probe changed the hidden window to 144x88 and passed zero for
+both ResizeBuffers dimensions. The facade derived the current client extent,
+and the Streamline lower swap returned `S_OK` with a 144x88 description.
 
 This verifies one real FG-Off pixel path through Streamline's proxied D3D12
 queue and lower swap. It does **not** verify FG On, generated frames, resource

@@ -15,6 +15,8 @@ presented real frame with FG Off. Release **52/52** CTest groups passed. See
 `docs/re/FG_STREAMLINE_FACADE_OFF_2026-09-28.md`. This is offline FG-Off
 evidence; installed V5.4 0.1.115 is unchanged, and Skyrim FG On/generated
 output remain **NOT RUN**.
+An additional hidden-window run passed zero-size ResizeBuffers and reported
+the actual 144x88 client extent.
 
 ## FG D3D11 swap COM facade (2026-09-28)
 
@@ -24,7 +26,7 @@ swap. WARP tested pixel readback after Present/Present1, D3D12 query hiding,
 held-buffer and invalid resize rejection, ResizeBuffers/1, and twelve repeated
 resize/present cycles. Debug and Release each passed **52/52** CTest groups.
 See `docs/re/FG_D3D11_COM_FACADE_2026-09-28.md`. Wrapper-chain integration,
-zero-size resize, private-data lifetime, nonblocking pacing, provider tags,
+private-data lifetime, nonblocking pacing, provider tags,
 FG On and generated output remain open. No game installation changed; Skyrim
 runtime verification for this facade is **NOT RUN**.
 

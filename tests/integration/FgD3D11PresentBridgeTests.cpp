@@ -261,4 +261,22 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
         gpu.context->ClearRenderTargetView(view.Get(),yellow);
         REQUIRE(SUCCEEDED(facade->Present(0,0)));
     }
+    view.Reset();
+    gameBuffer.Reset();
+    gpu.context->ClearState();
+    gpu.context->Flush();
+    REQUIRE(SetWindowPos(gpu.window,nullptr,0,0,120,84,
+        SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE));
+    REQUIRE(SUCCEEDED(facade->ResizeBuffers(2,0,0,
+        DXGI_FORMAT_UNKNOWN,0)));
+    REQUIRE(SUCCEEDED(facade->GetDesc(&resized)));
+    REQUIRE(resized.BufferDesc.Width==120);
+    REQUIRE(resized.BufferDesc.Height==84);
+    const auto windowIndex=facade->GetCurrentBackBufferIndex();
+    REQUIRE(SUCCEEDED(facade->GetBuffer(windowIndex,
+        IID_PPV_ARGS(&gameBuffer))));
+    D3D11_TEXTURE2D_DESC windowTexture{};
+    gameBuffer->GetDesc(&windowTexture);
+    REQUIRE(windowTexture.Width==120);
+    REQUIRE(windowTexture.Height==84);
 }

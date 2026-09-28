@@ -206,7 +206,21 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         DXGI_FORMAT_R8G8B8A8_UNORM,0);
     std::cout<<"Facade ResizeBuffers=0x"<<std::hex<<
         static_cast<std::uint32_t>(resized)<<std::dec<<'\n';
-    return SUCCEEDED(resized)?0:26;
+    if(FAILED(resized))return 26;
+    HWND window{};
+    if(FAILED(facade->GetHwnd(&window))||!window||
+       !SetWindowPos(window,nullptr,0,0,144,88,
+           SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE))return 30;
+    const auto zeroResize=facade->ResizeBuffers(2,0,0,
+        DXGI_FORMAT_UNKNOWN,0);
+    DXGI_SWAP_CHAIN_DESC after{};
+    const auto descResult=facade->GetDesc(&after);
+    std::cout<<"Facade zero-size ResizeBuffers=0x"<<std::hex<<
+        static_cast<std::uint32_t>(zeroResize)<<std::dec<<
+        " extent="<<after.BufferDesc.Width<<'x'<<
+        after.BufferDesc.Height<<'\n';
+    return SUCCEEDED(zeroResize)&&SUCCEEDED(descResult)&&
+        after.BufferDesc.Width==144&&after.BufferDesc.Height==88?0:31;
 }
 int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
     ID3D12Device* device,bool facadeMode) {

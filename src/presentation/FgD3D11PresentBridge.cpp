@@ -221,11 +221,21 @@ HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcep
 HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     try {
     if(prepared_||poisoned_)return DXGI_ERROR_INVALID_CALL;
-    if(!call.width||!call.height)
-        return DXGI_ERROR_UNSUPPORTED;
     DXGI_SWAP_CHAIN_DESC old{};
     auto hr=lower_.getDesc(&old);
     if(FAILED(hr))return hr;
+    auto width=call.width;
+    auto height=call.height;
+    if(!width||!height) {
+        HWND window{};
+        RECT client{};
+        if(FAILED(swap3_->GetHwnd(&window))||!window||
+           !GetClientRect(window,&client)||
+           client.right<=client.left||client.bottom<=client.top)
+            return DXGI_ERROR_UNSUPPORTED;
+        if(!width)width=static_cast<UINT>(client.right-client.left);
+        if(!height)height=static_cast<UINT>(client.bottom-client.top);
+    }
     const auto count=call.buffers?call.buffers:old.BufferCount;
     const auto format=call.format==DXGI_FORMAT_UNKNOWN?
         old.BufferDesc.Format:call.format;
@@ -248,8 +258,8 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     }
     D3D11_TEXTURE2D_DESC source{};
     render_.front()->GetDesc(&source);
-    source.Width=call.width;
-    source.Height=call.height;
+    source.Width=width;
+    source.Height=height;
     source.Format=format;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> nextRender;
     std::vector<FgSharedSurface> nextShared;
@@ -267,8 +277,8 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     if(FAILED(hr))return hr;
     DXGI_SWAP_CHAIN_DESC actual{};
     if(FAILED(lower_.getDesc(&actual))||actual.BufferCount!=count||
-       actual.BufferDesc.Width!=call.width||
-       actual.BufferDesc.Height!=call.height||
+       actual.BufferDesc.Width!=width||
+       actual.BufferDesc.Height!=height||
        actual.BufferDesc.Format!=format) {
         poisoned_=true;
         return E_FAIL;
