@@ -4,10 +4,13 @@
 
 Generate one additional displayed frame for each real Skyrim frame on a
 supported GPU while keeping SR, optional pre-SR NR, ENB, ReShade and native
-UI correct. The user's installed 0.1.106 build is still a D3D11 real-frame
+UI correct. The user's installed 0.1.114 build is still a D3D11 real-frame
 renderer with a pass-through ENB/ReShade swap-chain observer; this design
 does not imply FG is active. `General.Presentation=ProxyD3D12` and the FG
-settings are schema entries, not an implemented proxy/provider.
+settings are schema entries, not an implemented proxy/provider. The shared
+selection and frame contract is described in
+[`FG_PROVIDER_ARCHITECTURE.md`](FG_PROVIDER_ARCHITECTURE.md); this document
+describes the DLSS-G backend specifically.
 
 The supplied RE25 packet is evidence. Its recovered host exporter prepares
 data; the actual DLSS-G plugin operates at a Streamline-managed lower

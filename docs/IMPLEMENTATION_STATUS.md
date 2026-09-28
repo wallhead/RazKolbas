@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## Swappable FG policy checkpoint (2026-09-28)
+
+Source now has a vendor-neutral FG frame/guide contract, one-provider-per-session
+selection (DLSS-G first, FSR 3.1 FG as validated fallback on an NVIDIA render
+adapter), truthful requested/effective/Off reason, one-real-Present ledger and
+independent producer/copy/provider-input/Present/allocator retirement gates.
+The fixed three-slot lease pool refuses reuse before those fences retire and
+refuses resize generation rollover while any lease is still held.
+FG enablement and provider changes now require a restart because the lower
+presentation owner must be selected before swap-chain creation. TDD produced
+an expected compile failure for the missing contract, then an expected config
+test failure before restart classification, followed by a Release build and
+46/46 passing CTest groups. See `docs/design/FG_PROVIDER_ARCHITECTURE.md`.
+
+**Actual FG backend creation, generated GPU output, Skyrim runtime result and
+FSR-on-NVIDIA SR pairing: NOT RUN.** This work has no presentation owner or
+vendor FG submission yet and has not been installed into V5.4 MO2. The next
+implementation step is a same-adapter, generation-safe D3D11-to-D3D12 input
+lease and offline presentation-owner harness; only after that should the
+owner-started game verify a backend.
+
 ## 0.1.114 cold loading UI and first-world hitch candidate (2026-09-28)
 
 Source 0.1.114 extends the already-working cold-title spatial pre-UI handoff

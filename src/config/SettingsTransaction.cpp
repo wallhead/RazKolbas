@@ -9,6 +9,7 @@ Settings nrLiveSettingsForSession(const Settings& requested,const Settings& acti
 }
 ChangeCategory classifyChange(const Settings& before, const Settings& after) {
     for (const auto key : {"General.Presentation", "General.SafeMode",
+        "FrameGeneration.Enabled", "FrameGeneration.Provider",
         "NeuralRendering.RuntimeProfile", "NeuralRendering.AllowExperimentalRuntime",
         "Diagnostics.CaptureHotkey", "Diagnostics.CaptureFirstDlssFrame",
         "Diagnostics.SpatialBaselineOnly",
