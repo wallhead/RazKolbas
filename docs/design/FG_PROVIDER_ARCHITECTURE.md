@@ -44,8 +44,10 @@ report Effective Off. The in-game provider selector writes a restart-pending
 choice; it does not pretend to replace a live swap chain.
 Those methods operate on a common frame/lease record, with provider-specific
 tagging and API calls behind the interface. The current D3D11 observer is not
-that owner; a matching COM/ENB/ReShade wrapper trace and harness must precede
-replacement in the game.
+that owner. An offline WARP lower-chain forwarder now proves real
+Present/Present1, COM identity and resize HRESULTs, but it does not expose a
+D3D11-facing D3D12 proxy. A matching live ENB/ReShade wrapper trace must
+precede replacement in the game.
 
 For each real source frame, the coordinator supplies display-sized final
 colour, HUD-less colour and native UI colour/alpha, plus correctly sized
@@ -74,16 +76,18 @@ and [DLSS-G programming guide](https://github.com/NVIDIA-RTX/Streamline/blob/mai
 
 ## Remaining implementation and acceptance
 
-1. Build same-adapter D3D11-to-D3D12 source/guide leases with independently
-   measured consumer fences and generation-safe resize. Reuse the verified
-   NR interop techniques only where the lifetimes actually match.
-2. Trace the V5.4 swap-chain wrapper chain and build an offline COM/presentation
-   harness. Prove one real Present, HRESULT propagation, reference lifetime,
-   resize and Off/drain before changing Skyrim's owner.
-3. Pin matching vendor SDK/runtime versions, implement each backend behind
-   the owner, and test resource/tag contracts separately. The supplied local
-   Streamline v2.13.0-beta10 DLLs must not be paired with public 2.14.1
-   headers. Never infer FG
+1. Bind the new five-input shared leases to a genuine HUD-less/UI capture and
+   actual provider-input/Present/allocator fence signals. Their WARP-tested
+   retirement policy must not be fed fabricated completed values.
+2. Trace the V5.4 live swap-chain wrapper/creation order and use the WARP-tested
+   lower-chain harness to build the D3D11-facing D3D12 owner. The harness
+   already proves native lower Present, HRESULT, COM identity, 100 resizes and
+   Off/drain; it does not prove the future facade under ENB/ReShade.
+3. Use the now hash-pinned official Streamline 2.14.1 headers/runtime as one
+   set for the DLSS-G backend, and test tags/resource lifetimes separately.
+   The local RTX 4080 SUPER standalone probe reports DLSS-G support and D3D12
+   device binding, not generated output. The supplied local Streamline
+   v2.13.0-beta10 DLLs must not be paired with 2.14.1 headers. Never infer FG
    support from the NR runtime or GPU name.
 4. Use a user-started game session to establish actual generated output,
    native HUD/menu appearance, ENB/ReShade composition, frame cadence and

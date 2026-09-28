@@ -39,6 +39,7 @@ public:
         IFgPresentBackend& backend) noexcept;
     Result<FgPresentOutcome> present(const FgSourceFrame& frame,
         bool requestedEnabled,const FgPresentCall& call={});
+    Result<bool> suspend();
     bool enabled() const noexcept { return enabled_; }
 private:
     FgProviderSession session_;

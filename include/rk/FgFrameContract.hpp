@@ -94,6 +94,8 @@ public:
     bool releaseUnsubmitted(std::size_t slot) noexcept;
     bool advanceGeneration(std::uint64_t next,
         const FgFenceProgress& progress) noexcept;
+    bool canAdvanceGeneration(std::uint64_t next,
+        const FgFenceProgress& progress) const noexcept;
     std::uint64_t generation() const noexcept { return generation_; }
 private:
     enum class State { Free, Acquired, InFlight };

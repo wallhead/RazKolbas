@@ -5,6 +5,16 @@ FgPresentationCoordinator::FgPresentationCoordinator(
     FgProviderSession session,IFgPresentBackend& backend) noexcept :
     session_(session),backend_(backend) {}
 
+Result<bool> FgPresentationCoordinator::suspend() {
+    if(!enabled_)return true;
+    const auto drained=backend_.setMode(false);
+    if(!std::holds_alternative<bool>(drained)||!std::get<bool>(drained))
+        return Error{ErrorCode::Unavailable,
+            "FG backend could not turn Off and drain before resize"};
+    enabled_=false;
+    return true;
+}
+
 Result<FgPresentOutcome> FgPresentationCoordinator::present(
     const FgSourceFrame& frame,bool requestedEnabled,const FgPresentCall& call) {
     if((call.method==FgPresentMethod::Present&&call.parameters)||

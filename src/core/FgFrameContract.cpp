@@ -164,11 +164,18 @@ bool FgLeasePool::releaseUnsubmitted(std::size_t index) noexcept {
 }
 bool FgLeasePool::advanceGeneration(std::uint64_t next,
     const FgFenceProgress& progress) noexcept {
-    if(!next||next<=generation_||progress.generation!=generation_)return false;
+    if(!canAdvanceGeneration(next,progress))return false;
     retire(progress);
-    for(const auto& slot:slots_)
-        if(slot.state!=State::Free)return false;
     generation_=next;
+    return true;
+}
+bool FgLeasePool::canAdvanceGeneration(std::uint64_t next,
+    const FgFenceProgress& progress) const noexcept {
+    if(!next||next<=generation_||progress.generation!=generation_)return false;
+    for(const auto& slot:slots_) {
+        if(slot.state==State::Acquired)return false;
+        if(slot.state==State::InFlight&&!slot.retirement.ready(progress))return false;
+    }
     return true;
 }
 bool FgPresentLedger::canAcceptReal(const FgSourceFrame& frame) const noexcept {

@@ -1,5 +1,47 @@
 # Implementation checkpoint
 
+## FG offline input, presentation and Streamline probe (2026-09-28)
+
+Source-only FG infrastructure now leases five same-frame, correctly sized
+D3D11 inputs (display colour, render depth/motion, HUD-less colour and native
+UI colour/alpha) through persistent same-adapter D3D12 shared surfaces. The
+ring checks source/generation/reset stamps and actual texture descriptors,
+keeps each slot unavailable until producer, copy, provider-input, Present and
+allocator progress all retire, refuses generation advance while any lease is
+held, and quarantines the ring after a partial-copy failure. A prepared lease
+may be discarded only after its copy fence completes. The WARP integration
+tests exercised all five roles, stale guides, a mismatched guide size,
+delayed provider retirement and resize-generation rollover. These inputs are
+converted texture roles supplied by a caller; a real HUD-less/UI split and
+provider use have **NOT RUN**.
+
+`FgLowerSwap` now retains one actual DXGI lower chain and forwards Present,
+Present1, COM identity/GetBuffer/GetDevice/GetDesc and ResizeBuffers/1 with
+their real HRESULTs. A native pass-through backend runs through the same
+one-source Present coordinator and generates zero frames. `FgResizeTransaction`
+checks full input retirement, turns FG Off and drains, calls actual DXGI
+resize, then advances the resource generation only after success. A hidden
+window WARP test passed 100 real resize cycles, checked held-backbuffer
+`DXGI_ERROR_INVALID_CALL`, and proved pending provider retirement prevents
+both Off and resize. This is an offline lower-chain component, **not** a
+D3D11-facing D3D12 proxy in Skyrim.
+
+Official Streamline SDK `v2.14.1` x64 archive SHA-256
+`92c4d954631a1710da86ca3fa8d5034f2b9503838c95fc4ae977ae149319781b`
+was downloaded from the NVIDIA GitHub release into ignored `artifacts/local`.
+The standalone probe pins its headers, import library and six runtime DLL
+hashes and never stages them. On the local NVIDIA RTX 4080 SUPER
+(vendor `0x10de`, device `0x2702`), the exact 2.14.1 binaries reported
+`slInit=0`, `slIsFeatureSupported(DLSS-G)=0`,
+`slGetFeatureRequirements(DLSS-G)=0` (flags `0x16`),
+`D3D12CreateDevice=0x0`, `slSetD3DDevice=0`, and `slShutdown=0`.
+This is a real local capability/bootstrap probe, **not** proof of a
+Streamline-upgraded swap chain or generated frames. The older supplied
+2.13.0-beta10 binaries remain separate. Release build and **51/51** CTest
+groups pass; FG in Skyrim remains **NOT RUN** and the installed V5.4 MO2 DLL
+remains 0.1.114. The next owner-dependent step is a bounded live creation
+and wrapper trace before replacing Skyrim/ENB/ReShade's D3D11-facing swap.
+
 ## FG presentation audit and SDK ABI boundary (2026-09-28)
 
 An independent review of the source-only FG coordinator found that a failed

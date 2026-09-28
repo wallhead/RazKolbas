@@ -182,3 +182,22 @@ TEST_CASE("Backend-generated count cannot exceed the requested count",
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(1),true)));
     REQUIRE(std::holds_alternative<rk::Error>(owner.present(frame(1),true)));
 }
+
+TEST_CASE("FG suspension drains once and leaves failed drain active",
+    "[fg_presentation]") {
+    Backend backend;
+    const rk::FgProviderSession session({false,rk::FgProvider::Dlss,1},
+        rk::FgSrProvider::Dlss,0x10de,{backend.capability()});
+    rk::FgPresentationCoordinator owner(session,backend);
+    REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(1),true)));
+    backend.failDisable=true;
+    REQUIRE(std::holds_alternative<rk::Error>(owner.suspend()));
+    REQUIRE(owner.enabled());
+    backend.failDisable=false;
+    REQUIRE(std::holds_alternative<bool>(owner.suspend()));
+    REQUIRE_FALSE(owner.enabled());
+    REQUIRE(std::holds_alternative<bool>(owner.suspend()));
+    REQUIRE(backend.calls==std::vector<const char*>{
+        "on","present","off-drain","off-drain"});
+    REQUIRE(std::holds_alternative<rk::FgPresentOutcome>(owner.present(frame(2),true)));
+}
