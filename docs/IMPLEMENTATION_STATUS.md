@@ -1,5 +1,34 @@
 # Implementation checkpoint
 
+## Installed 0.1.124 paired FG input diagnostic (2026-09-29)
+
+The source now derives candidate Streamline row-major projection and temporal
+clip transforms from the observed Skyrim camera fields, including translation
+between the separately stored camera positions. This is source-only geometry;
+no Streamline FG constants are submitted. Synthetic geometry regressions and
+the full Debug and Release suites passed **57/57** CTest groups in each build.
+The default-off camera probe now also saves prepared colour, motion and depth
+guides on its two consecutive camera-sample frames. The one-shot installed INI
+arms that probe and the native UI-plane probe together while FG remains Off.
+
+The eight-payload MO2 archive
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.124-fg-paired.zip`
+has SHA-256 `33aa2cec22d1133a0f86c2205e5f61130f44c17222db5ae851d049eb7ee503b4`.
+Its nine ZIP entries and all eight payload hashes were verified. The isolated
+V5.4 MO2 mod contains DLL SHA-256
+`903b06f3161bc25348a2ae3c4758e9e1f57bb08affc2348afcd9fe32230bcadf`
+and one-shot INI SHA-256
+`f3f210cce739b382eb81acb1d3333a9fd53c7b408218a53e4224e0c9c4ff2ee2`;
+all eight installed payloads match the manifest. The prior DLL, normal INI and
+manifest are backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.124-2026-09-29`.
+
+Skyrim 0.1.124 and FG-On are **NOT RUN**. The next required step is a
+user-started save-load run. The paired readback may briefly stall diagnostic
+frames; its evidence will be analyzed before any FG submission is attempted.
+See `docs/re/FG_CAMERA_GEOMETRY_2026-09-29.md` for the numerical derivation,
+SDK contract and remaining guide/camera admission questions.
+
 ## Source-only observed game camera decoder (2026-09-29)
 
 The 720-byte sampled layout now has a separate 1.6.1170 world-route decoder for

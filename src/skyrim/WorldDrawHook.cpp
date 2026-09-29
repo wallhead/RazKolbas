@@ -151,6 +151,7 @@ struct WorldState {
     bool probeFgCameraBuffer{},fgCameraProbeFinished{};
     std::uint64_t fgCameraFirstFrame{};
     std::array<std::optional<ProbeBuffer>,3> fgCameraSamples;
+    std::array<bool,2> fgGuideSamples{};
     std::uint64_t directUiPlaneFrame{},directUiGeneration{};
     std::size_t directUiImageBytes{};
     std::optional<ProbeImage> directUiBaseline;
@@ -1158,7 +1159,8 @@ Result<ProbeBuffer> sampleGameFgCameraBuffer(WorldState* state,
     return readbackBufferCandidate(context,buffer.Get(),4096);
 }
 void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
-    std::uint64_t frame) noexcept {
+    ID3D11Texture2D* scene,ID3D11Texture2D* motion,
+    ID3D11Texture2D* depth,Extent display,std::uint64_t frame) noexcept {
     if(!state->probeFgCameraBuffer||state->fgCameraProbeFinished)return;
     try {
         unsigned slot{};
@@ -1166,6 +1168,7 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
         else if(!state->fgCameraSamples[1]) {
             if(frame!=state->fgCameraFirstFrame+1) {
                 state->fgCameraSamples={};
+                state->fgGuideSamples={};
                 state->fgCameraFirstFrame=0;
             }
             slot=state->fgCameraFirstFrame?1:0;
@@ -1190,6 +1193,18 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
             slot,frame,buffer.descriptor.ByteWidth,
             buffer.descriptor.BindFlags,sha256(buffer.bytes));
         state->fgCameraSamples[slot]=std::move(buffer);
+        if(slot<state->fgGuideSamples.size()) {
+            const auto guides=captureOwnedSrInputs(context,scene,motion,depth,
+                display,frame);
+            if(const auto error=std::get_if<Error>(&guides))
+                spdlog::warn("FG same-frame prepared guide capture unavailable at world frame {}: {}",
+                    frame,error->message);
+            else {
+                state->fgGuideSamples[slot]=true;
+                spdlog::info("FG same-frame prepared colour/motion/depth guides captured at world frame {}: {}",
+                    frame,std::get<std::filesystem::path>(guides).string());
+            }
+        }
         if(slot!=2)return;
         state->fgCameraProbeFinished=true;
         std::array<ProbeImage,3> images;
@@ -1227,9 +1242,11 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
             "Read-only D3D11 per-frame buffer bytes at three real world frames; linear R8 byte encoding, not texture pixels; static 1.6.1170 buffer producer, no matrix semantics or FG submission claimed");
         if(const auto error=std::get_if<Error>(&saved))
             spdlog::warn("FG camera buffer bundle save unavailable: {}",error->message);
-        else spdlog::info("FG camera buffer three-frame capture complete at {}",
-            directory.string());
+        else spdlog::info("FG camera buffer three-frame capture complete at {}; consecutive guide bundles complete={}",
+            directory.string(),
+            state->fgGuideSamples[0]&&state->fgGuideSamples[1]);
         state->fgCameraSamples={};
+        state->fgGuideSamples={};
     } catch(const std::exception& error) {
         state->fgCameraProbeFinished=true;
         try {spdlog::warn("FG camera buffer read-only probe failed: {}",error.what());}
@@ -1512,7 +1529,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         }
         if(boundary==OwnedPublicationBoundary::MenuDisplay&&
            outcome.mode()==SdrSrFrameMode::Provider)
-            probeGameFgCameraBuffer(state,context,sequence);
+            probeGameFgCameraBuffer(state,context,scene,
+                reinterpret_cast<ID3D11Texture2D*>(numbers.motion),
+                reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
+                domain->plan().display,sequence);
         if(boundary==OwnedPublicationBoundary::MenuDisplay&&
            outcome.mode()==SdrSrFrameMode::Provider&&
            state->probeDirectUiPlane&&!state->directUiPlaneAttempted&&
