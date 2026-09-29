@@ -20,6 +20,8 @@ public:
     sl::Result setD3DDevice(void* device) const noexcept;
     sl::Result upgradeInterface(void** value) const noexcept;
     sl::Result getNativeInterface(void* proxy,void** native) const noexcept;
+    sl::Result getFeatureFunction(sl::Feature feature,const char* name,
+        void*& function) const noexcept;
     bool initialized() const noexcept { return initialized_; }
     const std::filesystem::path& directory() const noexcept { return directory_; }
 private:
@@ -29,6 +31,7 @@ private:
     using SetDevice=decltype(&::slSetD3DDevice);
     using Upgrade=decltype(&::slUpgradeInterface);
     using Native=decltype(&::slGetNativeInterface);
+    using FeatureFunction=decltype(&::slGetFeatureFunction);
     std::filesystem::path directory_;
     HMODULE module_{};
     DLL_DIRECTORY_COOKIE cookie_{};
@@ -37,6 +40,7 @@ private:
     SetDevice setDevice_{};
     Upgrade upgrade_{};
     Native native_{};
+    FeatureFunction featureFunction_{};
     bool initialized_{};
 };
 }

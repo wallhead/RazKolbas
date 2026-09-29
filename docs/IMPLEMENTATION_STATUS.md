@@ -11,6 +11,13 @@ factory proxy whether the ReShade factory existed before or after `slInit`;
 it left ReShade's native delegate unchanged. See
 `docs/re/FG_PRIVATE_STREAMLINE_RUNTIME_2026-09-29.md`.
 
+A further private-loader probe upgraded native factory/device interfaces,
+created a real D3D12 lower swap, resolved the DLSS-G option function, set FG
+Off and created D3D11. ReShade's stored delegate remained native in that
+process, unlike the older statically imported Streamline harness. The exact
+cause of that global-hook difference is **not established**. The returned
+proxy is the reliable contract under both probes.
+
 Release CTest passed **60/60**. The private loader is not linked into the
 game plugin yet. Installed V5.4 MO2 remains 0.1.128, and game FG is Off.
 No Skyrim runtime verification occurred in this step. Next: route an owned

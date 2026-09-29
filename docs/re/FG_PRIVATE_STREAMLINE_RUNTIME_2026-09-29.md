@@ -17,6 +17,7 @@ staged DLLs and the exact ReShade 6.8 DLL:
 | One-byte mutation of staged `sl.pcl.dll` | Initialization refused before loading: pinned file identity differs. |
 | ReShade factory made before `slInit` | `slSetD3DDevice` and `slUpgradeInterface` return success; upgraded factory is distinct, its method belongs to the hash-verified `sl.interposer.dll` (slot 10 RVA `0x289e0`); ReShade's existing delegate stays System32 `dxgi.dll` RVA `0x67c90`; clean shutdown. |
 | ReShade factory made after `slInit` | Same result and clean shutdown. |
+| Native factory/device upgraded, D3D12 lower swap created, FG Off set, then ReShade factory made | Lower swap, feature-function resolution, FG Off, and D3D11 creation succeed. The returned factory proxy is interposer-owned; ReShade's stored native delegate still has System32 slot 10. |
 
 The first probe mistakenly inspected only ReShade's unchanged delegate and
 treated that as upgrade failure. The corrected probe inspects the returned
@@ -27,6 +28,15 @@ rewriting ReShade's stored delegate. The next integration must explicitly
 route the swap creation through that returned proxy while preserving
 ReShade's outer facade and ENB's D3D11-facing contract. A success result from
 `slUpgradeInterface` alone is insufficient evidence for this routing.
+
+The older standalone harness statically imports the same interposer before
+process entry; there, after lower swap creation, ReShade's native delegate
+slot 10 is interposer-owned at RVA `0x26510`. The new private-loader probe
+does **not** reproduce that global slot change, even after lower swap
+creation and FG Off. Load timing is a possible explanation, not an
+established cause. The production path must not depend on this global side
+effect; it must use the explicitly returned proxy and retain a guarded
+fallback for an unexpected factory owner.
 
 Release CTest: 60/60. This probe is outside Skyrim and does not establish
 game stability, generated frames, presentation cadence, or UI separation.

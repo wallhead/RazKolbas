@@ -60,8 +60,10 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
     runtime->setDevice_=exportFrom<SetDevice>(runtime->module_,"slSetD3DDevice");
     runtime->upgrade_=exportFrom<Upgrade>(runtime->module_,"slUpgradeInterface");
     runtime->native_=exportFrom<Native>(runtime->module_,"slGetNativeInterface");
+    runtime->featureFunction_=exportFrom<FeatureFunction>(runtime->module_,
+        "slGetFeatureFunction");
     if(!runtime->init_||!runtime->shutdown_||!runtime->setDevice_||
-       !runtime->upgrade_||!runtime->native_)
+       !runtime->upgrade_||!runtime->native_||!runtime->featureFunction_)
         return Error{ErrorCode::Conflict,
             "Pinned Streamline core exports are incomplete"};
     const wchar_t* pluginPaths[]{runtime->directory_.c_str()};
@@ -113,6 +115,13 @@ sl::Result FgStreamlineRuntime::upgradeInterface(void** value) const noexcept {
 sl::Result FgStreamlineRuntime::getNativeInterface(void* proxy,
     void** native) const noexcept {
     return initialized_&&native_&&proxy&&native?native_(proxy,native):
+        sl::Result::eErrorInvalidParameter;
+}
+sl::Result FgStreamlineRuntime::getFeatureFunction(sl::Feature feature,
+    const char* name,void*& function) const noexcept {
+    function=nullptr;
+    return initialized_&&featureFunction_&&name?
+        featureFunction_(feature,name,function):
         sl::Result::eErrorInvalidParameter;
 }
 }
