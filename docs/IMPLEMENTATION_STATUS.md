@@ -1,5 +1,27 @@
 # Implementation checkpoint
 
+## Full-frame FG UI diagnostic installed (2026-09-29)
+
+The user-started 0.1.116 run produced 25 manifest-verified raw files. Its
+first native-boundary DLSS frame captured all 15 menu entries, but the 16
+centre crops were identical and contained a door rather than the edge HUD
+seen in a nearby full-frame capture. Inventory and Magic replays independently
+showed native menu writes: a late cursor after Inventory preparation and a
+large Magic movie write. Final replay alpha was fully opaque; no transparent FG UI
+source has been established. No new crash log appeared. Skyrim was closed
+after capture, and the prior INI was restored. See
+`docs/re/FG_UI_GAME_CAPTURE_2026-09-29.md` for exact hashes and pixel counts.
+
+Version 0.1.117 now hashes full native frames at each menu entry and retains
+the baseline, changed entries and post-EndFrame image. Debug and Release
+builds each passed **54/54** tests. A verified eight-file MO2 package was
+installed in V5.4 with one-shot capture armed; the installed DLL hash is
+`7165040ef6eb9d0ab87dd552ce6f9581abce0cb994cb1040bb350fd6c270b764`.
+The 0.1.117 Skyrim run is **NOT RUN**. FG remains effectively Off in-game;
+the separate UI producer and actual camera/Streamline constants are still
+open. The next runtime step is a user-started save load to collect the
+full-frame native UI boundary, then restore the diagnostic INI.
+
 ## AIO DLSS-G camera/token RE30 audit (2026-09-29)
 
 The supplied RE30 archive passed an independent 121-file manifest check;

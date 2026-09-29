@@ -99,6 +99,7 @@ struct WorldState {
         unsigned nextOrdinal{};
         std::vector<ProbeImage> images;
         std::vector<std::string> names;
+        std::string lastDigest;
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
@@ -886,7 +887,7 @@ void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
     auto& sequence=*state->menuUiSequence;
-    if(sequence.images.size()>=63)return;
+    if(sequence.nextOrdinal>=63)return;
     const auto ordinal=sequence.nextOrdinal++;
     auto* domain=activeOwnedSceneDomain();
     const auto device=state->createdDevice.load(std::memory_order_relaxed);
@@ -901,21 +902,26 @@ void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
         return;
     }
     const auto display=domain->plan().display;
-    const UINT left=display.width/4,top=display.height/6;
-    const UINT width=display.width/2,height=display.height/2;
     auto image=readbackRegion(reinterpret_cast<ID3D11DeviceContext*>(context),
-        std::get<NativeFlipTarget>(native).texture.Get(),left,top,width,height);
+        std::get<NativeFlipTarget>(native).texture.Get(),0,0,
+        display.width,display.height);
     if(const auto error=std::get_if<Error>(&image)) {
         spdlog::warn("Owned UI menu-sequence region {} unavailable: {}",
             ordinal,error->message);
         return;
     }
     const auto [menuPointer,menuName]=menuAtOrdinal(state,ordinal);
-    sequence.names.emplace_back("before-"+std::to_string(ordinal)+"-"+
-        safeMenuLabel(menuName)+".raw");
-    sequence.images.emplace_back(std::move(std::get<ProbeImage>(image)));
-    spdlog::info("Owned UI menu-sequence frame {} before ordinal {}: menu={} pointer=0x{:x} regionSHA256={}",
-        frame,ordinal,menuName,menuPointer,sha256(sequence.images.back().pixels));
+    auto pixels=std::move(std::get<ProbeImage>(image));
+    const auto digest=sha256(pixels.pixels);
+    const bool save=sequence.images.empty()||digest!=sequence.lastDigest;
+    if(save) {
+        sequence.names.emplace_back("before-"+std::to_string(ordinal)+"-"+
+            safeMenuLabel(menuName)+".raw");
+        sequence.images.emplace_back(std::move(pixels));
+    }
+    sequence.lastDigest=digest;
+    spdlog::info("Owned UI menu-sequence frame {} before ordinal {}: menu={} pointer=0x{:x} fullFrameSHA256={} saved={}",
+        frame,ordinal,menuName,menuPointer,digest,save);
 }
 void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
@@ -943,14 +949,16 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     }
     const auto display=domain->plan().display;
     auto finalImage=readbackRegion(reinterpret_cast<ID3D11DeviceContext*>(context),
-        std::get<NativeFlipTarget>(native).texture.Get(),display.width/4,
-        display.height/6,display.width/2,display.height/2);
+        std::get<NativeFlipTarget>(native).texture.Get(),0,0,
+        display.width,display.height);
     if(const auto error=std::get_if<Error>(&finalImage)) {
         spdlog::warn("Owned UI menu-sequence final region unavailable: {}",error->message);
         state->menuUiSequence.reset();
         return;
     }
-    sequence.images.emplace_back(std::move(std::get<ProbeImage>(finalImage)));
+    auto finalPixels=std::move(std::get<ProbeImage>(finalImage));
+    const auto finalDigest=sha256(finalPixels.pixels);
+    sequence.images.emplace_back(std::move(finalPixels));
     sequence.names.emplace_back("after-all-menus.raw");
     PWSTR documents=nullptr;
     const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
@@ -969,12 +977,13 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     names.reserve(sequence.names.size());
     for(const auto& name:sequence.names)names.emplace_back(name);
     const auto saved=saveProbeBundle(directory,sequence.images,names,
-        "RazKolbas same-frame native UI centre region before each predicted menu-stack entry and after the complete stack");
+        "RazKolbas same-frame full native UI target before the first and each changed predicted menu-stack entry, then after the complete stack");
     if(const auto error=std::get_if<Error>(&saved))
         spdlog::warn("Owned UI menu-sequence save unavailable: {}",error->message);
     else
-        spdlog::info("Owned UI menu-sequence complete for frame {} with {} entry snapshots at {}",
-            frame,sequence.images.size()-1,directory.string());
+        spdlog::info("Owned UI menu-sequence complete for frame {} with {} changed-entry snapshots from {} entries; finalFullFrameSHA256={} at {}",
+            frame,sequence.images.size()-1,sequence.nextOrdinal,
+            finalDigest,directory.string());
     state->menuUiSequence.reset();
 }
 void applyPendingNrRuntimeSettings(WorldState* state) noexcept {
