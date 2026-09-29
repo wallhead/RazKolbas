@@ -3,6 +3,8 @@
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/ReducedSdrSurface.hpp"
 #include <wrl/client.h>
+#include <array>
+#include <cstring>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -573,4 +575,67 @@ TEST_CASE("WARP menu marker observes reduced scene binds without changing them",
     REQUIRE_FALSE(redirect.latePassRoutingAvailable());
     route.suspend();
     redirect.releaseAfterRetirement();
+}
+
+TEST_CASE("WARP direct UI plane keeps published colour and starts transparent",
+    "[native_ui]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    D3D_FEATURE_LEVEL level{};
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
+    constexpr rk::Extent render{32,16},display{64,32};
+    auto sceneResult=rk::createReducedSdrSurface(device.Get(),display,render);
+    REQUIRE(std::holds_alternative<rk::ReducedSdrSurface>(sceneResult));
+    auto& scene=std::get<rk::ReducedSdrSurface>(sceneResult);
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=display.width;desc.Height=display.height;desc.MipLevels=1;
+    desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;
+    desc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> finalColor,uiColor;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&finalColor)));
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&uiColor)));
+    ComPtr<ID3D11RenderTargetView> finalView,uiView;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(finalColor.Get(),nullptr,&finalView)));
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(uiColor.Get(),nullptr,&uiView)));
+    rk::OwnedSceneDomain route;
+    REQUIRE(route.configure({render,display,1}));
+    rk::NativeUiRedirector redirect(route);
+    REQUIRE(SUCCEEDED(redirect.configure(context.Get(),GetCurrentThreadId(),
+        {&forwardOm,&forwardVp,&forwardScissor,&forwardPs},scene.texture(),finalView.Get())));
+    REQUIRE(route.begin(1,1,GetCurrentThreadId()));
+    REQUIRE(route.startProcessing(1,1));
+    REQUIRE(FAILED(redirect.armUiPlaneForFrame(1,finalView.Get())));
+    REQUIRE(SUCCEEDED(redirect.armUiPlaneForFrame(1,uiView.Get())));
+    const float green[4]{0,1,0,1},red[4]{1,0,0,1};
+    context->ClearRenderTargetView(finalView.Get(),green);
+    context->ClearRenderTargetView(uiView.Get(),red);
+    REQUIRE(SUCCEEDED(redirect.commitPublishedUi(1)));
+    ComPtr<ID3D11RenderTargetView> bound;
+    context->OMGetRenderTargets(1,&bound,nullptr);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==identity(uiColor.Get()).Get());
+    auto* sceneView=scene.renderTarget();
+    redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
+    bound.Reset();context->OMGetRenderTargets(1,&bound,nullptr);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==identity(uiColor.Get()).Get());
+    auto sample=[&](ID3D11Texture2D* source) {
+        auto stagingDesc=desc;
+        stagingDesc.BindFlags=0;stagingDesc.Usage=D3D11_USAGE_STAGING;
+        stagingDesc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+        ComPtr<ID3D11Texture2D> staging;
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&stagingDesc,nullptr,&staging)));
+        context->CopyResource(staging.Get(),source);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        REQUIRE(SUCCEEDED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)));
+        std::array<std::uint8_t,4> pixel{};
+        std::memcpy(pixel.data(),mapped.pData,pixel.size());
+        context->Unmap(staging.Get(),0);
+        return pixel;
+    };
+    REQUIRE(sample(finalColor.Get())==std::array<std::uint8_t,4>{0,255,0,255});
+    REQUIRE(sample(uiColor.Get())==std::array<std::uint8_t,4>{0,0,0,0});
+    redirect.disarmUiPlane(1);
+    bound.Reset();context->OMGetRenderTargets(1,&bound,nullptr);
+    REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==identity(finalColor.Get()).Get());
 }

@@ -19,6 +19,7 @@
 #include "rk/RendererBootstrap.hpp"
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/UiPlaneComposite.hpp"
 #include "rk/HudMovieViewport.hpp"
 #ifdef RK_WITH_NGX
 #include "rk/OffscreenDlssProbe.hpp"
@@ -146,6 +147,10 @@ struct WorldState {
     bool ownedInputCaptureOnly{};
     bool ownedSpatialBaseline{};
     bool captureFirstDlssFrame{};
+    bool probeDirectUiPlane{},directUiPlaneAttempted{};
+    std::uint64_t directUiPlaneFrame{};
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> directUiPlane;
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> directUiPlaneView;
     UpscaleQuality earlyQuality{UpscaleQuality::Quality};
     double manualRenderScale{};
     bool automaticMipBias{true};
@@ -990,6 +995,90 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
             finalDigest,directory.string());
     state->menuUiSequence.reset();
 }
+void retireDirectUiPlane(WorldState* state,std::uint64_t frame) noexcept {
+    if(auto* ui=ownedUiRedirector())ui->disarmUiPlane(frame);
+    state->directUiPlane.Reset();
+    state->directUiPlaneView.Reset();
+    state->directUiPlaneFrame=0;
+}
+void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
+    ID3D11DeviceContext* context) noexcept {
+    const auto frame=state->directUiPlaneFrame;
+    auto* ui=ownedUiRedirector();
+    const auto retire=[&]() noexcept {retireDirectUiPlane(state,frame);};
+    try {
+        auto* domain=activeOwnedSceneDomain();
+        const auto device=state->createdDevice.load(std::memory_order_relaxed);
+        if(!frame||!ui||!domain||!context||!swap||!device||
+           !state->directUiPlane||
+           frame!=state->forwarded.load(std::memory_order_relaxed)) {
+            spdlog::warn("Experimental direct UI frame {} could not match its pre-Present owner",frame);
+            retire();return;
+        }
+        auto native=acquireNativeFlipTarget(swap,
+            reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+        if(const auto error=std::get_if<Error>(&native)) {
+            spdlog::warn("Experimental direct UI frame {} has no native target: {}",
+                frame,error->message);
+            retire();return;
+        }
+        auto& target=std::get<NativeFlipTarget>(native);
+        const std::array<ID3D11Texture2D*,2> sources{
+            target.texture.Get(),state->directUiPlane.Get()};
+        auto before=readbackCandidates(context,sources,32*1024*1024);
+        const auto composed=compositePremultipliedUi(context,
+            state->directUiPlane.Get(),target.view.Get());
+        if(const auto error=std::get_if<Error>(&composed)) {
+            spdlog::warn("Experimental direct UI frame {} could not composite: {}",
+                frame,error->message);
+            retire();return;
+        }
+        if(const auto error=std::get_if<Error>(&before)) {
+            spdlog::warn("Experimental direct UI frame {} pre-composite readback failed: {}",
+                frame,error->message);
+            retire();return;
+        }
+        const std::array<ID3D11Texture2D*,1> finalSource{target.texture.Get()};
+        auto after=readbackCandidates(context,finalSource,16*1024*1024);
+        if(const auto error=std::get_if<Error>(&after)) {
+            spdlog::warn("Experimental direct UI frame {} final readback failed: {}",
+                frame,error->message);
+            retire();return;
+        }
+        auto images=std::move(std::get<std::vector<ProbeImage>>(before));
+        auto last=std::move(std::get<std::vector<ProbeImage>>(after));
+        images.emplace_back(std::move(last.front()));
+        PWSTR documents=nullptr;
+        const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+            KF_FLAG_DEFAULT,nullptr,&documents);
+        struct FreeDocuments {PWSTR value;~FreeDocuments(){CoTaskMemFree(value);}}
+            free{documents};
+        if(FAILED(found)||!documents) {
+            spdlog::warn("Experimental direct UI frame {} Documents path unavailable",frame);
+            retire();return;
+        }
+        const auto directory=std::filesystem::path(documents)/"My Games"/
+            "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+            ("direct-ui-plane-"+std::to_string(GetCurrentProcessId())+"-"+
+             std::to_string(frame)+"-"+std::to_string(GetTickCount64()));
+        const std::array<std::string_view,3> names{
+            "hudless-native.raw","direct-ui-premultiplied.raw",
+            "composited-final.raw"};
+        const auto saved=saveProbeBundle(directory,images,names,
+            "One-frame experimental direct UI RTV: native before composite, transparent UI target, final premultiplied composition; FG off");
+        if(const auto error=std::get_if<Error>(&saved))
+            spdlog::warn("Experimental direct UI frame {} bundle failed: {}",
+                frame,error->message);
+        else spdlog::info("Experimental direct UI plane capture complete for frame {} at {}",
+            frame,directory.string());
+    } catch(const std::exception& error) {
+        try {spdlog::warn("Experimental direct UI frame {} failed: {}",
+            frame,error.what());}catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("Experimental direct UI frame {} failed",frame);}catch(...) {}
+    }
+    retire();
+}
 void applyPendingNrRuntimeSettings(WorldState* state) noexcept {
     try {
         const auto update=consumeDiagnosticsNrRuntimeUpdate();
@@ -1260,6 +1349,40 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
+        if(boundary==OwnedPublicationBoundary::MenuDisplay&&
+           outcome.mode()==SdrSrFrameMode::Provider&&
+           state->probeDirectUiPlane&&!state->directUiPlaneAttempted&&
+           !inventoryMenuOnStack(state)&&!magicMenuOnStack(state)&&
+           !titleMenuOnStack(state)&&
+           !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)) {
+            state->directUiPlaneAttempted=true;
+            D3D11_TEXTURE2D_DESC description{};
+            display->GetDesc(&description);
+            if(description.Format==DXGI_FORMAT_R8G8B8A8_UNORM&&
+               description.SampleDesc.Count==1&&
+               description.MipLevels==1&&description.ArraySize==1) {
+                description.BindFlags=D3D11_BIND_RENDER_TARGET|
+                    D3D11_BIND_SHADER_RESOURCE;
+                description.Usage=D3D11_USAGE_DEFAULT;
+                description.CPUAccessFlags=0;description.MiscFlags=0;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> plane;
+                Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
+                const auto created=device->CreateTexture2D(&description,nullptr,&plane);
+                const auto viewed=SUCCEEDED(created)?
+                    device->CreateRenderTargetView(plane.Get(),nullptr,&view):created;
+                const auto armed=SUCCEEDED(viewed)?
+                    ui->armUiPlaneForFrame(sequence,view.Get()):viewed;
+                if(SUCCEEDED(armed)) {
+                    state->directUiPlane=std::move(plane);
+                    state->directUiPlaneView=std::move(view);
+                    state->directUiPlaneFrame=sequence;
+                    spdlog::info("Experimental direct UI plane armed for one native DLSS frame {} at {}x{}; FG remains off",
+                        sequence,description.Width,description.Height);
+                } else spdlog::warn("Experimental direct UI plane could not arm at frame {}: HRESULT=0x{:08x}",
+                    sequence,static_cast<std::uint32_t>(armed));
+            } else spdlog::warn("Experimental direct UI plane rejected at frame {}: native format or geometry differs",
+                sequence);
+        }
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native publication or context compatibility failed");
         if(boundary==OwnedPublicationBoundary::PrePresent&&
@@ -1277,12 +1400,16 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 static_cast<unsigned>(state->displayedMode.load(std::memory_order_relaxed)),
                 state->srPresenter.submittedFrames(),state->ownedFallbacks.size());
     } catch(const std::exception& error) {
+        if(state->directUiPlaneFrame==sequence)
+            retireDirectUiPlane(state,sequence);
         state->srDisabled=true;
         state->statusDlssDisabled.store(true,std::memory_order_release);
         domain->suspend();
         try {spdlog::warn("Owned world SR suspended after frame {}: {}",sequence,error.what());}
         catch(...) {}
     } catch(...) {
+        if(state->directUiPlaneFrame==sequence)
+            retireDirectUiPlane(state,sequence);
         state->srDisabled=true;
         state->statusDlssDisabled.store(true,std::memory_order_release);
         domain->suspend();
@@ -2591,8 +2718,18 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     const bool ownedProbe=ownedRemaining!=0;
     bool ownedSrStageProbe=false;
     bool menuUiSequenceProbe=false;
+    bool directUiPlaneProbe=false;
     bool menuBoundaryProbe=false;
 #ifdef RK_WITH_NGX
+    const auto presentFrame=state->forwarded.load(std::memory_order_relaxed);
+    if(state->directUiPlaneFrame&&state->directUiPlaneFrame!=presentFrame) {
+        const auto stale=state->directUiPlaneFrame;
+        retireDirectUiPlane(state,stale);
+        try {spdlog::warn("Experimental direct UI plane frame {} retired without matching Present",stale);}
+        catch(...) {}
+    }
+    directUiPlaneProbe=state->directUiPlaneFrame&&
+        state->directUiPlaneFrame==presentFrame;
     {
         std::scoped_lock lock(state->ownedSrStageMutex);
         ownedSrStageProbe=state->ownedSrStages.has_value();
@@ -2603,13 +2740,20 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     }
     menuBoundaryProbe=state->menuBoundaryCapture.has_value();
 #endif
-    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&
+    if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&!directUiPlaneProbe&&
        !menuUiSequenceProbe&&!menuBoundaryProbe)return;
     if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
-        if(!context)return;
+        if(!context) {
 #ifdef RK_WITH_NGX
+            if(directUiPlaneProbe)completeDirectUiPlaneProbe(state,swap,nullptr);
+#endif
+            return;
+        }
+#ifdef RK_WITH_NGX
+        if(directUiPlaneProbe)completeDirectUiPlaneProbe(state,swap,
+            reinterpret_cast<ID3D11DeviceContext*>(context));
         if(menuBoundaryProbe) {
             auto capture=std::move(*state->menuBoundaryCapture);
             state->menuBoundaryCapture.reset();
@@ -3032,6 +3176,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Diagnostics.SpatialBaselineOnly");
     pending->captureFirstDlssFrame=
         settings.get<bool>("Diagnostics.CaptureFirstDlssFrame");
+    pending->probeDirectUiPlane=
+        settings.get<bool>("Diagnostics.ProbeDirectUiPlane");
     if(pending->ownedSpatialBaseline)
         spdlog::info("Owned reduced route configured for spatial baseline; NGX submissions disabled");
 #endif

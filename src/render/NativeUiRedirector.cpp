@@ -239,6 +239,19 @@ void NativeUiRedirector::bindNativeTarget(bool bindUiDepth) noexcept {
         static_cast<LONG>(display.height)};
     next_.scissor(context_.Get(),1,&scissor);
 }
+void NativeUiRedirector::bindUiTarget() noexcept {
+    auto* view=uiPlaneFrame_==route_.frame()&&uiPlaneRtv_?
+        uiPlaneRtv_.Get():nativeRtv_.Get();
+    auto* depth=companionsReady()?nativeDepthView_.Get():nullptr;
+    next_.om(context_.Get(),1,&view,depth);
+    const auto display=route_.plan().display;
+    const D3D11_VIEWPORT viewport{0,0,static_cast<float>(display.width),
+        static_cast<float>(display.height),0,1};
+    next_.viewport(context_.Get(),1,&viewport);
+    const D3D11_RECT scissor{0,0,static_cast<LONG>(display.width),
+        static_cast<LONG>(display.height)};
+    next_.scissor(context_.Get(),1,&scissor);
+}
 HRESULT NativeUiRedirector::bindNativeForProcessing(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
     if(!context_||!nativeRtv_||generation_!=route_.plan().generation||
@@ -246,6 +259,48 @@ HRESULT NativeUiRedirector::bindNativeForProcessing(std::uint64_t frame) noexcep
        GetCurrentThreadId()!=owner)return E_UNEXPECTED;
     bindNativeTarget(false);
     return S_OK;
+}
+HRESULT NativeUiRedirector::armUiPlaneForFrame(std::uint64_t frame,
+    ID3D11RenderTargetView* uiRtv) noexcept {
+    const auto owner=route_.renderThread()?route_.renderThread():thread_;
+    if(!context_||!uiRtv||!frame||uiPlaneRtv_||
+       generation_!=route_.plan().generation||
+       route_.phase()!=ScenePhase::Processing||route_.frame()!=frame||
+       GetCurrentThreadId()!=owner)return E_UNEXPECTED;
+    auto color=resource(uiRtv);
+    ComPtr<ID3D11Texture2D> texture;
+    if(!color||FAILED(color.As(&texture)))return E_INVALIDARG;
+    D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+    D3D11_RENDER_TARGET_VIEW_DESC view{};uiRtv->GetDesc(&view);
+    if(desc.Width!=route_.plan().display.width||
+       desc.Height!=route_.plan().display.height||
+       desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||
+       desc.MipLevels!=1||desc.ArraySize!=1||desc.SampleDesc.Count!=1||
+       desc.SampleDesc.Quality!=0||desc.Usage!=D3D11_USAGE_DEFAULT||
+       (desc.BindFlags&(D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE))!=
+           (D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE)||
+       view.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||
+       view.ViewDimension!=D3D11_RTV_DIMENSION_TEXTURE2D||
+       view.Texture2D.MipSlice!=0)return E_INVALIDARG;
+    auto id=canonical(texture.Get());
+    if(!id||id.Get()==nativeId_.Get()||id.Get()==sceneId_.Get())
+        return E_INVALIDARG;
+    ComPtr<ID3D11Device> ownerDevice,uiDevice;
+    context_->GetDevice(&ownerDevice);texture->GetDevice(&uiDevice);
+    if(!sameObject(ownerDevice.Get(),uiDevice.Get()))return E_INVALIDARG;
+    uiPlaneRtv_=uiRtv;uiPlaneId_=std::move(id);uiPlaneFrame_=frame;
+    return S_OK;
+}
+void NativeUiRedirector::disarmUiPlane(std::uint64_t frame) noexcept {
+    if(!uiPlaneRtv_||uiPlaneFrame_!=frame)return;
+    if(context_&&GetCurrentThreadId()==
+       (route_.renderThread()?route_.renderThread():thread_)) {
+        ComPtr<ID3D11RenderTargetView> bound;
+        context_->OMGetRenderTargets(1,&bound,nullptr);
+        auto value=resource(bound.Get());auto id=canonical(value.Get());
+        if(id&&id.Get()==uiPlaneId_.Get())bindNativeTarget(true);
+    }
+    uiPlaneRtv_.Reset();uiPlaneId_.Reset();uiPlaneFrame_=0;
 }
 HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
@@ -262,11 +317,14 @@ HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
             (hasStencil(desc.Format)?D3D11_CLEAR_STENCIL:0u);
         context_->ClearDepthStencilView(nativeDepthView_.Get(),flags,1.0f,0);
     }
-    // Scaleform records display commands in each IMenu::PostDisplay call and
-    // submits them later from GRenderer::EndFrame. Its vector masks require a
-    // stencil attachment at that deferred boundary, so leave the prepared
-    // display-sized depth/stencil view bound with the native colour target.
-    bindNativeTarget(true);
+    // The measured HUD menus write pixels during their PostDisplay loop;
+    // EndFrame made no further native-target change in the sampled frames.
+    // Keep display-sized depth/stencil for their masks and the later flush.
+    if(uiPlaneRtv_&&uiPlaneFrame_==frame) {
+        constexpr float clear[4]{};
+        context_->ClearRenderTargetView(uiPlaneRtv_.Get(),clear);
+    }
+    bindUiTarget();
     return S_OK;
 }
 HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexcept {
@@ -279,7 +337,7 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
         // The caller may publish that scene or keep an existing native UI
         // composite; this rebind must not modify native colour pixels.
         preserveReducedMenuPass_=false;
-        bindNativeTarget(true);
+        bindUiTarget();
         return S_FALSE;
     }
     std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT>
@@ -296,7 +354,9 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
     if(!count)return E_UNEXPECTED;
     auto boundResource=resource(targets[0].Get());
     auto boundId=canonical(boundResource.Get());
-    if(!boundId||boundId.Get()!=nativeId_.Get())return E_UNEXPECTED;
+    const auto* expected=uiPlaneRtv_&&uiPlaneFrame_==frame?
+        uiPlaneId_.Get():nativeId_.Get();
+    if(!boundId||boundId.Get()!=expected)return E_UNEXPECTED;
     next_.om(context_.Get(),count,rawTargets.data(),nativeDepthView_.Get());
     return S_OK;
 }
@@ -482,7 +542,9 @@ bool NativeUiRedirector::nativeBound() const noexcept {
     ComPtr<ID3D11RenderTargetView> bound;
     context_->OMGetRenderTargets(1,bound.GetAddressOf(),nullptr);
     auto value=resource(bound.Get());auto id=canonical(value.Get());
-    return id&&id.Get()==nativeId_.Get();
+    return id&&(id.Get()==nativeId_.Get()||
+        (uiPlaneRtv_&&uiPlaneFrame_==route_.frame()&&
+         id.Get()==uiPlaneId_.Get()));
 }
 void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
     UINT count,ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) noexcept {
@@ -564,7 +626,9 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
             bool compatible=count<=replacements.size();
             for(UINT i=0;compatible&&i<count;++i) {
                 auto value=resource(views[i]);auto id=canonical(value.Get());
-                if(id&&id.Get()==sceneId_.Get())replacements[i]=nativeRtv_.Get();
+                if(id&&id.Get()==sceneId_.Get())
+                    replacements[i]=uiPlaneRtv_&&uiPlaneFrame_==route_.frame()?
+                        uiPlaneRtv_.Get():nativeRtv_.Get();
                 else if(auto* auxiliary=auxiliaryReplacement(id.Get()))
                     replacements[i]=auxiliary;
                 else if(!views[i]||extentOf(value.Get()).width!=route_.plan().render.width||
@@ -728,7 +792,8 @@ void NativeUiRedirector::onPSSetShaderResources(ID3D11DeviceContext* context,
 void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     if(unbindNative&&context_&&nativeRtv_&&next_.om&&nativeBound())
         next_.om(context_.Get(),0,nullptr,nullptr);
-    scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();context_.Reset();
+    scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();
+    uiPlaneRtv_.Reset();uiPlaneId_.Reset();uiPlaneFrame_=0;context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
     latePassFaults_=0;latePassFaultFrame_=0;

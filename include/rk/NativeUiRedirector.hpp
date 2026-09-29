@@ -89,6 +89,11 @@ public:
     // Move output binding to the current native target before DLSS publication
     // or spatial fallback, while retaining the Processing phase.
     HRESULT bindNativeForProcessing(std::uint64_t frame) noexcept;
+    // One-frame experimental direct UI target. The caller owns final
+    // composition and must disarm after that frame's Present preparation.
+    HRESULT armUiPlaneForFrame(std::uint64_t frame,
+        ID3D11RenderTargetView* uiRtv) noexcept;
+    void disarmUiPlane(std::uint64_t frame) noexcept;
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
@@ -151,6 +156,7 @@ private:
     bool eligible(ID3D11DeviceContext* context) const noexcept;
     bool nativeBound() const noexcept;
     void bindNativeTarget(bool bindUiDepth) noexcept;
+    void bindUiTarget() noexcept;
     bool observationMatchesRoute() const noexcept;
     void rememberObservedCompanions(UINT count,
         ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth,
@@ -190,5 +196,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
     Microsoft::WRL::ComPtr<IUnknown> sceneId_,nativeId_;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> nativeRtv_;
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> uiPlaneRtv_;
+    Microsoft::WRL::ComPtr<IUnknown> uiPlaneId_;
+    std::uint64_t uiPlaneFrame_{};
 };
 }

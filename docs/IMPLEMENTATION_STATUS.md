@@ -1,5 +1,46 @@
 # Implementation checkpoint
 
+## 0.1.120 experimental direct UI plane (2026-09-29)
+
+Source now has a restart-scoped, default-off `Diagnostics.ProbeDirectUiPlane`
+switch. On the first eligible native-boundary DLSS frame, it routes native-size
+HUD output to a separate transparent RGBA8 target, composites that target over
+the published scene before Present, then retires the route. Inventory, Magic,
+title and loading screens are excluded from this first probe. It saves the
+pre-composite scene, UI plane and final composite for alpha and image analysis.
+FG remains off. Debug and Release each passed **55/55** CTest groups, including
+WARP route and premultiplied-composition tests. **The 0.1.120 route has not run
+in Skyrim**; actual Scaleform alpha, visual equivalence and ENB/ReShade order
+are unverified. Details and the next measurement are in
+`docs/re/DIRECT_UI_PLANE_PROBE_2026-09-29.md`.
+The eight-payload MO2 archive at
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.120-direct-ui-plane.zip`
+is SHA-256 `98ff59010adeda88f623fc1d5d344da821ad6345a5306e0a7d272b1ea034683a`;
+all archived payloads match its manifest. The isolated V5.4 MO2 mod contains
+DLL SHA-256 `c2b9e597417cc3fee397a0b2ffeb69b8e808f55a722bc5ad4c30f353e8938a75`
+and one-shot INI SHA-256
+`389d201369ee2a07669fcf7b78c9190370e2bf83ec107967037f1a68ef95dc59`.
+All eight installed payloads match; the prior DLL/INI/manifest are backed up
+under ignored `artifacts/local/mo2-install-backup-0.1.120-2026-09-29`.
+Skyrim was not started for this version. The next runtime action is a
+user-started save load, then analysis of the one-shot capture and restoration
+of the normal INI.
+
+## User-started 0.1.119 per-menu UI capture (2026-09-29)
+
+The one-shot 0.1.119 game run completed its full-frame UI, SR, Inventory
+cursor and Magic movie bundles; all manifest-listed files passed size/SHA
+verification. In frame 9985, eight menu-call intervals changed the native
+frame: TrueHUD, resistWidget, goldWidget, weightWidget, lvlWidget,
+gametimeWidget, equipWidget_STB, and HUD Menu. The HUD Menu interval changed
+78,250 RGB pixels; `EndFrame` and Present changed zero. Alpha did not change.
+This identifies the writers to target for a guarded transparent UI route but
+does not prove that route or FG. Exact rectangles, attribution limits, and
+runtime hashes are in `docs/re/UI_PIPELINE_PER_MENU_CAPTURE_2026-09-29.md`.
+Skyrim was closed after capture and the normal INI was restored; all eight
+installed MO2 payloads match the updated local manifest. FG-On remains
+**NOT RUN in Skyrim**.
+
 ## User-started 0.1.118 HUD write timing and 0.1.119 per-menu probe (2026-09-29)
 
 The 0.1.118 one-shot game run completed two manifest-verified bundles at world
