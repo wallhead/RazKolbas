@@ -1,5 +1,17 @@
 # Implementation checkpoint
 
+## Standalone D3D11 facade plus DLSS-G On (2026-09-29)
+
+The combined `--facade-on` probe now sends real D3D11-cleared colour through
+the D3D11-facing facade into the Streamline-managed D3D12 lower swap while
+submitting the existing synthetic guide packet. On RTX 4080 SUPER, eight
+lower Presents returned `S_OK` and each reported two actual presentations;
+Off/drain and shutdown succeeded. Release built and passed **60/60** CTest
+groups. The D3D12-only On probe and FG-Off facade colour/resize probe still
+exit 0. See `docs/re/FG_D3D11_FACADE_ON_PROBE_2026-09-29.md` for the exact
+boundary and limits. The installed 0.1.125 game build is unchanged; Skyrim
+FG-On remains **NOT RUN**.
+
 ## Source-side FG camera-to-Streamline mapping (2026-09-29)
 
 The 0.1.125 camera-phase result below now feeds a guarded source-only

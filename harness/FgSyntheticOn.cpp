@@ -2,6 +2,7 @@
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
 #include <sl_pcl.h>
+#include "rk/FgD3D11SwapFacade.hpp"
 #include "rk/FgStreamlineFrameInputs.hpp"
 #include "rk/FgStreamlineSubmit.hpp"
 #include <d3d12.h>
@@ -122,9 +123,39 @@ struct EventOwner {
 }
 
 int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
-    IDXGISwapChain1* swap) {
+    IDXGISwapChain1* swap,IDXGIAdapter1* adapter,bool facadeMode) {
     ComPtr<IDXGISwapChain3> swap3;
     if(FAILED(swap->QueryInterface(IID_PPV_ARGS(&swap3))))return 40;
+    ComPtr<ID3D11Device> d11;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGISwapChain4> facade;
+    ComPtr<ID3D11Texture2D> renderBuffer;
+    ComPtr<ID3D11RenderTargetView> renderView;
+    if(facadeMode) {
+        D3D_FEATURE_LEVEL level{};
+        if(FAILED(D3D11CreateDevice(adapter,D3D_DRIVER_TYPE_UNKNOWN,nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,
+            &d11,&level,&context)))return 60;
+        void* native{};
+        if(slGetNativeInterface(device,&native)!=sl::Result::eOk||!native)
+            return 61;
+        ComPtr<IUnknown> nativeOwner;
+        nativeOwner.Attach(static_cast<IUnknown*>(native));
+        ComPtr<ID3D12Device> verifiedNative;
+        if(FAILED(nativeOwner.As(&verifiedNative)))return 61;
+        auto made=rk::FgD3D11SwapFacade::create(d11.Get(),context.Get(),
+            device,queue,swap,verifiedNative.Get());
+        if(!std::holds_alternative<ComPtr<IDXGISwapChain4>>(made)) {
+            const auto& failure=std::get<rk::Error>(made);
+            std::cout<<"FG-D3D11 facade error: "<<failure.message<<'\n';
+            return 62;
+        }
+        facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
+        if(FAILED(facade->GetBuffer(0,IID_PPV_ARGS(&renderBuffer)))||
+           FAILED(d11->CreateRenderTargetView(renderBuffer.Get(),nullptr,
+               &renderView)))return 63;
+        std::cout<<"FG-D3D11 facade=1\n";
+    }
     ComPtr<ID3D12DescriptorHeap> heap;
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
     heapDesc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -206,12 +237,16 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             transition(list.Get(),planes[i].resource.Get(),
                 D3D12_RESOURCE_STATE_RENDER_TARGET,kReadState);
         }
-        transition(list.Get(),back[physical].Get(),
-            D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float final[]{0.25f,0.25f,0.0f,1.0f};
-        list->ClearRenderTargetView(backRtv[physical],final,0,nullptr);
-        transition(list.Get(),back[physical].Get(),
-            D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);
+        if(facadeMode) {
+            context->ClearRenderTargetView(renderView.Get(),final);
+        } else {
+            transition(list.Get(),back[physical].Get(),
+                D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
+            list->ClearRenderTargetView(backRtv[physical],final,0,nullptr);
+            transition(list.Get(),back[physical].Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);
+        }
         if(FAILED(list->Close())){error=51;break;}
         ID3D12CommandList* lists[]{list.Get()};
         queue->ExecuteCommandLists(1,lists);
@@ -268,7 +303,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
                 sl::PCLMarker::ePresentStart,*token))) {
             error=55;break;
         }
-        const auto present=swap->Present(0,0);
+        const auto present=facadeMode?facade->Present(0,0):swap->Present(0,0);
         std::cout<<"FG-On Present frame="<<frame<<" hr=0x"<<std::hex<<
             static_cast<UINT>(present)<<std::dec<<'\n';
         if(FAILED(present)||!ok("presentEnd",slPCLSetMarker(
@@ -296,7 +331,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
     options.mode=sl::DLSSGMode::eOff;
     std::cout<<"slDLSSGSetOptions(Off)="<<
         static_cast<int>(slDLSSGSetOptions(viewport,options))<<'\n';
-    const auto drain=swap->Present(0,0);
+    const auto drain=facadeMode?facade->Present(0,0):swap->Present(0,0);
     std::cout<<"FG-On drain Present=0x"<<std::hex<<
         static_cast<UINT>(drain)<<std::dec<<'\n';
     std::cout<<"FG-On generatedObserved="<<generated<<'\n';

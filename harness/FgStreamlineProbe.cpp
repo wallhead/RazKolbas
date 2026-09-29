@@ -17,7 +17,8 @@
 
 using Microsoft::WRL::ComPtr;
 
-int probeSyntheticOn(ID3D12Device*, ID3D12CommandQueue*, IDXGISwapChain1*);
+int probeSyntheticOn(ID3D12Device*, ID3D12CommandQueue*, IDXGISwapChain1*,
+    IDXGIAdapter1*, bool);
 
 namespace {
 int code(sl::Result result) { return static_cast<int>(result); }
@@ -317,7 +318,7 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
             std::cout<<"FG-On foreground="<<foreground<<'\n';
             if(!foreground&&!result)result=59;
             if(!result)result=probeSyntheticOn(proxyDevice.Get(),queue.Get(),
-                swap.Get());
+                swap.Get(),adapter,facadeMode);
         } else if(facadeMode) {
             if(!result)result=probeFacade(adapter,proxyDevice.Get(),
                 queue.Get(),swap.Get());
@@ -359,8 +360,9 @@ int wmain(int argc,wchar_t** argv) {
     if((argc!=2&&argc!=3)||(argc==3&&
        std::wcscmp(argv[2],L"--swap")&&
        std::wcscmp(argv[2],L"--facade")&&
-       std::wcscmp(argv[2],L"--on"))) {
-        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on]\n";
+       std::wcscmp(argv[2],L"--on")&&
+       std::wcscmp(argv[2],L"--facade-on"))) {
+        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on|--facade-on]\n";
         return 1;
     }
     const wchar_t* pluginPaths[]{argv[1]};
@@ -379,7 +381,8 @@ int wmain(int argc,wchar_t** argv) {
     preferences.projectId="b3340e44-a57e-4b98-9318-d7150829d110";
     preferences.renderAPI=sl::RenderAPI::eD3D12;
     std::wstring logPath;
-    if(argc==3&&!std::wcscmp(argv[2],L"--on")) {
+    if(argc==3&&(!std::wcscmp(argv[2],L"--on")||
+       !std::wcscmp(argv[2],L"--facade-on"))) {
         const auto path=std::filesystem::current_path()/
             "artifacts"/"local"/"fg-on-probe";
         std::filesystem::create_directories(path);
@@ -434,8 +437,10 @@ int wmain(int argc,wchar_t** argv) {
                 std::cout<<"slSetD3DDevice="<<code(bound)<<'\n';
                 if(bound!=sl::Result::eOk)exitCode=6;
                 else if(argc==3)exitCode=probeSwap(factory.Get(),adapter.Get(),
-                    device.Get(),!std::wcscmp(argv[2],L"--facade"),
-                    !std::wcscmp(argv[2],L"--on"));
+                    device.Get(),!std::wcscmp(argv[2],L"--facade")||
+                    !std::wcscmp(argv[2],L"--facade-on"),
+                    !std::wcscmp(argv[2],L"--on")||
+                    !std::wcscmp(argv[2],L"--facade-on"));
             }
             if(support!=sl::Result::eOk||queried!=sl::Result::eOk)
                 if(!exitCode)exitCode=7;
