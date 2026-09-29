@@ -1,5 +1,18 @@
 # Implementation checkpoint
 
+## User-started 0.1.123 camera buffer result (2026-09-29)
+
+The three-frame 720-byte D3D11 constant-buffer capture completed at world
+frames 34111, 34112 and 34231. Independent file hashes match the complete
+manifest. Numerical products/inverses identify current view/projection and
+view-projection blocks. Frame 34112's previous view-projection and position
+blocks exactly match frame 34111's current blocks. This establishes the
+candidate temporal offsets on the sampled world route, not continuous camera
+freshness or FG submission. See
+`docs/re/FG_CAMERA_BUFFER_GAME_CAPTURE_2026-09-29.md` for offsets and limits.
+The game was closed, the normal INI was restored, and all eight installed MO2
+payload hashes match the updated manifest. FG remains Off.
+
 ## User-started 0.1.122 UI-plane provenance result (2026-09-29)
 
 The user started Skyrim; process 3604 captured the first eligible guarded
@@ -39,8 +52,9 @@ the one-shot INI SHA-256 is
 `1174b6b5a0367f49f4e3b43ad0d5c1e55670acf6bd15f2723d36ec78015bd7b3`.
 All eight installed payloads match the manifest. The prior DLL, normal INI
 and manifest are backed up under ignored
-`artifacts/local/mo2-install-backup-0.1.123-2026-09-29`. Skyrim runtime is
-**NOT RUN** for this new probe. It does not enable FG.
+`artifacts/local/mo2-install-backup-0.1.123-2026-09-29`. At packaging time
+Skyrim runtime had **NOT RUN** for this probe; the later user-started capture
+is recorded above. It does not enable FG.
 
 ## Installed 0.1.122 review safeguards and FG camera producer (2026-09-29)
 
