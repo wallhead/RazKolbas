@@ -42,6 +42,26 @@ make a static or dummy buffer implausible. They do not establish every
 Map/Unmap writer, buffer freshness at the FG submission phase, or what all
 fields after `0x2a0` mean. The sample is from one outdoor world route.
 
+An independent read-only cross-check reproduced the hashes, matrix residuals
+and consecutive-frame equality. It also identified a crucial conversion
+limit: the view matrices here have no world-position translation. A temporal
+clip transform made only from previous VP times inverse current VP would
+omit the difference between `0x280` and `0x290`. The camera basis handedness,
+Streamline matrix memory convention, jitter/reset, motion-vector sign/scale,
+depth convention and pre-Present token freshness are not established by
+this capture. Do not submit guessed constants or infer depth parameters
+from the projection matrix alone.
+
+The decoder review caught an initially loose matrix threshold: pairing frame
+34111's P/V with frame 34112's VP produces a maximum component error of
+`3.33e-5`; pairing frame 34111's VP with frame 34112's inverse VP produces
+`3.67e-5`. Both passed the initial `1e-3` threshold, even though each real
+sample's own product/inverse error is below `1.3e-7`. The source-only
+decoder now uses `1e-6` matrix residual limits and has a regression for
+adjacent-frame-scale corruption. Numeric gates alone cannot prove freshness
+while the camera is stationary; the caller still needs a real-frame stamp
+and phase identity.
+
 The game was closed after capture. The installed normal INI was restored
 from the ignored 0.1.123 backup; its SHA-256 is
 `e05eed4f2a80237608f9c4e6a4a595bb7c36a4c19248239b38d827504f56ff5b`.
@@ -49,9 +69,10 @@ All eight installed MO2 payload hashes then matched the updated install
 manifest. The probe is off for subsequent starts. This run did not enable
 FG, check generated-frame quality, or obtain a user visual assessment.
 
-Next, use these measured offsets in an exact-version camera decoder with
-numeric and frame-stamp guards, then verify continuously at the intended
-pre-Present phase. The remaining FG integration must still bind the real
-scene/depth/motion and separate native UI inputs to the Streamline lease,
+The version-specific decoder now supplies numeric guards for these measured
+offsets. Next, connect it with real-frame stamps and verify freshness
+continuously at the intended pre-Present phase. The remaining FG integration
+must still bind the real scene/depth/motion and separate native UI inputs to
+the Streamline lease,
 check GPU completion and token lifetime, and finally run a user-started
 FG-On game test with motion, UI, ENB/ReShade and recovery paths.

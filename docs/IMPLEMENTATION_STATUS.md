@@ -1,5 +1,20 @@
 # Implementation checkpoint
 
+## Source-only observed game camera decoder (2026-09-29)
+
+The 720-byte sampled layout now has a separate 1.6.1170 world-route decoder for
+view/projection, current/previous view-projection and camera position. It
+rejects inconsistent matrix products/inverses and nonfinite history, and
+requires exact prior/current agreement when the caller asserts consecutive
+real frames. Synthetic tests were written before implementation and observed
+failing for missing decoding and corrupted fields. An independent review
+caught an adjacent-frame mixing case; its regression failed before the
+numeric thresholds were tightened. Debug and Release each passed **56/56**
+CTest groups after that repair. This source-only decoder is not connected
+to live FG, is not in the installed 0.1.123 DLL and does not establish
+Streamline-ready constants or continuous camera freshness. The installed
+MO2 mod remains at 0.1.123 with FG Off.
+
 ## User-started 0.1.123 camera buffer result (2026-09-29)
 
 The three-frame 720-byte D3D11 constant-buffer capture completed at world
