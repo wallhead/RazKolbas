@@ -1,5 +1,37 @@
 # Implementation checkpoint
 
+## User-started 0.1.118 HUD write timing and 0.1.119 per-menu probe (2026-09-29)
+
+The 0.1.118 one-shot game run completed two manifest-verified bundles at world
+frames 17413 and 17444. In the 2560x1440 UI bundle, the native target gained
+140,755 visible HUD/quest/subtitle/overlay pixels between the first menu call
+and the pre-`EndFrame` capture, then stayed byte-identical through `EndFrame`
+and Present. Every alpha byte remained 255. Thus the earlier sole-deferred-
+writer hypothesis is false for this frame, while individual menu attribution
+and a separate alpha UI producer remain open. The game was closed after the
+capture and the original INI was restored. Exact evidence is in
+`docs/re/UI_PIPELINE_GAME_CAPTURE_2026-09-29.md`.
+
+The current 0.1.119 source adds an armed, same-frame per-menu native-target
+probe with unchanged frames omitted, retaining the pre/post-`EndFrame` and
+pre-Present stages. It does not change normal render routing or enable FG.
+Debug and Release builds each passed **54/54** CTest groups. The eight-payload
+MO2 archive `D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.119-ui-per-menu.zip`
+is SHA-256 `be5a8b87646e5abf8152f49161193111f7a2d7cba45ea4d95c2a7b8904564271`;
+all eight archive payload hashes matched its manifest. The isolated V5.4 MO2
+mod now contains the installed DLL SHA-256
+`e79da11b59e19edb02752679495bf49532ebf374a10616f349ae7e528e623b91`
+and one-shot INI SHA-256
+`0a322215401ce23406a6ec7bd6697ff0f3edeebbf69b49c2c033df2710f43b7b`.
+All eight installed payloads match the manifest; the previous DLL, INI, and
+manifest are backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.119-2026-09-29`.
+Skyrim 0.1.119 is **NOT RUN**; FG-On remains
+**NOT RUN in Skyrim**. The current DynamicShaderFrameGen upstream HEAD was
+rechecked at `879ab2c`: its menu-start callback remains diagnostic only and
+its FG path consumes a completed backbuffer, so it does not supply this missing
+native UI plane.
+
 ## Ghidra/Capstone UI call-chain correction (2026-09-29)
 
 Ghidra 12.1.3 analyzed the exact AIO reference DLL and bounded decoded code

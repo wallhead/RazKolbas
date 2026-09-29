@@ -36,7 +36,7 @@ FA51EA  e811e10100   call 0xFC3300
 FC330E  ff5028       call qword ptr [rax+0x28]
 ```
 
-This proves call order and the common deferred submission boundary. It does
+This proves call order and the common `EndFrame` boundary. It does
 not prove that every UI pixel is written by that one virtual call or identify
 the effective D3D11 target, blend, stencil or alpha state of its draws.
 Therefore the 0.1.117 diagnostic's 15 full-frame reads **before** individual
@@ -72,6 +72,13 @@ as a genuine FG UI plane. AIO's offset and exact draw branch are reference
 contracts, not values to transplant into RazKolbas.
 
 ## RE-guided next observation
+
+The subsequent 0.1.118 game capture found that visible HUD pixels were already
+on the native target **before** `EndFrame` and did not change during that
+call. The full result and manifest hashes are in
+`UI_PIPELINE_GAME_CAPTURE_2026-09-29.md`. The conditional trace below is
+retained as the pre-run design record; its `EndFrame` branch did not occur in
+the measured frame.
 
 Version 0.1.118 moves the one-shot full-frame probe to four same-frame points:
 before the first `PostDisplay`, after the complete menu loop and RazKolbas's

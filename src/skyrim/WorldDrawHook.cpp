@@ -99,6 +99,7 @@ struct WorldState {
         unsigned nextOrdinal{};
         std::vector<ProbeImage> images;
         std::vector<std::string> names;
+        std::string lastDigest;
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
@@ -874,11 +875,10 @@ void logLoadingUiBoundary(WorldState* state,std::uint64_t frame,
     }
 }
 void captureMenuUiSnapshot(WorldState* state,std::uint64_t frame,
-    std::string_view label,bool firstEntry=false) {
+    std::string_view label,bool changedOnly=false) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
     auto& sequence=*state->menuUiSequence;
-    if(firstEntry&&sequence.nextOrdinal++!=0)return;
     if(std::ranges::find(sequence.names,label)!=sequence.names.end())return;
     auto* domain=activeOwnedSceneDomain();
     const auto device=state->createdDevice.load(std::memory_order_relaxed);
@@ -902,13 +902,30 @@ void captureMenuUiSnapshot(WorldState* state,std::uint64_t frame,
     }
     auto pixels=std::move(std::get<ProbeImage>(image));
     const auto digest=sha256(pixels.pixels);
+    if(changedOnly&&digest==sequence.lastDigest) {
+        spdlog::info("Owned UI boundary frame {} stage={} fullFrameSHA256={} unchanged",
+            frame,label,digest);
+        return;
+    }
+    sequence.lastDigest=digest;
     sequence.names.emplace_back(label);
     sequence.images.emplace_back(std::move(pixels));
     spdlog::info("Owned UI boundary frame {} stage={} fullFrameSHA256={}",
         frame,label,digest);
 }
 void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
-    captureMenuUiSnapshot(state,frame,"before-first-PostDisplay.raw",true);
+    unsigned ordinal{};
+    {
+        std::scoped_lock lock(state->menuUiSequenceMutex);
+        if(!state->menuUiSequence||state->menuUiSequence->frame!=frame||
+           state->menuUiSequence->nextOrdinal>=63)return;
+        ordinal=state->menuUiSequence->nextOrdinal++;
+    }
+    const auto [identity,name]=menuAtOrdinal(state,ordinal);
+    spdlog::info("Owned UI menu-sequence frame {} before call {}: stackMenu={} pointer=0x{:x}",
+        frame,ordinal,name,identity);
+    captureMenuUiSnapshot(state,frame,
+        "before-menu-call-"+std::to_string(ordinal)+".raw",true);
 }
 void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
@@ -964,7 +981,7 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     names.reserve(sequence.names.size());
     for(const auto& name:sequence.names)names.emplace_back(name);
     const auto saved=saveProbeBundle(directory,sequence.images,names,
-        "RazKolbas same-frame full native target before first PostDisplay, before/after verified Scaleform EndFrame, then pre-Present");
+        "RazKolbas same-frame native target at each menu call, before/after Scaleform EndFrame, and pre-Present; unchanged menu frames omitted");
     if(const auto error=std::get_if<Error>(&saved))
         spdlog::warn("Owned UI menu-sequence save unavailable: {}",error->message);
     else
