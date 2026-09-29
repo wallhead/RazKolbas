@@ -1,5 +1,19 @@
 # Implementation checkpoint
 
+## AIO FG native UI RE29 audit (2026-09-29)
+
+The supplied RE29 archive passed an independent 144-file manifest check.
+Its exact AIO host and PDPerf DLL hashes match the local pristine references,
+and 97 reported instruction-byte anchors matched the original PE files.
+The direct reference route uses a separate transparent UI target, while its
+detection route exports composite RGB with binary alpha. PDPerf explicitly
+copies UI and HUD-less inputs into owned companions, so copy order and content
+freshness matter. These findings refine the input contract but do not prove
+RazKolbas's live UI alpha, ENB/ReShade ordering, Inventory/Magic draws, or
+camera feed. No code or installed DLL was changed; the one-shot V5.4 capture
+remains armed and Skyrim capture/FG-On are **NOT RUN**. See
+`docs/re/AIO_FG_NATIVE_UI_RE29_AUDIT.md`.
+
 ## One-shot V5.4 UI capture armed (2026-09-29)
 
 With Skyrim closed, the installed V5.4 `RazKolbas.ini` now has only
