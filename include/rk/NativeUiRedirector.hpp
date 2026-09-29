@@ -94,6 +94,16 @@ public:
     HRESULT armUiPlaneForFrame(std::uint64_t frame,
         ID3D11RenderTargetView* uiRtv) noexcept;
     void disarmUiPlane(std::uint64_t frame) noexcept;
+    // Route evidence is conservative: any direct native write or preserved
+    // reduced menu chain makes the one-frame plane unsuitable for FG input.
+    bool uiPlaneRouteComplete(std::uint64_t frame) const noexcept {
+        const auto owner=route_.renderThread()?route_.renderThread():thread_;
+        return uiPlaneRtv_&&uiPlaneFrame_==frame&&!uiPlaneRoutePartial_&&
+            !latePassRoutingDisabled_&&
+            generation_==route_.plan().generation&&
+            route_.phase()!=ScenePhase::Suspended&&route_.frame()==frame&&
+            GetCurrentThreadId()==owner;
+    }
     // Call only after a valid same-frame SR result or spatial fallback has
     // actually been published to the native output and state scopes retired.
     HRESULT commitPublishedUi(std::uint64_t frame) noexcept;
@@ -199,5 +209,6 @@ private:
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> uiPlaneRtv_;
     Microsoft::WRL::ComPtr<IUnknown> uiPlaneId_;
     std::uint64_t uiPlaneFrame_{};
+    bool uiPlaneRoutePartial_{};
 };
 }

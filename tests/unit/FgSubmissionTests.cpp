@@ -131,6 +131,20 @@ TEST_CASE("FG submission accepts a noncommuting temporal transform and inverse",
         rk::prepareFgSubmission(source,input,planes,view,1,2)));
 }
 
+TEST_CASE("FG submission accepts a noncommuting projection and inverse",
+    "[fg_submission]") {
+    Warp gpu;
+    const auto source=frame();
+    const auto planes=ui(gpu,source);
+    const auto input=lease(gpu,source,planes);
+    auto view=camera();
+    view.viewToClip={2,0,0,0, 0,3,0,0, 0,0,1,0, 4,5,0,1};
+    view.clipToView={0.5f,0,0,0, 0,1.0f/3,0,0,
+        0,0,1,0, -2,-5.0f/3,0,1};
+    REQUIRE(std::holds_alternative<rk::FgPreparedSubmission>(
+        rk::prepareFgSubmission(source,input,planes,view,1,2)));
+}
+
 TEST_CASE("FG submission rejects altered token, UI, guide and camera",
     "[fg_submission]") {
     Warp gpu;
@@ -166,6 +180,16 @@ TEST_CASE("FG submission rejects altered token, UI, guide and camera",
     badCamera=view;badCamera.viewToClip[0]=std::numeric_limits<float>::quiet_NaN();
     rejected(input,planes,badCamera);
     badCamera=view;badCamera.clipToPrevClip[12]=1.0f;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.viewToClip[0]=2.0f;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.viewToClip[15]=0.0f;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.right={0,0,0};
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.right=badCamera.up;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.forward={0,0,2};
     rejected(input,planes,badCamera);
     badCamera=view;badCamera.source++;
     rejected(input,planes,badCamera);

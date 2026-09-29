@@ -72,3 +72,25 @@ Before enabling FG-On, verify that the backend receives the distinct pair
 and that retirement protects both textures. Inventory, Magic, title and
 loading UI paths and ENB/ReShade effect placement still need runtime checks.
 Camera constants and the Streamline FG contract remain independent open work.
+
+## Review 31 follow-up in installed 0.1.122
+
+The first 0.1.120 frame did not retain an independent scene image from the
+start of the UI interval; its pre-composite native image alone cannot rule out
+a native UI bypass on another frame. Version 0.1.122 captures that initial B0
+image before arming, then B1 and the transparent UI plane before composition,
+and the final image afterward. The four filenames are
+`scene-at-ui-boundary.raw`, `native-before-composite.raw`,
+`direct-ui-premultiplied.raw` and `composited-final.raw`. Direct native binds,
+the preserved reduced menu branch and a late reduced-scene publication mark
+the route partial. A candidate is logged complete only when no such route
+event occurred, B0 equals B1, and the native target and generation match.
+This classification is diagnostic and does
+not feed FG yet. It preserves the original compositor even if readback fails.
+
+The capture is preflighted against a 256 MiB transient budget before the UI
+target is armed, with exact image-size readback budgets. Its output RTV must
+be typed RGBA8 UNORM. Debug and Release each passed 55/55 CTest groups; the
+new installed game build is **NOT RUN**. The prior 0.1.120 result above remains
+valid for its sampled frame, and the new guard has not yet been observed in
+Skyrim.

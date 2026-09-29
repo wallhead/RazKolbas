@@ -1,5 +1,37 @@
 # Implementation checkpoint
 
+## Installed 0.1.122 review safeguards and FG camera producer (2026-09-29)
+
+The supplied branch review 31 was checked against source and its manifest;
+details and limitations are in `docs/re/BRANCH_REVIEW_31_TRIAGE_2026-09-29.md`.
+The numeric FG camera gate now rejects mismatched/singular projection pairs
+and degenerate basis vectors. The one-shot UI-plane probe has a pre-UI scene
+snapshot, a route-coverage flag, actual-size capture budgets and a typed RTV
+check. It also compares native target identity and scene generation across
+the UI interval. Debug and Release each built and passed **55/55** CTest groups. The
+eight-file MO2 package
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.122-ui-provenance.zip`
+has SHA-256 `01b98b077362bacd664ff49efe6e8e25257dfa4493025441b5f67f4fd7dcb38e`;
+all nine archive entries were checked against the eight manifest hashes, with
+no missing or unexpected payload. The new Release DLL SHA-256 is
+`2a8d1abe854c454e5aaec008f3ba7829fd0391b534018550a2b4ef0cbae3ea5d`.
+It is installed in the isolated V5.4 MO2 mod with the one-shot
+`ProbeDirectUiPlane=true` INI SHA-256
+`c0e8d2b571cf81d99d4f36c7a1498d5f6bc594de89046f0e02f70266581244c4`.
+The other six package payloads are unchanged; all eight installed payload
+hashes match. The prior DLL/INI/manifest are preserved under ignored
+`artifacts/local/mo2-install-backup-0.1.122-2026-09-29`. The 0.1.121 package
+and prior-version backup are preserved; it was superseded before a Skyrim run
+by the native-target and generation checks.
+Skyrim 0.1.122 is **NOT RUN**; the requested new evidence is a B0/B1/UI/final
+bundle and logged route-completeness status. No FG input promotion or game
+FG-On has occurred.
+
+An exact 1.6.1170 static trace identifies a candidate game per-frame D3D11
+buffer at RVA `0x3288788`, written by a `Map`/`Unmap` routine around RVAs
+`0xe45c26`–`0xe45d0d`. Matrix offsets and temporal meaning remain unverified;
+see `docs/re/FG_CAMERA_PERFRAME_STATIC_2026-09-29.md`.
+
 ## User-started 0.1.120 direct UI plane capture (2026-09-29)
 
 Source now has a restart-scoped, default-off `Diagnostics.ProbeDirectUiPlane`

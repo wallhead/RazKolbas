@@ -289,6 +289,7 @@ HRESULT NativeUiRedirector::armUiPlaneForFrame(std::uint64_t frame,
     context_->GetDevice(&ownerDevice);texture->GetDevice(&uiDevice);
     if(!sameObject(ownerDevice.Get(),uiDevice.Get()))return E_INVALIDARG;
     uiPlaneRtv_=uiRtv;uiPlaneId_=std::move(id);uiPlaneFrame_=frame;
+    uiPlaneRoutePartial_=false;
     return S_OK;
 }
 void NativeUiRedirector::disarmUiPlane(std::uint64_t frame) noexcept {
@@ -301,6 +302,7 @@ void NativeUiRedirector::disarmUiPlane(std::uint64_t frame) noexcept {
         if(id&&id.Get()==uiPlaneId_.Get())bindNativeTarget(true);
     }
     uiPlaneRtv_.Reset();uiPlaneId_.Reset();uiPlaneFrame_=0;
+    uiPlaneRoutePartial_=false;
 }
 HRESULT NativeUiRedirector::commitPublishedUi(std::uint64_t frame) noexcept {
     const auto owner=route_.renderThread()?route_.renderThread():thread_;
@@ -333,6 +335,7 @@ HRESULT NativeUiRedirector::rebindForDeferredUiFlush(std::uint64_t frame) noexce
        GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)return E_UNEXPECTED;
     if(preserveReducedMenuPass_) {
+        if(uiPlaneRtv_&&uiPlaneFrame_==frame)uiPlaneRoutePartial_=true;
         // The menu producer chain remained reduced through its final pass.
         // The caller may publish that scene or keep an existing native UI
         // composite; this rebind must not modify native colour pixels.
@@ -367,6 +370,7 @@ Result<SpatialFallbackFrame> NativeUiRedirector::publishHeldMenuScene(
        GetCurrentThreadId()!=owner||generation_!=route_.plan().generation||
        route_.phase()!=ScenePhase::NativeUi||route_.frame()!=frame)
         return Error{ErrorCode::Conflict,"Reduced menu publication boundary is unavailable"};
+    if(uiPlaneRtv_&&uiPlaneFrame_==frame)uiPlaneRoutePartial_=true;
     auto targetResource=resource(nativeRtv_.Get());
     ComPtr<ID3D11Texture2D> display;
     if(!targetResource||FAILED(targetResource.As(&display)))
@@ -605,9 +609,13 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
         for(UINT i=0;i<count&&i<D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;++i) {
             auto value=resource(views[i]);auto id=canonical(value.Get());
             if(id&&id.Get()==sceneId_.Get()) {sceneIncoming=true;sceneSlot=i;}
+            if(uiPlaneRtv_&&uiPlaneFrame_==route_.frame()&&id&&
+               id.Get()==nativeId_.Get())uiPlaneRoutePartial_=true;
         }
         if(sceneIncoming) {
             if(preserveReducedMenuPass_) {
+                if(uiPlaneRtv_&&uiPlaneFrame_==route_.frame())
+                    uiPlaneRoutePartial_=true;
                 next_.om(context,count,views,depth);
                 return;
             }
@@ -617,6 +625,8 @@ void NativeUiRedirector::onOMSetRenderTargets(ID3D11DeviceContext* context,
                 auto depthId=canonical(depthValue.Get());
                 if(depthId&&depthId.Get()==depthSourceId_.Get()) {
                     preserveReducedMenuPass_=true;
+                    if(uiPlaneRtv_&&uiPlaneFrame_==route_.frame())
+                        uiPlaneRoutePartial_=true;
                     next_.om(context,count,views,depth);
                     return;
                 }
@@ -793,7 +803,8 @@ void NativeUiRedirector::releaseAfterRetirement(bool unbindNative) noexcept {
     if(unbindNative&&context_&&nativeRtv_&&next_.om&&nativeBound())
         next_.om(context_.Get(),0,nullptr,nullptr);
     scene_.Reset();sceneId_.Reset();nativeId_.Reset();nativeRtv_.Reset();
-    uiPlaneRtv_.Reset();uiPlaneId_.Reset();uiPlaneFrame_=0;context_.Reset();
+    uiPlaneRtv_.Reset();uiPlaneId_.Reset();uiPlaneFrame_=0;
+    uiPlaneRoutePartial_=false;context_.Reset();
     thread_=0;generation_=0;next_={};compatibilityFault_=false;faultInfo_={};
     latePassRoutingDisabled_=latePassPermanentlyDisabled_=false;
     latePassFaults_=0;latePassFaultFrame_=0;

@@ -63,6 +63,7 @@ Result<bool> compositePremultipliedUi(ID3D11DeviceContext* context,
        finalDesc.Usage!=D3D11_USAGE_DEFAULT||
        !(uiDesc.BindFlags&D3D11_BIND_SHADER_RESOURCE)||
        !(finalDesc.BindFlags&D3D11_BIND_RENDER_TARGET)||
+       viewDesc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||
        viewDesc.ViewDimension!=D3D11_RTV_DIMENSION_TEXTURE2D||
        viewDesc.Texture2D.MipSlice!=0)
         return Error{ErrorCode::Unsupported,"UI composition format or geometry differs"};

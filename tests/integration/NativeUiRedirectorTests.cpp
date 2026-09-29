@@ -619,6 +619,12 @@ TEST_CASE("WARP direct UI plane keeps published colour and starts transparent",
     redirect.onOMSetRenderTargets(context.Get(),1,&sceneView,nullptr);
     bound.Reset();context->OMGetRenderTargets(1,&bound,nullptr);
     REQUIRE(identity(viewResource(bound.Get()).Get()).Get()==identity(uiColor.Get()).Get());
+    REQUIRE(redirect.uiPlaneRouteComplete(1));
+    // An explicit native bind bypasses the UI plane. The diagnostic must
+    // retain the frame for evidence but refuse to call its planes complete.
+    auto* directNative=finalView.Get();
+    redirect.onOMSetRenderTargets(context.Get(),1,&directNative,nullptr);
+    REQUIRE_FALSE(redirect.uiPlaneRouteComplete(1));
     auto sample=[&](ID3D11Texture2D* source) {
         auto stagingDesc=desc;
         stagingDesc.BindFlags=0;stagingDesc.Usage=D3D11_USAGE_STAGING;

@@ -41,19 +41,43 @@ bool inversePair(const std::array<float,16>& forward,
     }
     return true;
 }
-bool cameraReady(const FgCameraData& camera) noexcept {
-    return matrix(camera.viewToClip)&&matrix(camera.clipToView)&&
-        matrix(camera.clipToPrevClip)&&matrix(camera.prevClipToClip)&&
-        inversePair(camera.clipToPrevClip,camera.prevClipToClip)&&
-        finite(camera.position)&&finite(camera.up)&&
-        finite(camera.right)&&finite(camera.forward)&&
-        finite(camera.jitter)&&finite(camera.mvecScale)&&
-        camera.mvecScale[0]>0.0f&&camera.mvecScale[1]>0.0f&&
-        std::isfinite(camera.nearPlane)&&camera.nearPlane>0.0f&&
-        std::isfinite(camera.farPlane)&&camera.farPlane>camera.nearPlane&&
-        std::isfinite(camera.fovRadians)&&camera.fovRadians>0.0f&&
-        camera.fovRadians<3.14159265f&&
-        std::isfinite(camera.aspectRatio)&&camera.aspectRatio>0.0f;
+bool orthonormalBasis(const FgCameraData& camera) noexcept {
+    const std::array<const std::array<float,3>*,3> axes{
+        &camera.right,&camera.up,&camera.forward};
+    constexpr double tolerance=0.05;
+    for(std::size_t i=0;i<axes.size();++i) {
+        if(!finite(*axes[i]))return false;
+        double lengthSquared=0;
+        for(float value:*axes[i])lengthSquared+=static_cast<double>(value)*value;
+        if(std::fabs(lengthSquared-1.0)>tolerance)return false;
+        for(std::size_t j=0;j<i;++j) {
+            double dot=0;
+            for(std::size_t n=0;n<3;++n)
+                dot+=static_cast<double>((*axes[i])[n])*(*axes[j])[n];
+            if(std::fabs(dot)>tolerance)return false;
+        }
+    }
+    return true;
+}
+const char* cameraIssue(const FgCameraData& camera) noexcept {
+    if(!matrix(camera.viewToClip)||!matrix(camera.clipToView)||
+       !inversePair(camera.viewToClip,camera.clipToView))
+        return "FG camera projection and inverse are inconsistent";
+    if(!matrix(camera.clipToPrevClip)||!matrix(camera.prevClipToClip)||
+       !inversePair(camera.clipToPrevClip,camera.prevClipToClip))
+        return "FG camera temporal transform and inverse are inconsistent";
+    if(!orthonormalBasis(camera))
+        return "FG camera basis is degenerate or nonorthonormal";
+    if(!finite(camera.position)||!finite(camera.jitter)||
+       !finite(camera.mvecScale)||camera.mvecScale[0]<=0.0f||
+       camera.mvecScale[1]<=0.0f||
+       !std::isfinite(camera.nearPlane)||camera.nearPlane<=0.0f||
+       !std::isfinite(camera.farPlane)||camera.farPlane<=camera.nearPlane||
+       !std::isfinite(camera.fovRadians)||camera.fovRadians<=0.0f||
+       camera.fovRadians>=3.14159265f||
+       !std::isfinite(camera.aspectRatio)||camera.aspectRatio<=0.0f)
+        return "FG camera position, jitter, guides or frustum are invalid";
+    return nullptr;
 }
 bool alphaFormat(DXGI_FORMAT format) noexcept {
     switch(format) {
@@ -80,9 +104,11 @@ Result<FgPreparedSubmission> prepareFgSubmission(
     if(!frame.source||!frame.generation||!frame.presentToken||
        !frame.resetEpoch||!frame.cameraValid||!frame.render.valid()||
        !frame.display.valid()||!swapBufferCount||
-       physicalOutputIndex>=swapBufferCount||!cameraReady(camera))
+       physicalOutputIndex>=swapBufferCount)
         return Error{ErrorCode::InvalidInput,
-            "FG frame, camera or physical output index is invalid"};
+            "FG frame or physical output index is invalid"};
+    if(const auto issue=cameraIssue(camera))
+        return Error{ErrorCode::InvalidInput,issue};
     if(camera.source!=frame.source||camera.generation!=frame.generation||
        camera.presentToken!=frame.presentToken||
        camera.resetEpoch!=frame.resetEpoch||!camera.sampleRevision||

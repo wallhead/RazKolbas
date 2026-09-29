@@ -148,7 +148,10 @@ struct WorldState {
     bool ownedSpatialBaseline{};
     bool captureFirstDlssFrame{};
     bool probeDirectUiPlane{},directUiPlaneAttempted{};
-    std::uint64_t directUiPlaneFrame{};
+    std::uint64_t directUiPlaneFrame{},directUiGeneration{};
+    std::size_t directUiImageBytes{};
+    std::optional<ProbeImage> directUiBaseline;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> directUiNative;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> directUiPlane;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> directUiPlaneView;
     UpscaleQuality earlyQuality{UpscaleQuality::Quality};
@@ -1000,7 +1003,23 @@ void retireDirectUiPlane(WorldState* state,std::uint64_t frame) noexcept {
     state->directUiPlane.Reset();
     state->directUiPlaneView.Reset();
     state->directUiPlaneFrame=0;
+    state->directUiGeneration=0;
+    state->directUiImageBytes=0;
+    state->directUiBaseline.reset();
+    state->directUiNative.Reset();
 }
+constexpr std::optional<std::size_t> directUiCaptureImageBytes(
+    UINT width,UINT height) noexcept {
+    // Four retained CPU images, one readback staging texture and the UI plane.
+    constexpr std::uint64_t maxTransient=256ull*1024*1024;
+    const auto bytes=std::uint64_t{width}*height*4;
+    if(!width||!height||width>8192||height>8192||
+       bytes>maxTransient/6)return std::nullopt;
+    return static_cast<std::size_t>(bytes);
+}
+static_assert(directUiCaptureImageBytes(3440,1440)==19'814'400);
+static_assert(directUiCaptureImageBytes(3840,2160)==33'177'600);
+static_assert(!directUiCaptureImageBytes(7680,4320));
 void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
     ID3D11DeviceContext* context) noexcept {
     const auto frame=state->directUiPlaneFrame;
@@ -1010,7 +1029,9 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
         auto* domain=activeOwnedSceneDomain();
         const auto device=state->createdDevice.load(std::memory_order_relaxed);
         if(!frame||!ui||!domain||!context||!swap||!device||
-           !state->directUiPlane||
+           !state->directUiPlane||!state->directUiNative||
+           !state->directUiBaseline||
+           !state->directUiImageBytes||
            frame!=state->forwarded.load(std::memory_order_relaxed)) {
             spdlog::warn("Experimental direct UI frame {} could not match its pre-Present owner",frame);
             retire();return;
@@ -1023,9 +1044,15 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
             retire();return;
         }
         auto& target=std::get<NativeFlipTarget>(native);
+        const bool nativeTargetSame=identity(target.texture.Get())==
+            identity(state->directUiNative.Get());
+        const bool generationSame=state->directUiGeneration==
+            domain->plan().generation;
         const std::array<ID3D11Texture2D*,2> sources{
             target.texture.Get(),state->directUiPlane.Get()};
-        auto before=readbackCandidates(context,sources,32*1024*1024);
+        auto before=readbackCandidates(context,sources,
+            2*state->directUiImageBytes);
+        const bool routeComplete=ui->uiPlaneRouteComplete(frame);
         const auto composed=compositePremultipliedUi(context,
             state->directUiPlane.Get(),target.view.Get());
         if(const auto error=std::get_if<Error>(&composed)) {
@@ -1039,13 +1066,26 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
             retire();return;
         }
         const std::array<ID3D11Texture2D*,1> finalSource{target.texture.Get()};
-        auto after=readbackCandidates(context,finalSource,16*1024*1024);
+        auto after=readbackCandidates(context,finalSource,
+            state->directUiImageBytes);
         if(const auto error=std::get_if<Error>(&after)) {
             spdlog::warn("Experimental direct UI frame {} final readback failed: {}",
                 frame,error->message);
             retire();return;
         }
         auto images=std::move(std::get<std::vector<ProbeImage>>(before));
+        const bool nativeUnchanged=
+            state->directUiBaseline->pixels==images.front().pixels;
+        D3D11_RENDER_TARGET_VIEW_DESC finalViewDesc{};
+        target.view->GetDesc(&finalViewDesc);
+        spdlog::info("Experimental direct UI frame {} candidate={} route={} nativeBeforeComposite={} targetSame={} generationSame={} finalRtvFormat={}",
+            frame,routeComplete&&nativeUnchanged&&nativeTargetSame&&
+                generationSame?"complete":"partial",
+            routeComplete?"complete":"partial",
+            nativeUnchanged?"unchanged":"changed",
+            nativeTargetSame,generationSame,
+            static_cast<unsigned>(finalViewDesc.Format));
+        images.insert(images.begin(),std::move(*state->directUiBaseline));
         auto last=std::move(std::get<std::vector<ProbeImage>>(after));
         images.emplace_back(std::move(last.front()));
         PWSTR documents=nullptr;
@@ -1061,11 +1101,12 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
             "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
             ("direct-ui-plane-"+std::to_string(GetCurrentProcessId())+"-"+
              std::to_string(frame)+"-"+std::to_string(GetTickCount64()));
-        const std::array<std::string_view,3> names{
-            "hudless-native.raw","direct-ui-premultiplied.raw",
+        const std::array<std::string_view,4> names{
+            "scene-at-ui-boundary.raw","native-before-composite.raw",
+            "direct-ui-premultiplied.raw",
             "composited-final.raw"};
         const auto saved=saveProbeBundle(directory,images,names,
-            "One-frame experimental direct UI RTV: native before composite, transparent UI target, final premultiplied composition; FG off");
+            "One-frame UI route evidence: immutable scene at UI boundary, native and transparent UI plane before composite, final premultiplied composition; FG off; completeness status in log");
         if(const auto error=std::get_if<Error>(&saved))
             spdlog::warn("Experimental direct UI frame {} bundle failed: {}",
                 frame,error->message);
@@ -1358,28 +1399,45 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             state->directUiPlaneAttempted=true;
             D3D11_TEXTURE2D_DESC description{};
             display->GetDesc(&description);
+            const auto captureBytes=directUiCaptureImageBytes(
+                description.Width,description.Height);
             if(description.Format==DXGI_FORMAT_R8G8B8A8_UNORM&&
                description.SampleDesc.Count==1&&
-               description.MipLevels==1&&description.ArraySize==1) {
-                description.BindFlags=D3D11_BIND_RENDER_TARGET|
-                    D3D11_BIND_SHADER_RESOURCE;
-                description.Usage=D3D11_USAGE_DEFAULT;
-                description.CPUAccessFlags=0;description.MiscFlags=0;
-                Microsoft::WRL::ComPtr<ID3D11Texture2D> plane;
-                Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
-                const auto created=device->CreateTexture2D(&description,nullptr,&plane);
-                const auto viewed=SUCCEEDED(created)?
-                    device->CreateRenderTargetView(plane.Get(),nullptr,&view):created;
-                const auto armed=SUCCEEDED(viewed)?
-                    ui->armUiPlaneForFrame(sequence,view.Get()):viewed;
-                if(SUCCEEDED(armed)) {
-                    state->directUiPlane=std::move(plane);
-                    state->directUiPlaneView=std::move(view);
-                    state->directUiPlaneFrame=sequence;
-                    spdlog::info("Experimental direct UI plane armed for one native DLSS frame {} at {}x{}; FG remains off",
-                        sequence,description.Width,description.Height);
-                } else spdlog::warn("Experimental direct UI plane could not arm at frame {}: HRESULT=0x{:08x}",
-                    sequence,static_cast<std::uint32_t>(armed));
+               description.MipLevels==1&&description.ArraySize==1&&
+               captureBytes) {
+                const std::array<ID3D11Texture2D*,1> baselineSource{display};
+                auto baseline=readbackCandidates(context,baselineSource,*captureBytes);
+                if(const auto error=std::get_if<Error>(&baseline))
+                    spdlog::warn("Experimental direct UI plane baseline unavailable at frame {}: {}",
+                        sequence,error->message);
+                else {
+                    description.BindFlags=D3D11_BIND_RENDER_TARGET|
+                        D3D11_BIND_SHADER_RESOURCE;
+                    description.Usage=D3D11_USAGE_DEFAULT;
+                    description.CPUAccessFlags=0;description.MiscFlags=0;
+                    Microsoft::WRL::ComPtr<ID3D11Texture2D> plane;
+                    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
+                    const auto created=device->CreateTexture2D(
+                        &description,nullptr,&plane);
+                    const auto viewed=SUCCEEDED(created)?
+                        device->CreateRenderTargetView(
+                            plane.Get(),nullptr,&view):created;
+                    const auto armed=SUCCEEDED(viewed)?
+                        ui->armUiPlaneForFrame(sequence,view.Get()):viewed;
+                    if(SUCCEEDED(armed)) {
+                        state->directUiBaseline=std::move(
+                            std::get<std::vector<ProbeImage>>(baseline).front());
+                        state->directUiImageBytes=*captureBytes;
+                        state->directUiNative=display;
+                        state->directUiGeneration=domain->plan().generation;
+                        state->directUiPlane=std::move(plane);
+                        state->directUiPlaneView=std::move(view);
+                        state->directUiPlaneFrame=sequence;
+                        spdlog::info("Experimental direct UI plane armed for one native DLSS frame {} at {}x{}; FG remains off",
+                            sequence,description.Width,description.Height);
+                    } else spdlog::warn("Experimental direct UI plane could not arm at frame {}: HRESULT=0x{:08x}",
+                        sequence,static_cast<std::uint32_t>(armed));
+                }
             } else spdlog::warn("Experimental direct UI plane rejected at frame {}: native format or geometry differs",
                 sequence);
         }
