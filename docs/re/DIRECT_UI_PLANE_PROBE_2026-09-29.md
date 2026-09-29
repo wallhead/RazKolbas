@@ -33,16 +33,42 @@ Captures remain in the user's Skyrim documents directory, outside Git.
 
 WARP tests check route arming, clear, late binding, disarming, non-aliasing,
 premultiplied blend output, preserved alpha and restored D3D11 state. Debug
-and Release builds each passed 55/55 CTest groups. No Skyrim frame has yet
-run this candidate; runtime result is **NOT RUN**. FG-On is also **NOT RUN**.
+and Release builds each passed 55/55 CTest groups. FG-On is **NOT RUN**.
+
+## User-started Skyrim result
+
+The user started Skyrim with 0.1.120 and loaded a save. The first eligible
+native-boundary DLSS frame was 26506 in process 27836, at 2560x1440. The
+`direct-ui-plane-27836-26506-249706890` bundle contains three RGBA8 files,
+each 14,745,600 bytes; its manifest is complete, and every file's size and
+SHA-256 match. The same-frame per-menu and preceding SR bundles also passed
+their manifest checks. The log confirms a separate plane was armed and
+captured with FG off, without a route or composition error. Skyrim was closed
+after capture, and the normal INI and all eight MO2 payloads were verified.
+
+The transparent plane has **149,447** pixels with alpha greater than zero:
+31,043 opaque and 118,404 partially transparent, spanning (33,38)–(2525,1427).
+It contains 81,613 pixels with nonzero RGB, no nonzero RGB where alpha is zero,
+and no RGB channel greater than alpha plus one byte. This is consistent with
+premultiplied colour. The native scene buffer did not change through 15 menu
+calls or `GRenderer::EndFrame`, whereas the pre-Present composite changed
+140,927 RGB pixels, all where plane alpha is nonzero. Native and final alpha
+remain 255 everywhere. Per-channel deviation from
+`UI.rgb + native.rgb * (1 - UI.a)` is below 0.5 byte before rounding, and no
+pixel deviates by more than two bytes. The saved full-frame preview shows HUD,
+subtitles and quest text in the expected screen regions over the scene.
+
+This verifies a usable independent HUD colour/alpha producer and correct
+one-frame composition in this save. It does not compare against a normal
+HUD rendering of the *same* game frame, establish continuous resource
+retirement, or validate every menu and ENB/ReShade ordering. FG-On remains
+untested.
 
 ## Runtime decision
 
-In a user-started save, verify the manifest and per-file hashes, then compare
-the three captures. Measure UI-plane nonzero colour and alpha distributions,
-bounding rectangles and the composite difference from a normal native HUD
-frame. Check whether the image remains correct with ENB and ReShade active.
-If alpha is unusable, trace the actual D3D11 blend/write state for the
-attributed HUD draws before changing composition. Only a verified separate
-UI producer can be offered to FG; camera constants and the Streamline FG
-contract remain independent open work.
+Retain a frame-stamped HUDless scene and transparent UI pair through the FG
+input lease while still presenting the correctly composited native frame.
+Before enabling FG-On, verify that the backend receives the distinct pair
+and that retirement protects both textures. Inventory, Magic, title and
+loading UI paths and ENB/ReShade effect placement still need runtime checks.
+Camera constants and the Streamline FG contract remain independent open work.

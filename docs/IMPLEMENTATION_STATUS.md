@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-## 0.1.120 experimental direct UI plane (2026-09-29)
+## User-started 0.1.120 direct UI plane capture (2026-09-29)
 
 Source now has a restart-scoped, default-off `Diagnostics.ProbeDirectUiPlane`
 switch. On the first eligible native-boundary DLSS frame, it routes native-size
@@ -9,9 +9,18 @@ the published scene before Present, then retires the route. Inventory, Magic,
 title and loading screens are excluded from this first probe. It saves the
 pre-composite scene, UI plane and final composite for alpha and image analysis.
 FG remains off. Debug and Release each passed **55/55** CTest groups, including
-WARP route and premultiplied-composition tests. **The 0.1.120 route has not run
-in Skyrim**; actual Scaleform alpha, visual equivalence and ENB/ReShade order
-are unverified. Details and the next measurement are in
+WARP route and premultiplied-composition tests. The user-started Skyrim run
+captured the first eligible native-boundary DLSS frame 26506 at 2560x1440.
+The separate UI target had 149,447 pixels with nonzero alpha (118,404 partial,
+31,043 opaque), no nonzero RGB under zero alpha, and no RGB component above
+alpha by more than one byte. Native colour was unchanged throughout the menu
+loop and EndFrame; the 140,927 pixels changed at final composition all lay
+under nonzero UI alpha. The final image satisfies the premultiplied blend
+equation to below 0.5 byte in every channel, with scene alpha unchanged.
+All three new capture bundles passed file-size/SHA checks. This establishes a
+usable separate HUD plane for the sampled frame; continuous operation,
+Inventory/Magic/title/loading routing, ENB/ReShade effect placement and
+FG-On are still **NOT RUN**. Details are in
 `docs/re/DIRECT_UI_PLANE_PROBE_2026-09-29.md`.
 The eight-payload MO2 archive at
 `D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.120-direct-ui-plane.zip`
@@ -22,9 +31,11 @@ and one-shot INI SHA-256
 `389d201369ee2a07669fcf7b78c9190370e2bf83ec107967037f1a68ef95dc59`.
 All eight installed payloads match; the prior DLL/INI/manifest are backed up
 under ignored `artifacts/local/mo2-install-backup-0.1.120-2026-09-29`.
-Skyrim was not started for this version. The next runtime action is a
-user-started save load, then analysis of the one-shot capture and restoration
-of the normal INI.
+Skyrim was closed after the capture. The normal INI was restored to SHA-256
+`e05eed4f2a80237608f9c4e6a4a595bb7c36a4c19248239b38d827504f56ff5b`;
+all eight installed payloads match the updated manifest. The next step is
+to retain a native scene/UI pair through FG input submission without changing
+the visible native composition, then validate it before FG-On.
 
 ## User-started 0.1.119 per-menu UI capture (2026-09-29)
 
