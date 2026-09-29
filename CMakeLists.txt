@@ -97,6 +97,7 @@ if(WIN32)
       endif()
     endforeach()
     add_library(rk_fg_streamline STATIC
+      src/backends/fg/FgStreamlineRuntime.cpp
       src/backends/fg/FgStreamlineConstants.cpp
       src/backends/fg/FgStreamlineOptions.cpp
       src/backends/fg/FgStreamlineFrameInputs.cpp
@@ -107,6 +108,9 @@ if(WIN32)
     target_include_directories(rk_fg_streamline SYSTEM PUBLIC
       "${RK_STREAMLINE_SDK_ROOT}/include")
     target_link_libraries(rk_fg_streamline PUBLIC rk_core)
+    add_executable(RazKolbasFgRuntimeProbe harness/FgRuntimeProbe.cpp)
+    target_compile_definitions(RazKolbasFgRuntimeProbe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(RazKolbasFgRuntimeProbe PRIVATE rk_fg_streamline d3d12 dxgi)
     add_executable(RazKolbasFgStreamlineProbe harness/FgStreamlineProbe.cpp harness/FgSyntheticOn.cpp)
     target_include_directories(RazKolbasFgStreamlineProbe SYSTEM PRIVATE
       "${RK_STREAMLINE_SDK_ROOT}/include")

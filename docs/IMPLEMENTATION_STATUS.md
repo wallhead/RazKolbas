@@ -1,5 +1,23 @@
 # Implementation checkpoint
 
+## Private Streamline loader and factory pointer contract (2026-09-29)
+
+Source now has a hash-pinned private Streamline 2.14.1 runtime loader and an
+optional MO2 packaging path for the six exact NVIDIA-signed runtime DLLs.
+An isolated-process probe loaded the staged runtime, bound a D3D12 device,
+then shut down successfully. A mutated staged DLL was refused before load.
+With exact ReShade 6.8, `slUpgradeInterface` returned a distinct interposer
+factory proxy whether the ReShade factory existed before or after `slInit`;
+it left ReShade's native delegate unchanged. See
+`docs/re/FG_PRIVATE_STREAMLINE_RUNTIME_2026-09-29.md`.
+
+Release CTest passed **60/60**. The private loader is not linked into the
+game plugin yet. Installed V5.4 MO2 remains 0.1.128, and game FG is Off.
+No Skyrim runtime verification occurred in this step. Next: route an owned
+lower factory/swap through the returned Streamline proxy while retaining
+ReShade and ENB's outer D3D11 contracts, then integrate the validated startup
+and frame service into the game plugin before one bundled user-started test.
+
 ## Source 0.1.129 chains a pinned Streamline factory owner (2026-09-29)
 
 The separate-process ReShade/Streamline result was converted into a guarded
