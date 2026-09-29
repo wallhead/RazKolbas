@@ -47,7 +47,8 @@ With the separate default-off direct UI-plane probe enabled for the same run,
 the logs can correlate world frame, camera bytes, prepared guides and native
 pre-Present UI. This diagnostic may stall those frames for readback. It does
 not enable FG or alter normal rendering after the bounded capture. Its game
-outcome is **NOT RUN** until the owner starts Skyrim.
+outcome is recorded in `FG_PAIRED_GUIDES_GAME_CAPTURE_2026-09-29.md` after
+the owner's user-started run; FG-On remained **NOT RUN**.
 
 The eight-payload MO2 package is
 `D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.124-fg-paired.zip`

@@ -1,6 +1,7 @@
 #include "rk/FgCameraGeometry.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 namespace rk {
@@ -90,6 +91,75 @@ Result<FgCameraTransforms> deriveFgCameraTransforms(
     out.clipToCameraView=transpose(camera.inverseProjection);
     out.clipToPrevClip=transpose(clipToPrevious);
     out.prevClipToClip=transpose(*previousToClip);
+    return out;
+}
+Result<FgCameraCalibration> deriveFgCameraCalibration(
+    const FgGameCameraSample& camera) {
+    const auto transforms=deriveFgCameraTransforms(camera);
+    if(const auto error=std::get_if<Error>(&transforms))return *error;
+    const auto& p=camera.projection;
+    constexpr double shapeTolerance=1e-4;
+    constexpr std::array<std::size_t,11> zeroEntries{
+        1,2,3,4,6,7,8,9,12,13,15};
+    if(!std::all_of(zeroEntries.begin(),zeroEntries.end(),
+            [&](std::size_t index){return std::abs(p[index])<=shapeTolerance;})||
+       std::abs(p[14]-1.0f)>shapeTolerance||
+       p[0]<=0.0f||p[5]<=0.0f||p[10]<=1.0f||p[11]>=0.0f)
+        return Error{ErrorCode::Unsupported,
+            "FG game projection is not the measured unjittered forward-Z form"};
+    const auto& v=camera.view;
+    if(std::abs(v[3])>shapeTolerance||std::abs(v[7])>shapeTolerance||
+       std::abs(v[11])>shapeTolerance||std::abs(v[12])>shapeTolerance||
+       std::abs(v[13])>shapeTolerance||std::abs(v[14])>shapeTolerance||
+       std::abs(v[15]-1.0f)>shapeTolerance)
+        return Error{ErrorCode::Unsupported,
+            "FG game view includes unmeasured translation or homogeneous terms"};
+    FgCameraCalibration out{};
+    out.transforms=std::get<FgCameraTransforms>(transforms);
+    out.position=camera.position;
+    out.right={v[0],v[1],v[2]};
+    out.up={v[4],v[5],v[6]};
+    out.forward={v[8],v[9],v[10]};
+    const std::array<const std::array<float,3>*,3> axes{
+        &out.right,&out.up,&out.forward};
+    for(std::size_t row=0;row<axes.size();++row) {
+        for(std::size_t prior=0;prior<=row;++prior) {
+            double dot=0;
+            for(std::size_t n=0;n<3;++n)
+                dot+=static_cast<double>((*axes[row])[n])*(*axes[prior])[n];
+            const double expected=row==prior?1.0:0.0;
+            if(!std::isfinite(dot)||std::abs(dot-expected)>1e-3)
+                return Error{ErrorCode::InvalidInput,
+                    "FG game camera basis is not orthonormal"};
+        }
+    }
+    const double determinant=
+        static_cast<double>(v[0])*(v[5]*v[10]-v[6]*v[9])-
+        static_cast<double>(v[1])*(v[4]*v[10]-v[6]*v[8])+
+        static_cast<double>(v[2])*(v[4]*v[9]-v[5]*v[8]);
+    if(!std::isfinite(determinant)||std::abs(determinant+1.0)>1e-3)
+        return Error{ErrorCode::Unsupported,
+            "FG game camera basis handedness differs from the measured route"};
+    const double a=p[10],b=p[11];
+    const double nearPlane=-b/a;
+    const double farPlane=b/(1.0-a);
+    const double verticalFov=2.0*std::atan(1.0/static_cast<double>(p[5]));
+    const double horizontalFov=2.0*std::atan(1.0/static_cast<double>(p[0]));
+    const double aspect=static_cast<double>(p[5])/p[0];
+    if(!std::isfinite(nearPlane)||!std::isfinite(farPlane)||
+       !std::isfinite(verticalFov)||!std::isfinite(horizontalFov)||
+       !std::isfinite(aspect)||
+       nearPlane<=0||farPlane<=nearPlane||
+       verticalFov<=0||verticalFov>=3.141592653589793||
+       horizontalFov<=0||horizontalFov>=3.141592653589793||aspect<=0||
+       farPlane>std::numeric_limits<float>::max())
+        return Error{ErrorCode::InvalidInput,
+            "FG game projection has invalid frustum parameters"};
+    out.nearPlane=static_cast<float>(nearPlane);
+    out.farPlane=static_cast<float>(farPlane);
+    out.verticalFovRadians=static_cast<float>(verticalFov);
+    out.horizontalFovRadians=static_cast<float>(horizontalFov);
+    out.aspectRatio=static_cast<float>(aspect);
     return out;
 }
 }

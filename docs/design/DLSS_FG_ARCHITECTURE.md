@@ -4,8 +4,9 @@
 
 Generate one additional displayed frame for each real Skyrim frame on a
 supported GPU while keeping SR, optional pre-SR NR, ENB, ReShade and native
-UI correct. The user's installed 0.1.114 build is still a D3D11 real-frame
-renderer with a pass-through ENB/ReShade swap-chain observer; this design
+UI correct. The user's installed 0.1.124 build is still a D3D11 real-frame
+renderer with a pass-through ENB/ReShade swap-chain observer; its default-off
+one-shot camera/guide/UI probes have completed one paired capture. This design
 does not imply FG is active. `General.Presentation=ProxyD3D12` and the FG
 settings are schema entries, not an implemented proxy/provider. The shared
 selection and frame contract is described in

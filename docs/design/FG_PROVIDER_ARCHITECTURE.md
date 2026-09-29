@@ -79,9 +79,11 @@ Present token. It runs NR and SR once. The selected backend can present one
 generated frame without advancing simulation, source ID, jitter or history.
 The source-only `FgUiPlanes` capture boundary now snapshots the pre-UI colour
 and accepts a distinct native-size UI colour/alpha source and final colour
-only for the same real-frame identity. Its WARP pixel test passed. The live
-Skyrim UI route does not yet produce that separate alpha source, so this
-contract is not evidence that FG UI tagging is ready.
+only for the same real-frame identity. Its WARP pixel test passed. A default-off
+one-shot Skyrim diagnostic produced a valid separate premultiplied UI plane
+on world frame 103469. Continuous source publication and provider tagging
+remain unimplemented, so that capture is not evidence that FG UI tagging is
+ready.
 The source-frame ledger rejects a second real Present. The producer, copy,
 provider-input, Present and allocator completion fences must all retire
 before a slot is reused; no provider may infer completion from the copy fence

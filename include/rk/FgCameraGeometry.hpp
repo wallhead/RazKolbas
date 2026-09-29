@@ -11,4 +11,15 @@ struct FgCameraTransforms {
 };
 Result<FgCameraTransforms> deriveFgCameraTransforms(
     const FgGameCameraSample& camera);
+
+// Skyrim 1.6.1170 world-route geometry only. Guide conventions, same-frame
+// jitter and a real-frame token are separate admission requirements.
+struct FgCameraCalibration {
+    FgCameraTransforms transforms{};
+    std::array<float,3> position{},right{},up{},forward{};
+    float nearPlane{},farPlane{},verticalFovRadians{},
+        horizontalFovRadians{},aspectRatio{};
+};
+Result<FgCameraCalibration> deriveFgCameraCalibration(
+    const FgGameCameraSample& camera);
 }

@@ -136,7 +136,8 @@ CaptureFirstDlssFrame = false
 ; Requires a game restart. Frame generation remains off during this probe.
 ProbeDirectUiPlane = false
 ; Read-only three-sample probe of the exact 1.6.1170 per-frame D3D11 buffer.
-; Also saves prepared colour/motion/depth on its two consecutive frames.
+; Also saves prepared colour/motion/depth and matching pre-Present camera bytes
+; on its two consecutive frames, so same-frame camera freshness can be checked.
 ; Can be paired with ProbeDirectUiPlane for one correlated world/UI frame.
 ; Restart required; may stall diagnostic frames; does not enable frame generation.
 ProbeFgCameraBuffer = false

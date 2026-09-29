@@ -1,5 +1,55 @@
 # Implementation checkpoint
 
+## Installed 0.1.125 camera phase comparison (2026-09-29)
+
+The next default-off diagnostic saves the same game camera buffer at
+MenuDisplay and at RazKolbas's game-facing pre-Present observer on each of
+two consecutive real world frames, with frame numbers and byte comparisons
+in the log. The source
+also extracts the observed 1.6.1170 camera basis, near/far and separate
+vertical/horizontal FOV candidates under strict geometry guards. It does not
+submit FG constants or enable a provider. Debug and Release each built and
+passed **57/57** CTest groups; a missing-calibration API was observed failing
+before implementation.
+
+The eight-payload MO2 archive
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.125-fg-present-phase.zip`
+has SHA-256 `acde9ad1c9627298f0da752b033ab523657b840c84ccba1fc5bd15f8c6767032`.
+Its nine ZIP entries and eight payload hashes were verified. The isolated V5.4
+MO2 mod contains DLL SHA-256
+`047ad7d895943335dc0c07d22879f2e4986c37548684b7f916f91edbe7bb7e3f`
+and one-shot INI SHA-256
+`dcc54915e2ba392c3e38ebd3ef941a451b6f3d8457ddb6f465016e1949eacf21`;
+all eight installed payloads match the manifest. The preceding DLL, normal
+INI and manifest are backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.125-2026-09-29`.
+Skyrim 0.1.125 is **NOT RUN**. The next required step is a user-started
+save-load run for the two same-frame phase comparisons. FG remains Off.
+
+## User-started 0.1.124 paired FG guide result (2026-09-29)
+
+The read-only run captured three camera buffers, prepared colour/motion/depth
+guides on two consecutive frames and a native UI plane on their first frame.
+All 13 raw-file hashes match complete manifests. Frame 103470's previous
+camera fields equal frame 103469's current fields. Position-aware camera
+reprojection predicts the RG16F motion guide as previous UV minus current UV
+with correlation above 0.999995 on each axis over the full second frame;
+omitting camera translation makes the error 39–152 times larger. The R32F
+depth follows the captured forward-depth projection. The 2560x1440 UI plane
+has valid premultiplied alpha and blends exactly over the unchanged native
+HUD-free scene on the sampled frame. See
+`docs/re/FG_PAIRED_GUIDES_GAME_CAPTURE_2026-09-29.md` for measurements and
+limits. This does **not** verify moving-object vectors, continuous pre-Present
+freshness or FG-On output.
+
+The game was closed; the normal INI was restored and all eight installed MO2
+payloads match the updated manifest. FG remains Off. Source-only camera
+calibration now derives world axes and projection near/far/FOV/aspect with
+strict guards from the observed 1.6.1170 route. Debug and Release each pass
+**57/57** CTest groups. The 0.1.124 DLL used for that run predates this
+source-only calibration; 0.1.125 installed above contains it without invoking
+it in the game.
+
 ## Installed 0.1.124 paired FG input diagnostic (2026-09-29)
 
 The source now derives candidate Streamline row-major projection and temporal
@@ -23,9 +73,9 @@ all eight installed payloads match the manifest. The prior DLL, normal INI and
 manifest are backed up under ignored
 `artifacts/local/mo2-install-backup-0.1.124-2026-09-29`.
 
-Skyrim 0.1.124 and FG-On are **NOT RUN**. The next required step is a
-user-started save-load run. The paired readback may briefly stall diagnostic
-frames; its evidence will be analyzed before any FG submission is attempted.
+At packaging time Skyrim 0.1.124 and FG-On were **NOT RUN**. The later
+user-started paired result is recorded above; FG-On remains **NOT RUN**.
+The paired readback can briefly stall diagnostic frames.
 See `docs/re/FG_CAMERA_GEOMETRY_2026-09-29.md` for the numerical derivation,
 SDK contract and remaining guide/camera admission questions.
 

@@ -41,6 +41,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <filesystem>
 #include <wrl/client.h>
 
@@ -151,6 +152,7 @@ struct WorldState {
     bool probeFgCameraBuffer{},fgCameraProbeFinished{};
     std::uint64_t fgCameraFirstFrame{};
     std::array<std::optional<ProbeBuffer>,3> fgCameraSamples;
+    std::array<std::optional<ProbeBuffer>,2> fgPrePresentCameraSamples;
     std::array<bool,2> fgGuideSamples{};
     std::uint64_t directUiPlaneFrame{},directUiGeneration{};
     std::size_t directUiImageBytes{};
@@ -1168,6 +1170,7 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
         else if(!state->fgCameraSamples[1]) {
             if(frame!=state->fgCameraFirstFrame+1) {
                 state->fgCameraSamples={};
+                state->fgPrePresentCameraSamples={};
                 state->fgGuideSamples={};
                 state->fgCameraFirstFrame=0;
             }
@@ -1207,10 +1210,11 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
         }
         if(slot!=2)return;
         state->fgCameraProbeFinished=true;
-        std::array<ProbeImage,3> images;
-        for(unsigned i=0;i<images.size();++i) {
-            auto& sample=*state->fgCameraSamples[i];
-            auto& image=images[i];
+        std::vector<ProbeImage> images;
+        std::vector<std::string> names;
+        images.reserve(5);names.reserve(5);
+        const auto append=[&](ProbeBuffer& sample,std::string name) {
+            ProbeImage image{};
             // Explicit linear R8 encoding of buffer bytes for the existing
             // transactional raw-bundle writer; these are not game textures.
             image.descriptor.Width=sample.descriptor.ByteWidth;
@@ -1218,6 +1222,18 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
             image.descriptor.Format=DXGI_FORMAT_R8_UINT;
             image.rowBytes=sample.descriptor.ByteWidth;
             image.pixels=std::move(sample.bytes);
+            images.push_back(std::move(image));
+            names.push_back(std::move(name));
+        };
+        for(unsigned i=0;i<state->fgCameraSamples.size();++i) {
+            const auto sampleFrame=i==2?frame:state->fgCameraFirstFrame+i;
+            append(*state->fgCameraSamples[i],
+                "world-"+std::to_string(sampleFrame)+".raw");
+        }
+        for(unsigned i=0;i<state->fgPrePresentCameraSamples.size();++i) {
+            if(!state->fgPrePresentCameraSamples[i])continue;
+            append(*state->fgPrePresentCameraSamples[i],
+                "pre-present-"+std::to_string(state->fgCameraFirstFrame+i)+".raw");
         }
         PWSTR documents=nullptr;
         const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
@@ -1233,19 +1249,20 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
             ("fg-camera-buffer-"+std::to_string(GetCurrentProcessId())+"-"+
              std::to_string(state->fgCameraFirstFrame)+"-"+
              std::to_string(GetTickCount64()));
-        const std::array<std::string,3> names{
-            "world-"+std::to_string(state->fgCameraFirstFrame)+".raw",
-            "world-"+std::to_string(state->fgCameraFirstFrame+1)+".raw",
-            "world-"+std::to_string(frame)+".raw"};
-        const std::array<std::string_view,3> views{names[0],names[1],names[2]};
+        std::vector<std::string_view> views;
+        views.reserve(names.size());
+        for(const auto& name:names)views.push_back(name);
         const auto saved=saveProbeBundle(directory,images,views,
-            "Read-only D3D11 per-frame buffer bytes at three real world frames; linear R8 byte encoding, not texture pixels; static 1.6.1170 buffer producer, no matrix semantics or FG submission claimed");
+            "Read-only D3D11 per-frame camera bytes at three world frames and available matching pre-Present phases; linear R8 bytes, not texture pixels; FG off");
         if(const auto error=std::get_if<Error>(&saved))
             spdlog::warn("FG camera buffer bundle save unavailable: {}",error->message);
-        else spdlog::info("FG camera buffer three-frame capture complete at {}; consecutive guide bundles complete={}",
+        else spdlog::info("FG camera buffer three-frame capture complete at {}; consecutive guide bundles complete={} paired pre-Present samples={}/2",
             directory.string(),
-            state->fgGuideSamples[0]&&state->fgGuideSamples[1]);
+            state->fgGuideSamples[0]&&state->fgGuideSamples[1],
+            static_cast<unsigned>(state->fgPrePresentCameraSamples[0].has_value())+
+            static_cast<unsigned>(state->fgPrePresentCameraSamples[1].has_value()));
         state->fgCameraSamples={};
+        state->fgPrePresentCameraSamples={};
         state->fgGuideSamples={};
     } catch(const std::exception& error) {
         state->fgCameraProbeFinished=true;
@@ -1254,6 +1271,42 @@ void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
     } catch(...) {
         state->fgCameraProbeFinished=true;
         try {spdlog::warn("FG camera buffer read-only probe failed");}
+        catch(...) {}
+    }
+}
+void probeGameFgCameraPrePresent(WorldState* state,std::uint64_t frame) noexcept {
+    if(!state->probeFgCameraBuffer||state->fgCameraProbeFinished||
+       !state->fgCameraFirstFrame||
+       (frame!=state->fgCameraFirstFrame&&
+        frame!=state->fgCameraFirstFrame+1))return;
+    const auto slot=static_cast<unsigned>(frame-state->fgCameraFirstFrame);
+    if(!state->fgCameraSamples[slot]||
+       state->fgPrePresentCameraSamples[slot])return;
+    try {
+        const auto context=reinterpret_cast<ID3D11DeviceContext*>(
+            state->createdContext.load(std::memory_order_relaxed));
+        if(!context) {
+            spdlog::warn("FG pre-Present camera sample unavailable at world frame {}: no immediate context",frame);
+            return;
+        }
+        auto sampled=sampleGameFgCameraBuffer(state,context);
+        if(const auto error=std::get_if<Error>(&sampled)) {
+            spdlog::warn("FG pre-Present camera sample unavailable at world frame {}: {}",
+                frame,error->message);
+            return;
+        }
+        auto buffer=std::move(std::get<ProbeBuffer>(sampled));
+        const bool equal=buffer.descriptor.ByteWidth==
+            state->fgCameraSamples[slot]->descriptor.ByteWidth&&
+            buffer.bytes==state->fgCameraSamples[slot]->bytes;
+        spdlog::info("FG pre-Present camera sample at world frame {}: bytes={} sha256={} menuDisplayEqual={}",
+            frame,buffer.descriptor.ByteWidth,sha256(buffer.bytes),equal);
+        state->fgPrePresentCameraSamples[slot]=std::move(buffer);
+    } catch(const std::exception& error) {
+        try {spdlog::warn("FG pre-Present camera sample failed at world frame {}: {}",
+            frame,error.what());}catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("FG pre-Present camera sample failed at world frame {}",frame);}
         catch(...) {}
     }
 }
@@ -2913,6 +2966,8 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
                 frame);}catch(...) {}
         }
     }
+    probeGameFgCameraPrePresent(state,
+        state->forwarded.load(std::memory_order_relaxed));
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
