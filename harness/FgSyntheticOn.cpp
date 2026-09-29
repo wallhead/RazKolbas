@@ -2,7 +2,8 @@
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
 #include <sl_pcl.h>
-#include "rk/FgStreamlineConstants.hpp"
+#include "rk/FgStreamlineFrameInputs.hpp"
+#include "rk/FgStreamlineSubmit.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -70,13 +71,24 @@ bool waitFor(ID3D12CommandQueue* queue,ID3D12Fence* fence,
     return WaitForSingleObject(event,10000)==WAIT_OBJECT_0&&
         fence->GetCompletedValue()>=value;
 }
+bool waitCompletion(ID3D12Fence* fence,std::uint64_t value,HANDLE event) {
+    if(!fence||!value)return true;
+    if(fence->GetCompletedValue()>=value)return true;
+    if(FAILED(fence->SetEventOnCompletion(value,event)))return false;
+    return WaitForSingleObject(event,10000)==WAIT_OBJECT_0&&
+        fence->GetCompletedValue()>=value;
+}
 
-rk::Result<sl::Constants> constants(unsigned frame) {
+rk::FgSourceFrame sourceFrame(unsigned frame) {
     rk::FgSourceFrame source{};
     source.source=frame+1;source.generation=1;
     source.presentToken=frame+1;source.resetEpoch=1;
-    source.cameraValid=true;
+    source.cameraValid=true;source.worldActive=true;source.ownerReady=true;
     source.render={kWidth,kHeight};source.display=source.render;
+    return source;
+}
+rk::FgCameraData cameraData(unsigned frame) {
+    const auto source=sourceFrame(frame);
     rk::FgCameraData camera{};
     camera.source=source.source;camera.generation=source.generation;
     camera.presentToken=source.presentToken;
@@ -95,7 +107,7 @@ rk::Result<sl::Constants> constants(unsigned frame) {
     camera.fovRadians=1.04719755f;
     camera.aspectRatio=static_cast<float>(kWidth)/kHeight;
     camera.cameraMotionIncluded=true;camera.reset=frame==0;
-    return rk::makeFgStreamlineConstants(source,camera);
+    return camera;
 }
 
 bool ok(const char* label,sl::Result result) {
@@ -116,13 +128,14 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
     ComPtr<ID3D12DescriptorHeap> heap;
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
     heapDesc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    heapDesc.NumDescriptors=6;
+    heapDesc.NumDescriptors=7;
     if(FAILED(device->CreateDescriptorHeap(&heapDesc,IID_PPV_ARGS(&heap))))
         return 41;
-    std::array<Plane,4> planes{};
-    const std::array<DXGI_FORMAT,4> formats{
+    std::array<Plane,5> planes{};
+    const std::array<DXGI_FORMAT,5> formats{
         DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R16G16_FLOAT,
-        DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM};
+        DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM,
+        DXGI_FORMAT_R8G8B8A8_UNORM};
     for(UINT i=0;i<planes.size();++i)
         if(!makePlane(device,heap.Get(),i,formats[i],planes[i]))return 42;
     std::array<ComPtr<ID3D12Resource>,2> back{};
@@ -130,7 +143,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
     for(UINT i=0;i<back.size();++i) {
         if(FAILED(swap->GetBuffer(i,IID_PPV_ARGS(&back[i]))))return 43;
         backRtv[i]=heap->GetCPUDescriptorHandleForHeapStart();
-        backRtv[i].ptr+=static_cast<SIZE_T>(i+4)*
+        backRtv[i].ptr+=static_cast<SIZE_T>(i+5)*
             device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
         device->CreateRenderTargetView(back[i].Get(),nullptr,backRtv[i]);
     }
@@ -209,30 +222,49 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
                 sl::PCLMarker::eRenderSubmitEnd,*token))) {
             error=53;break;
         }
-        const auto camera=constants(frame);
-        if(!std::holds_alternative<sl::Constants>(camera)||
-           !ok("slSetConstants",slSetConstants(
-                std::get<sl::Constants>(camera),*token,viewport))) {
+        const auto source=sourceFrame(frame);
+        rk::FgPreparedSubmission prepared{};
+        prepared.source=source.source;prepared.generation=source.generation;
+        prepared.presentToken=source.presentToken;
+        prepared.resetEpoch=source.resetEpoch;
+        prepared.render=source.render;prepared.display=source.display;
+        prepared.physicalOutputIndex=physical;
+        prepared.swapBufferCount=static_cast<std::uint32_t>(back.size());
+        // Synthetic single-queue producer: both recorded completion values
+        // name the real fence signal just waited above. No D3D11 copy occurs.
+        prepared.copyTicket={frame+1,frame+1};
+        prepared.camera=cameraData(frame);
+        prepared.resources={planes[4].resource,planes[0].resource,
+            planes[1].resource,planes[2].resource,planes[3].resource};
+        rk::FgStreamlineReadStates readable{};
+        readable.completedCopy=prepared.copyTicket;
+        readable.actual.fill(kReadState);
+        auto inputs=rk::prepareFgStreamlineFrameInputs(source,prepared,
+            readable,DXGI_FORMAT_R8G8B8A8_UNORM);
+        if(const auto failure=std::get_if<rk::Error>(&inputs)) {
+            std::cout<<"FG-On prepared inputs failed: "<<failure->message<<'\n';
             error=54;break;
         }
-        sl::Resource depth{sl::ResourceType::eTex2d,
-            planes[0].resource.Get(),static_cast<UINT>(kReadState)};
-        sl::Resource motion{sl::ResourceType::eTex2d,
-            planes[1].resource.Get(),static_cast<UINT>(kReadState)};
-        sl::Resource hudless{sl::ResourceType::eTex2d,
-            planes[2].resource.Get(),static_cast<UINT>(kReadState)};
-        sl::Resource ui{sl::ResourceType::eTex2d,
-            planes[3].resource.Get(),static_cast<UINT>(kReadState)};
-        sl::Extent extent{0,0,kWidth,kHeight};
-        sl::ResourceTag tags[]{
-            {&depth,sl::kBufferTypeDepth,sl::eValidUntilPresent,&extent},
-            {&motion,sl::kBufferTypeMotionVectors,sl::eValidUntilPresent,&extent},
-            {&hudless,sl::kBufferTypeHUDLessColor,sl::eValidUntilPresent,&extent},
-            {&ui,sl::kBufferTypeUIColorAndAlpha,sl::eValidUntilPresent,&extent},
-            {nullptr,sl::kBufferTypeBackbuffer,sl::eValidUntilPresent,&extent}};
-        if(!ok("slSetTagForFrame",slSetTagForFrame(*token,viewport,tags,
-                static_cast<UINT>(std::size(tags)),nullptr))||
-           !ok("presentStart",slPCLSetMarker(
+        rk::FgStreamlineCalls sdk{};
+        sdk.setConstants=[](const sl::Constants& values,
+            const sl::FrameToken& frameToken,const sl::ViewportHandle& view) {
+            return slSetConstants(values,frameToken,view);
+        };
+        sdk.setTags=[](const sl::FrameToken& frameToken,
+            const sl::ViewportHandle& view,const sl::ResourceTag* tags,
+            std::uint32_t count,sl::CommandBuffer* commands) {
+            return slSetTagForFrame(frameToken,view,tags,count,commands);
+        };
+        const rk::FgStreamlineTokenBinding binding{
+            source.source,source.generation,source.presentToken,
+            source.resetEpoch,token};
+        const auto submitted=rk::submitFgStreamlineInputs(
+            std::get<rk::FgStreamlineFrameInputs>(inputs),binding,viewport,sdk);
+        if(const auto failure=std::get_if<rk::Error>(&submitted)) {
+            std::cout<<"FG-On input submission failed: "<<failure->message<<'\n';
+            error=54;break;
+        }
+        if(!ok("presentStart",slPCLSetMarker(
                 sl::PCLMarker::ePresentStart,*token))) {
             error=55;break;
         }
@@ -252,6 +284,13 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             " minDimension="<<state.minWidthOrHeight<<'\n';
         if(stateResult!=sl::Result::eOk){error=57;break;}
         generated|=state.numFramesActuallyPresented>1;
+        if(!waitCompletion(reinterpret_cast<ID3D12Fence*>(
+                state.inputsProcessingCompletionFence),
+                state.lastPresentInputsProcessingCompletionFenceValue,
+                event.handle)) {
+            std::cout<<"FG-On provider input fence did not retire\n";
+            error=59;break;
+        }
         Sleep(16);
     }
     options.mode=sl::DLSSGMode::eOff;

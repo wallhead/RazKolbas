@@ -35,15 +35,24 @@ injectable functions. Mocked calls verify order, arguments, stale-token
 rejection and failure propagation. The game has not supplied real token
 ownership or invoked this boundary.
 
+The standalone synthetic FG-On harness now builds the same stamped packet
+from five D3D12 textures after a real producer-fence wait, calls the SDK
+submission boundary with its official SL token, and checks any returned
+provider-input completion fence before reusing those textures. Its producer
+is a single D3D12 queue; it does not exercise the game's D3D11 copy path.
+On the local RTX 4080 SUPER, the probe acquired foreground, reported
+`slSetD3DDevice=0` and DLSS-G support, then reported `status=0x0` and
+`numFramesActuallyPresented=2` for each of eight real Presents. It turned
+DLSS-G Off, issued the drain Present, shut down and exited 0. This directly
+verifies synthetic extra-frame output through the new packet and call path,
+not Skyrim image quality or ENB/ReShade compatibility.
+
 Debug built with **57/57** CTest groups passed. Release with the hash-pinned
 Streamline 2.14.1 SDK built with **60/60**, including constants, options,
-tag-bundle, source-packet and mocked SDK-call tests. The rebuilt synthetic
-harness was not rerun for FG-On during this checkpoint, so its earlier
-generated-frame telemetry remains evidence
-for the previous harness build only.
+tag-bundle, source-packet and mocked SDK-call tests.
 
-This is a source-side candidate mapping, **not live FG submission**. A caller
-could falsely stamp old camera bytes with a current token; the mapping API
+The game-side mapping remains a candidate, **not live Skyrim FG submission**.
+A caller could falsely stamp old camera bytes with a current token; the mapping API
 cannot establish that the producer emitted those bytes for that real frame.
 Game wiring must use an independently sampled producer/frame stamp or a
 continuous phase check. Moving-object vectors, cuts, actual Streamline lower

@@ -7,12 +7,14 @@ The 0.1.125 camera-phase result below now feeds a guarded source-only
 one-extra-frame `sl::DLSSGOptions`, and retained input-tag adapters composed
 into one source-stamped input packet. An SDK-call boundary checks an SL token
 binding and invokes constants then tags; its call order/failure path has
-mock tests. The synthetic FG-On harness uses the constants adapter. Debug
-passed **57/57**
-CTest groups; Release with the pinned SDK passed **60/60**, including
+mock tests. The synthetic FG-On harness now uses the whole packet and call
+boundary, waits its real producer fence and checks any reported provider-input
+completion fence. On RTX 4080 SUPER it reported two actual presentations per
+real frame for eight consecutive frames, then drained and shut down cleanly.
+Debug passed **57/57** CTest groups; Release with the pinned SDK passed
+**60/60**, including
 matrix/token/guide, exact format/dimension and WARP tag-lifetime tests. The
-rebuilt synthetic FG-On harness has not been rerun. The installed 0.1.125
-DLL has not changed and FG stays Off.
+installed 0.1.125 DLL has not changed and FG stays Off.
 The mapping cannot itself prove that caller-stamped camera bytes came from
 the current frame. Continuous producer/phase proof, live SL tag submission,
 provider fence retirement and the game-facing D3D12 presentation owner are
