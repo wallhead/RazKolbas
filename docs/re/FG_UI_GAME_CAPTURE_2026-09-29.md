@@ -109,3 +109,9 @@ The earlier DLL, INI and manifest are backed up in ignored
 needs only a save loaded into a world scene; the full-frame sequence triggers
 on the first native-boundary provider frame. After collection, restore the
 INI and manifest to the package default with the probe disabled.
+
+**Superseded before a 0.1.117 game run:** Ghidra and Capstone confirmed that
+the actual common `EndFrame` call follows all per-menu `PostDisplay` calls.
+Version 0.1.118 now captures on both sides of that flush. The current package
+and next runtime action are recorded in
+`docs/re/UI_PIPELINE_GHIDRA_CAPSTONE_2026-09-29.md`.

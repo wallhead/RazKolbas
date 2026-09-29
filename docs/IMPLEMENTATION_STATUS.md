@@ -1,5 +1,30 @@
 # Implementation checkpoint
 
+## Ghidra/Capstone UI call-chain correction (2026-09-29)
+
+Ghidra 12.1.3 analyzed the exact AIO reference DLL and bounded decoded code
+from the hash-matched Skyrim 1.6.1170 executable; Capstone 5.0.7 independently
+decoded the critical sites. Skyrim calls each menu's virtual `PostDisplay`
+before the common `GRenderer::EndFrame` wrapper. AIO's analyzed direct
+branch binds and clears a separate UI RTV, redirects recognized late OM binds,
+and conditionally copies that UI texture to its FG export before composition.
+RazKolbas currently renders UI into its final native target and has no
+verified separate alpha producer. These are static call/resource findings,
+not proof of the active game's per-draw blend/alpha state. See
+`docs/re/UI_PIPELINE_GHIDRA_CAPSTONE_2026-09-29.md`.
+
+The 0.1.117 per-menu full-frame diagnostic was superseded **before any game
+run** because pre-`PostDisplay` reads cannot attribute work submitted at
+`EndFrame`. Version 0.1.118 instead attempts four full-frame stages around the
+verified loop and flush, without changing the UI route or enabling FG. Debug
+and Release each passed **54/54** tests. The verified eight-payload package
+`RazKolbas-0.1.118-ui-endframe.zip` is installed in the V5.4 MO2 mod with a
+one-shot capture armed. Installed DLL SHA-256 is
+`0fbcb39165eaa588703c399f65caab866a3ce9bcb73bcb0ddf63e61ac3a8129e`.
+Skyrim 0.1.118 and FG-On are **NOT RUN**. The next runtime step is a
+user-started save load to locate the changed interval; only then trace its
+actual D3D11 draw state and build the separate UI producer.
+
 ## Full-frame FG UI diagnostic installed (2026-09-29)
 
 The user-started 0.1.116 run produced 25 manifest-verified raw files. Its

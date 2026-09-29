@@ -99,7 +99,6 @@ struct WorldState {
         unsigned nextOrdinal{};
         std::vector<ProbeImage> images;
         std::vector<std::string> names;
-        std::string lastDigest;
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
@@ -542,15 +541,6 @@ Result<std::filesystem::path> captureOwnedSrInputs(ID3D11DeviceContext* context,
         return Error{ErrorCode::Io,std::string("Cannot locate owned SR capture directory: ")+error.what()};
     }
 }
-std::string safeMenuLabel(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for(const unsigned char c:value)
-        result.push_back(std::isalnum(c)||c=='-'||c=='_'?static_cast<char>(c):'_');
-    if(result.empty())result="unknown";
-    if(result.size()>64)result.resize(64);
-    return result;
-}
 std::pair<std::uintptr_t,std::string> menuAtOrdinal(
     const WorldState* state,unsigned ordinal) {
     RE::UI* ui{};
@@ -883,12 +873,13 @@ void logLoadingUiBoundary(WorldState* state,std::uint64_t frame,
             view.left,view.top,view.width,view.height,view.flags);}catch(...) {}
     }
 }
-void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
+void captureMenuUiSnapshot(WorldState* state,std::uint64_t frame,
+    std::string_view label,bool firstEntry=false) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
     auto& sequence=*state->menuUiSequence;
-    if(sequence.nextOrdinal>=63)return;
-    const auto ordinal=sequence.nextOrdinal++;
+    if(firstEntry&&sequence.nextOrdinal++!=0)return;
+    if(std::ranges::find(sequence.names,label)!=sequence.names.end())return;
     auto* domain=activeOwnedSceneDomain();
     const auto device=state->createdDevice.load(std::memory_order_relaxed);
     const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -897,8 +888,8 @@ void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     const auto native=acquireNativeFlipTarget(reinterpret_cast<IDXGISwapChain*>(swap),
         reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
     if(const auto error=std::get_if<Error>(&native)) {
-        spdlog::warn("Owned UI menu-sequence frame {} ordinal {} unavailable: {}",
-            frame,ordinal,error->message);
+        spdlog::warn("Owned UI boundary frame {} stage={} unavailable: {}",
+            frame,label,error->message);
         return;
     }
     const auto display=domain->plan().display;
@@ -906,22 +897,18 @@ void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
         std::get<NativeFlipTarget>(native).texture.Get(),0,0,
         display.width,display.height);
     if(const auto error=std::get_if<Error>(&image)) {
-        spdlog::warn("Owned UI menu-sequence region {} unavailable: {}",
-            ordinal,error->message);
+        spdlog::warn("Owned UI boundary {} unavailable: {}",label,error->message);
         return;
     }
-    const auto [menuPointer,menuName]=menuAtOrdinal(state,ordinal);
     auto pixels=std::move(std::get<ProbeImage>(image));
     const auto digest=sha256(pixels.pixels);
-    const bool save=sequence.images.empty()||digest!=sequence.lastDigest;
-    if(save) {
-        sequence.names.emplace_back("before-"+std::to_string(ordinal)+"-"+
-            safeMenuLabel(menuName)+".raw");
-        sequence.images.emplace_back(std::move(pixels));
-    }
-    sequence.lastDigest=digest;
-    spdlog::info("Owned UI menu-sequence frame {} before ordinal {}: menu={} pointer=0x{:x} fullFrameSHA256={} saved={}",
-        frame,ordinal,menuName,menuPointer,digest,save);
+    sequence.names.emplace_back(label);
+    sequence.images.emplace_back(std::move(pixels));
+    spdlog::info("Owned UI boundary frame {} stage={} fullFrameSHA256={}",
+        frame,label,digest);
+}
+void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
+    captureMenuUiSnapshot(state,frame,"before-first-PostDisplay.raw",true);
 }
 void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     std::scoped_lock lock(state->menuUiSequenceMutex);
@@ -959,7 +946,7 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     auto finalPixels=std::move(std::get<ProbeImage>(finalImage));
     const auto finalDigest=sha256(finalPixels.pixels);
     sequence.images.emplace_back(std::move(finalPixels));
-    sequence.names.emplace_back("after-all-menus.raw");
+    sequence.names.emplace_back("pre-Present.raw");
     PWSTR documents=nullptr;
     const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
         KF_FLAG_DEFAULT,nullptr,&documents);
@@ -977,12 +964,12 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
     names.reserve(sequence.names.size());
     for(const auto& name:sequence.names)names.emplace_back(name);
     const auto saved=saveProbeBundle(directory,sequence.images,names,
-        "RazKolbas same-frame full native UI target before the first and each changed predicted menu-stack entry, then after the complete stack");
+        "RazKolbas same-frame full native target before first PostDisplay, before/after verified Scaleform EndFrame, then pre-Present");
     if(const auto error=std::get_if<Error>(&saved))
         spdlog::warn("Owned UI menu-sequence save unavailable: {}",error->message);
     else
-        spdlog::info("Owned UI menu-sequence complete for frame {} with {} changed-entry snapshots from {} entries; finalFullFrameSHA256={} at {}",
-            frame,sequence.images.size()-1,sequence.nextOrdinal,
+        spdlog::info("Owned UI boundary capture complete for frame {} with {} stage snapshots from {} menu entries; finalFullFrameSHA256={} at {}",
+            frame,sequence.images.size(),sequence.nextOrdinal,
             finalDigest,directory.string());
     state->menuUiSequence.reset();
 }
@@ -1728,6 +1715,11 @@ void beforeDeferredUiFlush(void*) noexcept {
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");
+    try {captureMenuUiSnapshot(state,frame,"before-Scaleform-EndFrame.raw");}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Owned UI pre-EndFrame capture failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {}
 #endif
 }
 void deferredUiFlushProxy(void* renderer) noexcept {
@@ -1735,8 +1727,13 @@ void deferredUiFlushProxy(void* renderer) noexcept {
     if(!state)std::terminate();
     state->deferredUiFlushForwarder.dispatch(renderer);
 #ifdef RK_WITH_NGX
-    finishNativeHudMovieViewportWindow(state);
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    try {captureMenuUiSnapshot(state,frame,"after-Scaleform-EndFrame.raw");}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Owned UI post-EndFrame capture failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {}
+    finishNativeHudMovieViewportWindow(state);
     logLoadingUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logHudUiBoundary(state,frame,"after-Scaleform-EndFrame");
     logInventoryBinding(state,frame,"after-EndFrame");
