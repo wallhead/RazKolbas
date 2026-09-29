@@ -19,6 +19,9 @@
 #include "rk/RendererLogicalSize.hpp"
 #include "rk/SamplerBiasCache.hpp"
 #include "rk/RipCall6.hpp"
+#ifdef RK_WITH_STREAMLINE
+#include "rk/FgPrivateSwapRoute.hpp"
+#endif
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -40,6 +43,8 @@ struct ObserverLease {
     std::atomic<unsigned> observations{0};
     std::atomic<bool> armed{false};
     std::string disabledPatchIds;
+    bool privateFgOffProbe{};
+    std::atomic_flag privateFgAttempted=ATOMIC_FLAG_INIT;
     HMODULE exactEnbOwner{}; // pinned with the verified creation export owner
 };
 // Process-lifetime lease: both callback DLL and prior owner's DLL are pinned.
@@ -58,6 +63,10 @@ struct FactoryTraceLease {
     std::atomic<IDXGIFactory*> downstreamTarget{nullptr}; // identity only
     std::atomic_flag downstreamAttempted=ATOMIC_FLAG_INIT;
     std::atomic<unsigned> downstreamCalls{0};
+#ifdef RK_WITH_STREAMLINE
+    std::atomic<FgPrivateSwapRoute*> privateFgRoute{nullptr};
+    std::atomic<bool> downstreamNativeOwner{false};
+#endif
 };
 std::atomic<FactoryTraceLease*> factoryTrace{nullptr};
 std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
@@ -686,6 +695,42 @@ HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
     const auto next=state?state->downstreamNext.load(
         std::memory_order_acquire):nullptr;
     if(!next)return E_UNEXPECTED;
+#ifdef RK_WITH_STREAMLINE
+    if(auto* route=state->privateFgRoute.load(std::memory_order_acquire);
+       route&&!route->issued()&&requested&&swap&&
+       requested->OutputWindow==reinterpret_cast<HWND>(
+           route->admission().window)) {
+        const FgPrivateSwapAdmission actual{GetCurrentThreadId(),
+            reinterpret_cast<std::uintptr_t>(requested->OutputWindow),
+            requested->BufferDesc.Width,requested->BufferDesc.Height,
+            state->downstreamNativeOwner.load(std::memory_order_acquire)};
+        if(factory!=state->downstreamTarget.load(std::memory_order_acquire)||
+           !admitPrivateFgSwap(route->admission(),actual)) {
+            route->abandon();
+            try {spdlog::warn("FG-Off private swap refused: native callback contract differs; native swap retained");}
+            catch(...) {}
+        } else {
+            Microsoft::WRL::ComPtr<ID3D11Device> nativeD11;
+            if(device&&SUCCEEDED(device->QueryInterface(
+                IID_PPV_ARGS(&nativeD11)))) {
+                auto made=route->createFacade(next,factory,nativeD11.Get(),
+                    *requested,true);
+                if(auto* facade=std::get_if<Microsoft::WRL::ComPtr<
+                    IDXGISwapChain4>>(&made)) {
+                    *swap=facade->Detach();
+                    try {spdlog::info("FG-Off private Streamline lower and D3D11 facade returned to ReShade; frame generation disabled");}
+                    catch(...) {}
+                    return S_OK;
+                }
+                if(const auto* error=std::get_if<Error>(&made))
+                    try {spdlog::warn("FG-Off private swap fell back to native: {}",error->message);}
+                    catch(...) {}
+            } else try {spdlog::warn("FG-Off private swap fell back: native D3D11 device unavailable");}
+                catch(...) {}
+            route->abandon();
+        }
+    }
+#endif
     return observeFactoryCreate(next,factory,device,requested,swap,
         &nativeFactoryCreated,state);
 }
@@ -789,12 +834,15 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
     state.downstreamTarget.store(
         reinterpret_cast<IDXGIFactory*>(delegate.delegate),
         std::memory_order_release);
+#ifdef RK_WITH_STREAMLINE
+    state.downstreamNativeOwner.store(nativeOwner,std::memory_order_release);
+#endif
     auto** table=reinterpret_cast<void**>(delegate.vtable);
     const auto applied=state.downstreamPatch.apply(table+site.slot,
         reinterpret_cast<void*>(delegate.createMethod),
         reinterpret_cast<void*>(&nativeFactoryCreateProxy));
     if(const auto error=std::get_if<Error>(&applied))return *error;
-    spdlog::info("Installed {}: tableSHA256={}; tableRVA=0x{:x}; slot={}; priorMethodRVA=0x{:x}; native lower creation pass-through",
+    spdlog::info("Installed {}: tableSHA256={}; tableRVA=0x{:x}; slot={}; priorMethodRVA=0x{:x}; native lower creation guarded",
         nativeOwner?site.id:foreign.id,id.hash,site.tableRva,site.slot,
         nativeOwner?site.methodRva:foreign.methodRva);
     return true;
@@ -814,6 +862,15 @@ HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
     } catch(...) {
         try {spdlog::warn("FG native factory trace unavailable");}catch(...) {}
     }
+#ifdef RK_WITH_STREAMLINE
+    if(auto* route=state->privateFgRoute.load(std::memory_order_acquire);
+       route&&(!state->downstreamNext.load(std::memory_order_acquire)||
+              !state->downstreamNativeOwner.load(std::memory_order_acquire))) {
+        route->abandon();
+        try {spdlog::warn("FG-Off private swap disabled: exact native DXGI callback not installed");}
+        catch(...) {}
+    }
+#endif
     return observeFactoryCreate(state->next,factory,device,requested,swap,
         &factoryCreated,state);
 }
@@ -1202,15 +1259,68 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
     auto* state=lease.load(std::memory_order_acquire);
     if (!state || !state->original) return E_UNEXPECTED;
     logFactoryBeforeCreation(adapter);
+#ifdef RK_WITH_STREAMLINE
+    std::unique_ptr<FgPrivateSwapRoute> preparedPrivate;
+    if(state->privateFgOffProbe&&swapDesc&&
+       !state->privateFgAttempted.test_and_set(std::memory_order_acq_rel)) {
+        try {
+            HMODULE self{};
+            wchar_t path[32768]{};
+            if(!GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(&createProxy),&self)||
+               !GetModuleFileNameW(self,path,32768)) {
+                spdlog::warn("FG-Off private swap not armed: plugin path unavailable");
+            } else {
+                const auto directory=std::filesystem::path(path).parent_path()/
+                    L"RazKolbasRuntime"/L"FG";
+                auto prepared=FgPrivateSwapRoute::prepare(adapter,*swapDesc,
+                    directory);
+                if(auto* error=std::get_if<Error>(&prepared))
+                    spdlog::warn("FG-Off private swap not armed: {}",
+                        error->message);
+                else preparedPrivate=std::move(std::get<
+                    std::unique_ptr<FgPrivateSwapRoute>>(prepared));
+            }
+        } catch(const std::exception& error) {
+            try {spdlog::warn("FG-Off private swap preparation failed: {}",error.what());}
+            catch(...) {}
+        } catch(...) {
+            try {spdlog::warn("FG-Off private swap preparation failed");}
+            catch(...) {}
+        }
+    }
+#endif
+    bool tracedInstalled=false;
     try {
         const auto traced=installFactoryCreationTrace(adapter);
         if(const auto error=std::get_if<Error>(&traced))
             spdlog::warn("Early factory trace not installed: {}",error->message);
+        else tracedInstalled=std::get<bool>(traced);
     } catch(const std::exception& error) {
         try {spdlog::warn("Early factory trace unavailable: {}",error.what());} catch(...) {}
     } catch(...) {
         try {spdlog::warn("Early factory trace unavailable");} catch(...) {}
     }
+#ifdef RK_WITH_STREAMLINE
+    if(preparedPrivate) {
+        auto* trace=factoryTrace.load(std::memory_order_acquire);
+        if(tracedInstalled&&trace&&trace->target&&
+           isOwnedSceneFactoryCandidate(trace->target,trace->target,
+               swapDesc)) {
+            spdlog::info("FG-Off private Streamline lower prepared: {}x{}; thread={}; game swap callback pending",
+                preparedPrivate->admission().width,
+                preparedPrivate->admission().height,
+                preparedPrivate->admission().thread);
+            trace->privateFgRoute.store(preparedPrivate.release(),
+                std::memory_order_release);
+        } else {
+            spdlog::warn("FG-Off private swap released: exact ReShade game hook unavailable");
+            preparedPrivate.reset();
+        }
+    }
+#endif
     const DeviceCreationArgs args{adapter,driverType,software,flags,levels,levelCount,sdkVersion,
         swapDesc,swapChain,device,featureLevel,context};
     return observeDeviceCreation(state->original,args,&observed);
@@ -1479,6 +1589,16 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
     try {
         const auto game=GetModuleHandleW(nullptr);
         const auto identity=identify(game);
+        if(settings.get<bool>("Diagnostics.ProbeFgPrivateSwapOff")) {
+            if(const auto dxgi=GetModuleHandleW(L"dxgi.dll")) {
+                wchar_t loadedPath[32768]{};
+                const auto count=GetModuleFileNameW(dxgi,loadedPath,32768);
+                const auto loadedId=identify(dxgi);
+                spdlog::info("FG-Off startup DXGI already loaded: path={}; SHA256={}",
+                    count&&count<32768?std::filesystem::path(loadedPath).string():
+                        std::string{"unavailable"},loadedId.hash);
+            } else spdlog::info("FG-Off startup DXGI not yet loaded at SKSEPlugin_Load");
+        }
         const auto& profile=skyrim1170CreationProfile();
         if (identity.hash!=profile.gameSha256 || identity.size!=profile.fileSize)
             return Error{ErrorCode::Unsupported,"Unknown game hash; renderer IAT was not modified"};
@@ -1509,6 +1629,7 @@ Result<bool> installRendererObserver(const Settings& settings,RendererObserved n
         auto pending=std::make_unique<ObserverLease>();
         pending->original=reinterpret_cast<CreateD3D11>(original); pending->notification=notification;
         pending->disabledPatchIds=settings.get<Text>("Patching.DisabledPatchIds").value;
+        pending->privateFgOffProbe=settings.get<bool>("Diagnostics.ProbeFgPrivateSwapOff");
         if(const auto sites=findEnbContextSites(ownerIdentity.hash);
            sites.om&&ownerIdentity.size==sites.om->fileSize)
             pending->exactEnbOwner=owner;

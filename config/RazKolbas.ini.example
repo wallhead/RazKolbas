@@ -141,6 +141,10 @@ ProbeDirectUiPlane = false
 ; Can be paired with ProbeDirectUiPlane for one correlated world/UI frame.
 ; Restart required; may stall diagnostic frames; does not enable frame generation.
 ProbeFgCameraBuffer = false
+; Restart-only, exact V5.4 ReShade/ENB private Streamline D3D12 lower
+; and D3D11 game facade trial. DLSS-G is explicitly Off; native fallback
+; remains active if identity, adapter or swap creation preflight fails.
+ProbeFgPrivateSwapOff = false
 ; Diagnostic comparison mode: retain reduced rendering and final UI routing,
 ; but publish the current frame with the spatial scaler instead of DLSS.
 SpatialBaselineOnly = false

@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## Source 0.1.130 private FG-Off game route (2026-09-30)
+
+The opt-in V5.4 creation path now links the private Streamline runtime into
+`RazKolbas.dll`, prepares a managed D3D12 lower on the selected ReShade
+adapter parent, and can return a D3D11 facade at the already verified native
+factory callback. FG generation remains Off. The exact ReShade-first offline
+probe completed real lower and upper Presents, resize, and ordered teardown;
+Release CTest passed 61/61, Debug 57/57. The initial System32-factory
+`E_ABORT` failure and corrected factory selection are recorded in
+`docs/re/FG_PRIVATE_GAME_BINDING_2026-09-30.md`.
+
+**Skyrim runtime result: NOT RUN. FG-On result: NOT RUN.** The installed
+V5.4 package and first game run must verify the actual callback ordering,
+ENB/ReShade output, UI, fallback and first Present. No live FG claim is made.
+The 0.1.130 FG-Off trial package is now installed at
+`D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas` with all 14 manifest files
+hash-verified and the previous DLL/INI/manifest preserved under ignored
+`artifacts/local/backup-v54-before-0130`. The installed private runtime passed
+the exact ReShade-first offline route probe; Skyrim has not been started.
+
 ## Private ReShade/Streamline FG-Off resize (2026-09-29)
 
 The offline D3D11 auxiliary swap now prepares a new back buffer before lower

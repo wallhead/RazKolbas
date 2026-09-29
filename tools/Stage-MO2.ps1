@@ -22,6 +22,7 @@ $destinationPath = [IO.Path]::GetFullPath($Destination)
 if (Test-Path -LiteralPath $destinationPath) { throw 'Destination must be new; refusing to overwrite a mod or game installation' }
 $ini = if ($IniSource) { [IO.Path]::GetFullPath($IniSource) } else { Join-Path $root 'config/RazKolbas.ini.example' }
 if ($IniSource -and -not (Test-Path -LiteralPath $ini -PathType Leaf)) { throw 'Specified INI source is missing' }
+$fgOffTrial = $hasFgRuntime -and (Get-Content -LiteralPath $ini -Raw) -match '(?m)^\s*ProbeFgPrivateSwapOff\s*=\s*true\s*(?:;.*)?$'
 if ($NvidiaSrRuntime) {
     $runtimeFile = [IO.Path]::GetFullPath($NvidiaSrRuntime)
     if (-not (Test-Path -LiteralPath $runtimeFile -PathType Leaf)) { throw 'NVIDIA SR runtime is missing' }
@@ -130,6 +131,6 @@ $files = @(Get-ChildItem -LiteralPath $destinationPath -File -Recurse | ForEach-
     if (-not $_.FullName.StartsWith($destinationPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Staged file escaped destination' }
     @{ path=$_.FullName.Substring($destinationPrefix.Length).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-@{ product='RazKolbas'; status=$(if ($hasFgRuntime) { 'FG_RUNTIME_STAGED_NOT_ENABLED' } elseif ($hasNrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR_NR' } elseif ($NvidiaSrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
+@{ product='RazKolbas'; status=$(if ($fgOffTrial) { 'FG_OFF_PRIVATE_SWAP_TRIAL' } elseif ($hasFgRuntime) { 'FG_RUNTIME_STAGED_NOT_ENABLED' } elseif ($hasNrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR_NR' } elseif ($NvidiaSrRuntime) { 'EXPERIMENTAL_GUARDED_DLSS_SR' } else { 'DEVELOPMENT_RENDERER_OBSERVER_OPT_IN' }); files=$files; uninstall='Remove only listed files whose hashes still match, or remove this isolated MO2 mod folder.' } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destinationPath 'install-manifest.json') -Encoding utf8
 Write-Output $destinationPath
