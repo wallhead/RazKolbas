@@ -102,6 +102,7 @@ struct WorldState {
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
+    bool menuUiSequenceAttempted{};
     struct MenuBoundaryCapture {
         std::uint64_t frame{};
         std::vector<ProbeImage> images;
@@ -1198,11 +1199,6 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         std::scoped_lock lock(state->ownedSrStageMutex);
                         state->ownedSrStages.emplace(WorldState::OwnedSrStageCapture{
                             sequence,std::move(std::get<std::vector<ProbeImage>>(stages))});
-                        {
-                            std::scoped_lock menuLock(state->menuUiSequenceMutex);
-                            state->menuUiSequence.emplace(WorldState::MenuUiSequence{
-                                sequence,0,{},{}});
-                        }
                         state->presentTargetProbeDue.store(true,std::memory_order_release);
                         spdlog::info("Owned SR three-stage capture frame {} recorded prepared input and raw DLSS output; awaiting final pre-Present composition",
                             sequence);
@@ -1223,6 +1219,15 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             spdlog::warn("Owned world DLSS frame {} unavailable: {}",
                 sequence,outcome.providerFailure()->message);
         if(outcome.mode()==SdrSrFrameMode::Provider) {
+            if(boundary==OwnedPublicationBoundary::MenuDisplay&&
+               state->captureFirstDlssFrame&&!state->menuUiSequenceAttempted) {
+                std::scoped_lock lock(state->menuUiSequenceMutex);
+                state->menuUiSequence.emplace(WorldState::MenuUiSequence{
+                    sequence,0,{},{}});
+                state->menuUiSequenceAttempted=true;
+                spdlog::info("Owned UI menu-sequence armed on first native-boundary DLSS frame {}",
+                    sequence);
+            }
             if(boundary==OwnedPublicationBoundary::MenuDisplay&&
                state->menuProviderAdmissionGeneration!=domain->plan().generation) {
                 state->menuProviderAdmissionGeneration=domain->plan().generation;

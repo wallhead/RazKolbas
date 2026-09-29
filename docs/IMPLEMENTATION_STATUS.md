@@ -1,5 +1,25 @@
 # Implementation checkpoint
 
+## V5.4 UI capture and diagnostic trigger correction (2026-09-29)
+
+The user-started 0.1.115 run produced verified SR, empty first-frame UI,
+Inventory cursor and Magic movie replay bundles. The first DLSS frame was 31
+frames before native UI route activation, explaining the empty UI sequence.
+Same-frame Inventory replay changed only 702 cursor pixels; Magic replay
+changed 1,820,499 pixels in a large left-side region. Every replay image had
+opaque final alpha, so these composites cannot serve as the FG UI plane.
+FG On was requested in the menu but remained effective Off in the game.
+Source 0.1.116 now arms the UI sequence on the first native-boundary DLSS
+provider frame, independently of the first SR-stage capture. This corrected
+capture is **NOT RUN** in Skyrim. Debug and Release each passed 54/54 tests.
+The eight-file MO2 package was hash-verified and installed in the V5.4 mod
+folder with a reversible four-file backup. Installed DLL SHA-256 is
+`ed62abde2e4484113b51f0c45ac0310619064d5b69384d543dc66416737f8ce2`;
+the one-shot INI SHA-256 is
+`0a322215401ce23406a6ec7bd6697ff0f3edeebbf69b49c2c033df2710f43b7b`.
+Vendor runtimes are unchanged. See
+`docs/re/FG_UI_GAME_CAPTURE_2026-09-29.md`.
+
 ## AIO FG native UI RE29 audit (2026-09-29)
 
 The supplied RE29 archive passed an independent 144-file manifest check.
