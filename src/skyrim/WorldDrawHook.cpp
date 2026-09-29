@@ -148,6 +148,9 @@ struct WorldState {
     bool ownedSpatialBaseline{};
     bool captureFirstDlssFrame{};
     bool probeDirectUiPlane{},directUiPlaneAttempted{};
+    bool probeFgCameraBuffer{},fgCameraProbeFinished{};
+    std::uint64_t fgCameraFirstFrame{};
+    std::array<std::optional<ProbeBuffer>,3> fgCameraSamples;
     std::uint64_t directUiPlaneFrame{},directUiGeneration{};
     std::size_t directUiImageBytes{};
     std::optional<ProbeImage> directUiBaseline;
@@ -1120,6 +1123,123 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
     }
     retire();
 }
+Result<ProbeBuffer> sampleGameFgCameraBuffer(WorldState* state,
+    ID3D11DeviceContext* context) {
+    // Exact 1.6.1170 Address Library ID 411384, independently resolved and
+    // statically traced to the game's D3D11 Map/Unmap producer.
+    constexpr std::uintptr_t bufferCellRva=0x3288788;
+    if(!state->expectedRenderer||state->expectedRenderer<renderer1170Rva)
+        return Error{ErrorCode::Unavailable,"FG camera buffer module base is unavailable"};
+    const auto base=state->expectedRenderer-renderer1170Rva;
+    std::uintptr_t object{},vtable{},queryMethod{};
+    if(!read(base+bufferCellRva,&object,sizeof(object))||!object||
+       !read(object,&vtable,sizeof(vtable))||!vtable||
+       !read(vtable,&queryMethod,sizeof(queryMethod))||!queryMethod)
+        return Error{ErrorCode::Unavailable,"FG camera buffer object is absent"};
+    MEMORY_BASIC_INFORMATION codePage{};
+    if(!VirtualQuery(reinterpret_cast<void*>(queryMethod),&codePage,
+            sizeof(codePage))||codePage.State!=MEM_COMMIT||
+       (codePage.Protect&PAGE_GUARD))
+        return Error{ErrorCode::Conflict,"FG camera buffer COM method is unreadable"};
+    const auto executable=codePage.Protect&0xff;
+    if(executable!=PAGE_EXECUTE&&executable!=PAGE_EXECUTE_READ&&
+       executable!=PAGE_EXECUTE_READWRITE&&
+       executable!=PAGE_EXECUTE_WRITECOPY)
+        return Error{ErrorCode::Conflict,"FG camera buffer COM method is not executable"};
+    Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
+    if(FAILED(reinterpret_cast<IUnknown*>(object)->QueryInterface(
+            IID_PPV_ARGS(&buffer))))
+        return Error{ErrorCode::Conflict,"Game per-frame object is not a D3D11 buffer"};
+    D3D11_BUFFER_DESC desc{};
+    buffer->GetDesc(&desc);
+    if(desc.ByteWidth<0x2d0||desc.ByteWidth>4096||
+       !(desc.BindFlags&D3D11_BIND_CONSTANT_BUFFER))
+        return Error{ErrorCode::Unsupported,"Game per-frame buffer descriptor differs from static producer"};
+    return readbackBufferCandidate(context,buffer.Get(),4096);
+}
+void probeGameFgCameraBuffer(WorldState* state,ID3D11DeviceContext* context,
+    std::uint64_t frame) noexcept {
+    if(!state->probeFgCameraBuffer||state->fgCameraProbeFinished)return;
+    try {
+        unsigned slot{};
+        if(!state->fgCameraFirstFrame)slot=0;
+        else if(!state->fgCameraSamples[1]) {
+            if(frame!=state->fgCameraFirstFrame+1) {
+                state->fgCameraSamples={};
+                state->fgCameraFirstFrame=0;
+            }
+            slot=state->fgCameraFirstFrame?1:0;
+        } else if(frame>=state->fgCameraFirstFrame+120)slot=2;
+        else return;
+        auto sampled=sampleGameFgCameraBuffer(state,context);
+        if(const auto error=std::get_if<Error>(&sampled)) {
+            state->fgCameraProbeFinished=true;
+            spdlog::warn("FG camera buffer read-only probe unavailable at frame {}: {}",
+                frame,error->message);
+            return;
+        }
+        auto buffer=std::move(std::get<ProbeBuffer>(sampled));
+        if(!state->fgCameraFirstFrame)state->fgCameraFirstFrame=frame;
+        if(slot&&buffer.descriptor.ByteWidth!=
+           state->fgCameraSamples[0]->descriptor.ByteWidth) {
+            state->fgCameraProbeFinished=true;
+            spdlog::warn("FG camera buffer byte width changed between real frames");
+            return;
+        }
+        spdlog::info("FG camera buffer read-only sample {} at world frame {}: bytes={} bindFlags=0x{:x} sha256={}",
+            slot,frame,buffer.descriptor.ByteWidth,
+            buffer.descriptor.BindFlags,sha256(buffer.bytes));
+        state->fgCameraSamples[slot]=std::move(buffer);
+        if(slot!=2)return;
+        state->fgCameraProbeFinished=true;
+        std::array<ProbeImage,3> images;
+        for(unsigned i=0;i<images.size();++i) {
+            auto& sample=*state->fgCameraSamples[i];
+            auto& image=images[i];
+            // Explicit linear R8 encoding of buffer bytes for the existing
+            // transactional raw-bundle writer; these are not game textures.
+            image.descriptor.Width=sample.descriptor.ByteWidth;
+            image.descriptor.Height=1;
+            image.descriptor.Format=DXGI_FORMAT_R8_UINT;
+            image.rowBytes=sample.descriptor.ByteWidth;
+            image.pixels=std::move(sample.bytes);
+        }
+        PWSTR documents=nullptr;
+        const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+            KF_FLAG_DEFAULT,nullptr,&documents);
+        struct FreeDocuments {PWSTR value;~FreeDocuments(){CoTaskMemFree(value);}}
+            free{documents};
+        if(FAILED(found)||!documents) {
+            spdlog::warn("FG camera buffer Documents directory unavailable");
+            return;
+        }
+        const auto directory=std::filesystem::path(documents)/"My Games"/
+            "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+            ("fg-camera-buffer-"+std::to_string(GetCurrentProcessId())+"-"+
+             std::to_string(state->fgCameraFirstFrame)+"-"+
+             std::to_string(GetTickCount64()));
+        const std::array<std::string,3> names{
+            "world-"+std::to_string(state->fgCameraFirstFrame)+".raw",
+            "world-"+std::to_string(state->fgCameraFirstFrame+1)+".raw",
+            "world-"+std::to_string(frame)+".raw"};
+        const std::array<std::string_view,3> views{names[0],names[1],names[2]};
+        const auto saved=saveProbeBundle(directory,images,views,
+            "Read-only D3D11 per-frame buffer bytes at three real world frames; linear R8 byte encoding, not texture pixels; static 1.6.1170 buffer producer, no matrix semantics or FG submission claimed");
+        if(const auto error=std::get_if<Error>(&saved))
+            spdlog::warn("FG camera buffer bundle save unavailable: {}",error->message);
+        else spdlog::info("FG camera buffer three-frame capture complete at {}",
+            directory.string());
+        state->fgCameraSamples={};
+    } catch(const std::exception& error) {
+        state->fgCameraProbeFinished=true;
+        try {spdlog::warn("FG camera buffer read-only probe failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {
+        state->fgCameraProbeFinished=true;
+        try {spdlog::warn("FG camera buffer read-only probe failed");}
+        catch(...) {}
+    }
+}
 void applyPendingNrRuntimeSettings(WorldState* state) noexcept {
     try {
         const auto update=consumeDiagnosticsNrRuntimeUpdate();
@@ -1390,6 +1510,9 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             probeOwnedPixels("post-world",context,scene,display);
             state->ownedPrePresentProbes.store(2,std::memory_order_release);
         }
+        if(boundary==OwnedPublicationBoundary::MenuDisplay&&
+           outcome.mode()==SdrSrFrameMode::Provider)
+            probeGameFgCameraBuffer(state,context,sequence);
         if(boundary==OwnedPublicationBoundary::MenuDisplay&&
            outcome.mode()==SdrSrFrameMode::Provider&&
            state->probeDirectUiPlane&&!state->directUiPlaneAttempted&&
@@ -3236,6 +3359,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Diagnostics.CaptureFirstDlssFrame");
     pending->probeDirectUiPlane=
         settings.get<bool>("Diagnostics.ProbeDirectUiPlane");
+    pending->probeFgCameraBuffer=
+        settings.get<bool>("Diagnostics.ProbeFgCameraBuffer");
     if(pending->ownedSpatialBaseline)
         spdlog::info("Owned reduced route configured for spatial baseline; NGX submissions disabled");
 #endif

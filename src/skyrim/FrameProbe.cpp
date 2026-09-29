@@ -33,6 +33,41 @@ std::size_t pixelSize(DXGI_FORMAT format) {
     }
 }
 }
+Result<ProbeBuffer> readbackBufferCandidate(ID3D11DeviceContext* context,
+    ID3D11Buffer* buffer,std::size_t budget) {
+    using Microsoft::WRL::ComPtr;
+    if(!context||!buffer||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::InvalidInput,"Buffer capture requires an immediate context and buffer"};
+    ProbeBuffer result;
+    buffer->GetDesc(&result.descriptor);
+    if(!result.descriptor.ByteWidth||result.descriptor.ByteWidth>budget||
+       result.descriptor.ByteWidth>4096)
+        return Error{ErrorCode::Unsupported,"Buffer capture byte extent differs"};
+    ComPtr<ID3D11Device> device,owner;
+    context->GetDevice(&device);buffer->GetDevice(&owner);
+    ComPtr<IUnknown> deviceId,ownerId;
+    if(!device||!owner||FAILED(device.As(&deviceId))||
+       FAILED(owner.As(&ownerId))||deviceId.Get()!=ownerId.Get())
+        return Error{ErrorCode::Conflict,"Buffer capture device differs"};
+    auto stagingDesc=result.descriptor;
+    stagingDesc.Usage=D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags=0;stagingDesc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    stagingDesc.MiscFlags=0;stagingDesc.StructureByteStride=0;
+    ComPtr<ID3D11Buffer> staging;
+    if(FAILED(device->CreateBuffer(&stagingDesc,nullptr,&staging)))
+        return Error{ErrorCode::Unavailable,"Buffer capture staging allocation failed"};
+    result.bytes.resize(result.descriptor.ByteWidth);
+    context->CopyResource(staging.Get(),buffer);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if(FAILED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)))
+        return Error{ErrorCode::Unavailable,"Buffer capture staging Map failed"};
+    struct Unmap { ID3D11DeviceContext* context;ID3D11Buffer* buffer;
+        ~Unmap(){context->Unmap(buffer,0);} } unmap{context,staging.Get()};
+    if(!mapped.pData)
+        return Error{ErrorCode::Unavailable,"Buffer capture staging data is absent"};
+    std::memcpy(result.bytes.data(),mapped.pData,result.bytes.size());
+    return result;
+}
 Result<std::vector<ProbeImage>> readbackCandidates(ID3D11DeviceContext* context,std::span<ID3D11Texture2D* const> textures,std::size_t budget) {
     using Microsoft::WRL::ComPtr;
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||textures.empty()||textures.size()>3)

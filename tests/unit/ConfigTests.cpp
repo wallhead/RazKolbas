@@ -69,6 +69,15 @@ TEST_CASE("Direct UI plane probe is opt-in and restart-scoped", "[config]") {
     REQUIRE(enabled.get<bool>("Diagnostics.ProbeDirectUiPlane"));
     REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
 }
+TEST_CASE("FG camera buffer probe is opt-in and restart-scoped", "[config]") {
+    const auto defaults=rk::defaultSettings();
+    REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeFgCameraBuffer"));
+    const auto parsed=rk::parseIni("[Diagnostics]\nProbeFgCameraBuffer=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& enabled=std::get<rk::Settings>(parsed);
+    REQUIRE(enabled.get<bool>("Diagnostics.ProbeFgCameraBuffer"));
+    REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+}
 TEST_CASE("Invalid input rejects whole snapshot rather than publishing partial values", "[config]") {
     for (const auto input : {"[Upscaling]\nProvider=Magic\n", "[Upscaling]\nSharpness=nan\n", "[Upscaling]\nSharpness=inf\n", "[Upscaling]\nSharpness=0.5garbage\n", "[Upscaling]\nManualMipBias=-3.01\n", "[Upscaling]\nManualMipBias=3.01\n", "[Interface]\nFontScale=0\n", "[General]\nEnabled=true\nEnabled=false\n"})
         REQUIRE(std::holds_alternative<rk::Error>(rk::parseIni(input)));

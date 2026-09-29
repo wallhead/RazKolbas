@@ -1,5 +1,47 @@
 # Implementation checkpoint
 
+## User-started 0.1.122 UI-plane provenance result (2026-09-29)
+
+The user started Skyrim; process 3604 captured the first eligible guarded
+DLSS MenuDisplay frame 47328 at 2560x1440. The four-file
+`direct-ui-plane-3604-47328-254597031` bundle is complete and every raw
+file's 14,745,600-byte length and SHA-256 match its manifest. The log reports
+`candidate=complete`, `route=complete`, `nativeBeforeComposite=unchanged`,
+`targetSame=true`, `generationSame=true`, and typed final RTV format 28
+(RGBA8 UNORM). B0 and B1 are byte-identical. The UI plane has 149,508
+nonzero-alpha pixels (118,453 partial and 31,055 opaque), zero RGB under
+zero alpha, and zero RGB components above alpha plus one byte. Final
+composition changed 141,044 RGB pixels, all under nonzero UI alpha; alpha
+remained 255. Blend residual was below 0.5 byte in every channel. The
+preview shows ordinary HUD, quest and subtitle text over the scene. The
+game ran for hundreds more frames without a logged route/composite failure,
+then was closed. The normal INI was restored and all eight installed MO2
+payloads match their updated manifest. This verifies the guard on one
+ordinary world frame, not continuous FG input, menu coverage, camera data or
+FG-On. See `docs/re/DIRECT_UI_PLANE_PROBE_2026-09-29.md`.
+
+## Installed 0.1.123 read-only game camera buffer probe (2026-09-29)
+
+Source now has default-off `Diagnostics.ProbeFgCameraBuffer`. It resolves the
+statically traced exact 1.6.1170 per-frame D3D11 buffer cell, validates its
+COM object and bounded constant-buffer descriptor, and takes read-only
+staging copies on three real DLSS world frames: consecutive N/N+1 and N+120
+or later. The raw byte bundle is explicitly a linear-byte representation;
+no matrix offsets or FG constants are inferred by the capture itself. WARP
+tests cover exact bytes, budget and foreign-device rejection. Debug and
+Release each passed **55/55** CTest groups. The eight-payload MO2 archive
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.123-fg-camera-buffer.zip`
+is SHA-256 `7fd8c3c261c4cefd3c0a263408c150712ff6c46d3a28617c3795bce7fc7f0cf7`;
+all eight payload hashes and the archive's nine entries were checked. The
+installed DLL SHA-256 is
+`7d3615563739eff49f2835ecc35c19849a21cea2a5543639f587764afcdd120f`;
+the one-shot INI SHA-256 is
+`1174b6b5a0367f49f4e3b43ad0d5c1e55670acf6bd15f2723d36ec78015bd7b3`.
+All eight installed payloads match the manifest. The prior DLL, normal INI
+and manifest are backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.123-2026-09-29`. Skyrim runtime is
+**NOT RUN** for this new probe. It does not enable FG.
+
 ## Installed 0.1.122 review safeguards and FG camera producer (2026-09-29)
 
 The supplied branch review 31 was checked against source and its manifest;

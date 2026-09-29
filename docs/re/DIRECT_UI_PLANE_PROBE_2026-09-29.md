@@ -85,12 +85,38 @@ and the final image afterward. The four filenames are
 the preserved reduced menu branch and a late reduced-scene publication mark
 the route partial. A candidate is logged complete only when no such route
 event occurred, B0 equals B1, and the native target and generation match.
-This classification is diagnostic and does
-not feed FG yet. It preserves the original compositor even if readback fails.
+This classification is diagnostic and does not feed FG yet. It preserves the
+original compositor even if readback fails.
 
 The capture is preflighted against a 256 MiB transient budget before the UI
 target is armed, with exact image-size readback budgets. Its output RTV must
-be typed RGBA8 UNORM. Debug and Release each passed 55/55 CTest groups; the
-new installed game build is **NOT RUN**. The prior 0.1.120 result above remains
-valid for its sampled frame, and the new guard has not yet been observed in
-Skyrim.
+be typed RGBA8 UNORM. Debug and Release each passed 55/55 CTest groups. The
+prior 0.1.120 result above remains valid for its sampled frame; the guarded
+0.1.122 game observation is recorded below.
+
+## User-started 0.1.122 guarded frame
+
+Process 3604 captured world frame 47328 at 2560x1440 after the user loaded a
+save. `direct-ui-plane-3604-47328-254597031` has a complete four-file
+manifest; all recorded byte counts and SHA-256 values were independently
+checked. The log reports a complete UI route, identical target identity and
+scene generation, and an RGBA8 UNORM output RTV. The B0 scene at the UI
+boundary and B1 native image before composition have the same SHA-256,
+`59e8ac2a1920cabab3bc29e8bf7ea2ac8717aac2510798c1555682b2daa07562`,
+and zero byte differences. Thus no sampled native colour changed during that
+frame's UI interval. The plane SHA-256 is
+`c8e28142b34d6e8f57c119fc754016bfc7244918eb87317926ab06a355477e2c`;
+the final image SHA-256 is
+`e67a4a273ebd0bf9a37bcb0a99f1a8ec38f05390294ef6d23858ca589f3e0d2d`.
+
+The UI plane contains 149,508 pixels with alpha greater than zero, 118,453
+partial and 31,055 opaque; its bounding box is (33,38)–(2525,1427). There
+are zero nonzero-RGB pixels at alpha zero and zero pixels with any RGB channel
+above alpha plus one byte. Composition changed 141,044 RGB pixels, all under
+nonzero plane alpha; native and final alpha were 255 everywhere. Maximum
+per-channel residual from premultiplied composition was 0.498 byte before
+rounding. The saved preview visibly contains normal HUD and text over the
+scene. Skyrim was then closed and the normal INI restored. This extends the
+single-frame evidence with an independent baseline and route provenance;
+continuous route coverage, excluded menus, FG input copies, camera constants
+and generated output remain unverified.

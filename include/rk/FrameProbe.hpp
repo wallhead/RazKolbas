@@ -16,6 +16,13 @@ struct ProbeImage {
     std::size_t rowBytes{};
     std::vector<std::uint8_t> pixels;
 };
+struct ProbeBuffer {
+    D3D11_BUFFER_DESC descriptor{};
+    std::vector<std::uint8_t> bytes;
+};
+// Read-only bounded copy after the producer has unmapped its D3D11 buffer.
+Result<ProbeBuffer> readbackBufferCandidate(ID3D11DeviceContext* context,
+    ID3D11Buffer* buffer,std::size_t budget=4096);
 // Caller owns resources and exclusive immediate-context access for this call.
 // No render-state mutation. Local staging resources retire after Map/Unmap;
 // only tightly packed CPU bytes leave the function.

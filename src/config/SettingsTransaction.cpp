@@ -13,6 +13,7 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
         "NeuralRendering.RuntimeProfile", "NeuralRendering.AllowExperimentalRuntime",
         "Diagnostics.CaptureHotkey", "Diagnostics.CaptureFirstDlssFrame",
         "Diagnostics.ProbeDirectUiPlane",
+        "Diagnostics.ProbeFgCameraBuffer",
         "Diagnostics.SpatialBaselineOnly",
         "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches",
         "Patching.DisabledPatchIds"})

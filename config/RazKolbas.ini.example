@@ -135,6 +135,9 @@ CaptureFirstDlssFrame = false
 ; One-frame experimental transparent UI route and raw alpha/composite capture.
 ; Requires a game restart. Frame generation remains off during this probe.
 ProbeDirectUiPlane = false
+; Read-only three-sample probe of the exact 1.6.1170 per-frame D3D11 buffer.
+; Restart required. Saves small raw buffers; does not enable frame generation.
+ProbeFgCameraBuffer = false
 ; Diagnostic comparison mode: retain reduced rendering and final UI routing,
 ; but publish the current frame with the spatial scaler instead of DLSS.
 SpatialBaselineOnly = false

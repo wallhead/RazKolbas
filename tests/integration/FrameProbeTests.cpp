@@ -84,6 +84,36 @@ TEST_CASE("Candidate capture packs odd-sized GPU textures without changing pixel
     inputs[0]=nullptr;REQUIRE(std::holds_alternative<rk::Error>(rk::readbackCandidates(context.Get(),inputs)));
     context->ClearState();
 }
+TEST_CASE("WARP per-frame buffer readback preserves bytes and rejects stale device or budget",
+    "[frame_probe]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    std::vector<std::uint8_t> known(0x2d0);
+    for(std::size_t i=0;i<known.size();++i)
+        known[i]=static_cast<std::uint8_t>((i*37)%251);
+    D3D11_BUFFER_DESC desc{};
+    desc.ByteWidth=static_cast<UINT>(known.size());
+    desc.Usage=D3D11_USAGE_DEFAULT;
+    desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+    const D3D11_SUBRESOURCE_DATA initial{known.data(),0,0};
+    ComPtr<ID3D11Buffer> buffer;
+    REQUIRE(SUCCEEDED(device->CreateBuffer(&desc,&initial,&buffer)));
+    auto result=rk::readbackBufferCandidate(context.Get(),buffer.Get());
+    REQUIRE(std::holds_alternative<rk::ProbeBuffer>(result));
+    REQUIRE(std::get<rk::ProbeBuffer>(result).descriptor.ByteWidth==0x2d0);
+    REQUIRE(std::get<rk::ProbeBuffer>(result).bytes==known);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::readbackBufferCandidate(context.Get(),buffer.Get(),known.size()-1)));
+    ComPtr<ID3D11Device> other;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&other,nullptr,nullptr)));
+    ComPtr<ID3D11Buffer> foreign;
+    REQUIRE(SUCCEEDED(other->CreateBuffer(&desc,&initial,&foreign)));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::readbackBufferCandidate(context.Get(),foreign.Get())));
+}
 TEST_CASE("Frame probe captures an exact bounded texture region", "[frame_probe]") {
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
     REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
