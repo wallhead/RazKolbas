@@ -137,3 +137,57 @@ TEST_CASE("FG game calibration rejects a reversed or nonorthonormal camera",
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::deriveFgCameraCalibration(opposite)));
 }
+
+TEST_CASE("FG game camera binds measured geometry and guide semantics to one real frame",
+    "[fg_camera_geometry]") {
+    rk::FgSourceFrame frame{};
+    frame.source=27;frame.generation=3;frame.presentToken=1004;
+    frame.resetEpoch=2;frame.cameraValid=true;frame.worldActive=true;
+    frame.render={1485,835};frame.display={2560,1440};
+    auto sample=leftHandedCamera();
+    sample.position={5,6,7};sample.previousPosition={2,6,7};
+    const auto result=rk::bindFgGameCamera(frame,sample,{0.25f,-0.125f},
+        9546,true);
+    REQUIRE(std::holds_alternative<rk::FgCameraData>(result));
+    const auto& bound=std::get<rk::FgCameraData>(result);
+    REQUIRE(bound.source==frame.source);
+    REQUIRE(bound.generation==frame.generation);
+    REQUIRE(bound.presentToken==frame.presentToken);
+    REQUIRE(bound.resetEpoch==frame.resetEpoch);
+    REQUIRE(bound.sampleRevision==9546);
+    REQUIRE(bound.jitter==std::array<float,2>{0.25f,-0.125f});
+    REQUIRE(bound.mvecScale==std::array<float,2>{1.0f,1.0f});
+    REQUIRE_FALSE(bound.depthInverted);
+    REQUIRE(bound.cameraMotionIncluded);
+    REQUIRE(bound.reset);
+    REQUIRE(bound.position==sample.position);
+    REQUIRE(bound.forward==std::array<float,3>{0,0,-1});
+    REQUIRE(std::abs(bound.fovRadians-1.5707963f)<1e-5f);
+    const auto calibrated=rk::deriveFgCameraCalibration(sample);
+    REQUIRE(std::holds_alternative<rk::FgCameraCalibration>(calibrated));
+    REQUIRE(bound.clipToPrevClip==
+        std::get<rk::FgCameraCalibration>(calibrated).transforms.clipToPrevClip);
+    const auto reprojection=transformRow({1,0,0,1},bound.clipToPrevClip);
+    REQUIRE(reprojection[0]>1.1f);
+    REQUIRE(reprojection[0]<1.13f);
+}
+
+TEST_CASE("FG game camera binding rejects absent identity and invalid same-frame jitter",
+    "[fg_camera_geometry]") {
+    rk::FgSourceFrame frame{};
+    frame.source=27;frame.generation=3;frame.presentToken=1004;
+    frame.resetEpoch=2;frame.cameraValid=true;frame.worldActive=true;
+    frame.render={1485,835};frame.display={2560,1440};
+    const auto sample=leftHandedCamera();
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::bindFgGameCamera(frame,sample,{0,0},0,false)));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::bindFgGameCamera(frame,sample,{0.6f,0},1,false)));
+    frame.cameraCut=true;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::bindFgGameCamera(frame,sample,{0,0},1,false)));
+    frame.cameraCut=false;
+    frame.cameraValid=false;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::bindFgGameCamera(frame,sample,{0,0},1,false)));
+}

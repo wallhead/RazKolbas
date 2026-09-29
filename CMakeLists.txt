@@ -96,11 +96,21 @@ if(WIN32)
         message(FATAL_ERROR "Streamline 2.14.1 ${sl_binary} identity mismatch")
       endif()
     endforeach()
+    add_library(rk_fg_streamline STATIC
+      src/backends/fg/FgStreamlineConstants.cpp
+      src/backends/fg/FgStreamlineOptions.cpp
+      src/backends/fg/FgStreamlineFrameInputs.cpp
+      src/backends/fg/FgStreamlineSubmit.cpp
+      src/backends/dlss/FgStreamlineTags.cpp)
+    target_include_directories(rk_fg_streamline PUBLIC include)
+    target_include_directories(rk_fg_streamline SYSTEM PUBLIC
+      "${RK_STREAMLINE_SDK_ROOT}/include")
+    target_link_libraries(rk_fg_streamline PUBLIC rk_core)
     add_executable(RazKolbasFgStreamlineProbe harness/FgStreamlineProbe.cpp harness/FgSyntheticOn.cpp)
     target_include_directories(RazKolbasFgStreamlineProbe SYSTEM PRIVATE
       "${RK_STREAMLINE_SDK_ROOT}/include")
     target_compile_definitions(RazKolbasFgStreamlineProbe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(RazKolbasFgStreamlineProbe PRIVATE rk_core "${sl_lib}" d3d11 d3d12 dxgi)
+    target_link_libraries(RazKolbasFgStreamlineProbe PRIVATE rk_fg_streamline "${sl_lib}" d3d11 d3d12 dxgi)
     foreach(sl_binary IN LISTS sl_binaries)
       add_custom_command(TARGET RazKolbasFgStreamlineProbe POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -206,6 +216,15 @@ if(BUILD_TESTING)
   add_test(NAME unit.fg_game_camera COMMAND rk_tests "[fg_game_camera]")
   target_sources(rk_tests PRIVATE tests/unit/FgCameraGeometryTests.cpp)
   add_test(NAME unit.fg_camera_geometry COMMAND rk_tests "[fg_camera_geometry]")
+  if(TARGET rk_fg_streamline)
+    target_sources(rk_tests PRIVATE tests/unit/FgStreamlineConstantsTests.cpp)
+    target_sources(rk_tests PRIVATE tests/unit/FgStreamlineOptionsTests.cpp)
+    target_sources(rk_tests PRIVATE tests/unit/FgStreamlineTagsTests.cpp)
+    target_link_libraries(rk_tests PRIVATE rk_fg_streamline)
+    add_test(NAME unit.fg_streamline_constants COMMAND rk_tests "[fg_streamline_constants]")
+    add_test(NAME unit.fg_streamline_options COMMAND rk_tests "[fg_streamline_options]")
+    add_test(NAME unit.fg_streamline_tags COMMAND rk_tests "[fg_streamline_tags]")
+  endif()
   target_sources(rk_tests PRIVATE tests/unit/FgPresentationCoordinatorTests.cpp)
   add_test(NAME unit.fg_presentation COMMAND rk_tests "[fg_presentation]")
   target_sources(rk_tests PRIVATE tests/integration/FgSharedInputsTests.cpp)

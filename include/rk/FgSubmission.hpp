@@ -7,8 +7,8 @@ namespace rk {
 // Row-major, unjittered matrices and motion-vector normalization are
 // provider-independent values. The game must supply them from one real frame.
 struct FgCameraData {
-    // Assigned when the game camera producer finishes this real-frame sample.
-    // A prior sample retaining its old stamp is rejected for a newer token.
+    // Must be assigned by a verified same-frame camera producer/observation.
+    // Simply copying the current frame token onto old bytes is not freshness.
     std::uint64_t source{},generation{},presentToken{},resetEpoch{},
         sampleRevision{};
     std::array<float,16> viewToClip{},clipToView{},clipToPrevClip{},

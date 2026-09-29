@@ -1,5 +1,38 @@
 # Implementation checkpoint
 
+## Source-side FG camera-to-Streamline mapping (2026-09-29)
+
+The 0.1.125 camera-phase result below now feeds a guarded source-only
+`FgCameraData` candidate and pinned-2.14.1 `sl::Constants`,
+one-extra-frame `sl::DLSSGOptions`, and retained input-tag adapters composed
+into one source-stamped input packet. An SDK-call boundary checks an SL token
+binding and invokes constants then tags; its call order/failure path has
+mock tests. The synthetic FG-On harness uses the constants adapter. Debug
+passed **57/57**
+CTest groups; Release with the pinned SDK passed **60/60**, including
+matrix/token/guide, exact format/dimension and WARP tag-lifetime tests. The
+rebuilt synthetic FG-On harness has not been rerun. The installed 0.1.125
+DLL has not changed and FG stays Off.
+The mapping cannot itself prove that caller-stamped camera bytes came from
+the current frame. Continuous producer/phase proof, live SL tag submission,
+provider fence retirement and the game-facing D3D12 presentation owner are
+still open. See `docs/re/FG_STREAMLINE_CAMERA_CONSTANTS_2026-09-29.md`.
+
+## User-started 0.1.125 camera phase result (2026-09-29)
+
+Both 720-byte camera samples at the game-facing pre-Present observer were
+byte-identical to their MenuDisplay samples on world frames 9545 and 9546.
+All five camera files and six prepared-guide files passed size/SHA checks
+against complete manifests. Adjacent camera history again matched exactly;
+the finite depth/motion pair repeated the measured previous-UV-minus-current-
+UV relationship with correlation above 0.99995 on each axis. This supports
+same-frame camera freshness at the sampled observer, not at a future
+Streamline lower Present or on all game routes. See
+`docs/re/FG_CAMERA_PHASE_GAME_CAPTURE_2026-09-29.md`.
+The game was closed and the normal INI restored; all eight installed MO2
+payload hashes match the updated manifest. FG remains Off and FG-On in Skyrim
+is **NOT RUN**.
+
 ## Installed 0.1.125 camera phase comparison (2026-09-29)
 
 The next default-off diagnostic saves the same game camera buffer at
@@ -23,8 +56,8 @@ and one-shot INI SHA-256
 all eight installed payloads match the manifest. The preceding DLL, normal
 INI and manifest are backed up under ignored
 `artifacts/local/mo2-install-backup-0.1.125-2026-09-29`.
-Skyrim 0.1.125 is **NOT RUN**. The next required step is a user-started
-save-load run for the two same-frame phase comparisons. FG remains Off.
+At packaging time Skyrim 0.1.125 was **NOT RUN**. The later user-started
+result is recorded above. FG remains Off.
 
 ## User-started 0.1.124 paired FG guide result (2026-09-29)
 

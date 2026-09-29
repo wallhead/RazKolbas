@@ -162,4 +162,53 @@ Result<FgCameraCalibration> deriveFgCameraCalibration(
     out.aspectRatio=static_cast<float>(aspect);
     return out;
 }
+
+Result<FgCameraData> bindFgGameCamera(
+    const FgSourceFrame& frame,const FgGameCameraSample& camera,
+    NgxJitter sameFrameJitter,std::uint64_t producerRevision,bool reset) {
+    if(!frame.source||!frame.generation||!frame.presentToken||
+       !frame.resetEpoch||!frame.cameraValid||!frame.worldActive||
+       frame.loading||frame.paused||!frame.render.valid()||
+       !frame.display.valid()||!producerRevision||
+       producerRevision==UINT64_MAX)
+        return Error{ErrorCode::InvalidInput,
+            "FG camera requires a valid real-frame stamp and producer revision"};
+    if(frame.cameraCut&&!reset)
+        return Error{ErrorCode::Conflict,
+            "FG camera cut requires a temporal reset"};
+    constexpr float jitterLimit=0.5001f;
+    if(!std::isfinite(sameFrameJitter.x)||
+       !std::isfinite(sameFrameJitter.y)||
+       std::abs(sameFrameJitter.x)>jitterLimit||
+       std::abs(sameFrameJitter.y)>jitterLimit)
+        return Error{ErrorCode::InvalidInput,
+            "FG same-frame pixel jitter is invalid"};
+    const auto calibrated=deriveFgCameraCalibration(camera);
+    if(const auto error=std::get_if<Error>(&calibrated))return *error;
+    const auto& source=std::get<FgCameraCalibration>(calibrated);
+    FgCameraData out{};
+    out.source=frame.source;
+    out.generation=frame.generation;
+    out.presentToken=frame.presentToken;
+    out.resetEpoch=frame.resetEpoch;
+    out.sampleRevision=producerRevision;
+    out.viewToClip=source.transforms.cameraViewToClip;
+    out.clipToView=source.transforms.clipToCameraView;
+    out.clipToPrevClip=source.transforms.clipToPrevClip;
+    out.prevClipToClip=source.transforms.prevClipToClip;
+    out.position=source.position;
+    out.right=source.right;
+    out.up=source.up;
+    out.forward=source.forward;
+    out.jitter={sameFrameJitter.x,sameFrameJitter.y};
+    out.mvecScale={1.0f,1.0f};
+    out.nearPlane=source.nearPlane;
+    out.farPlane=source.farPlane;
+    out.fovRadians=source.verticalFovRadians;
+    out.aspectRatio=source.aspectRatio;
+    out.depthInverted=false;
+    out.cameraMotionIncluded=true;
+    out.reset=reset;
+    return out;
+}
 }

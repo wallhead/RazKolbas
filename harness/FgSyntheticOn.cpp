@@ -2,6 +2,7 @@
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
 #include <sl_pcl.h>
+#include "rk/FgStreamlineConstants.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -9,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <variant>
 
 using Microsoft::WRL::ComPtr;
 
@@ -69,36 +71,31 @@ bool waitFor(ID3D12CommandQueue* queue,ID3D12Fence* fence,
         fence->GetCompletedValue()>=value;
 }
 
-sl::float4x4 identity() {
-    sl::float4x4 matrix{};
-    for(unsigned row=0;row<4;++row)
-        for(unsigned column=0;column<4;++column)
-            (&matrix[row].x)[column]=row==column?1.0f:0.0f;
-    return matrix;
-}
-
-sl::Constants constants(unsigned frame) {
-    sl::Constants values{};
-    values.cameraViewToClip=identity();
-    values.clipToCameraView=identity();
-    values.clipToPrevClip=identity();
-    values.prevClipToClip=identity();
-    values.jitterOffset={0.0f,0.0f};
-    values.mvecScale={1.0f,1.0f};
-    values.cameraPinholeOffset={0.0f,0.0f};
-    values.cameraPos={0.0f,0.0f,0.0f};
-    values.cameraUp={0.0f,1.0f,0.0f};
-    values.cameraRight={1.0f,0.0f,0.0f};
-    values.cameraFwd={0.0f,0.0f,1.0f};
-    values.cameraNear=0.1f;
-    values.cameraFar=100.0f;
-    values.cameraFOV=1.04719755f;
-    values.cameraAspectRatio=static_cast<float>(kWidth)/kHeight;
-    values.depthInverted=sl::Boolean::eFalse;
-    values.cameraMotionIncluded=sl::Boolean::eTrue;
-    values.motionVectors3D=sl::Boolean::eFalse;
-    values.reset=frame==0?sl::Boolean::eTrue:sl::Boolean::eFalse;
-    return values;
+rk::Result<sl::Constants> constants(unsigned frame) {
+    rk::FgSourceFrame source{};
+    source.source=frame+1;source.generation=1;
+    source.presentToken=frame+1;source.resetEpoch=1;
+    source.cameraValid=true;
+    source.render={kWidth,kHeight};source.display=source.render;
+    rk::FgCameraData camera{};
+    camera.source=source.source;camera.generation=source.generation;
+    camera.presentToken=source.presentToken;
+    camera.resetEpoch=source.resetEpoch;camera.sampleRevision=frame+1;
+    for(unsigned i=0;i<4;++i) {
+        camera.viewToClip[i*4+i]=1.0f;
+        camera.clipToView[i*4+i]=1.0f;
+        camera.clipToPrevClip[i*4+i]=1.0f;
+        camera.prevClipToClip[i*4+i]=1.0f;
+    }
+    camera.up={0.0f,1.0f,0.0f};
+    camera.right={1.0f,0.0f,0.0f};
+    camera.forward={0.0f,0.0f,1.0f};
+    camera.mvecScale={1.0f,1.0f};
+    camera.nearPlane=0.1f;camera.farPlane=100.0f;
+    camera.fovRadians=1.04719755f;
+    camera.aspectRatio=static_cast<float>(kWidth)/kHeight;
+    camera.cameraMotionIncluded=true;camera.reset=frame==0;
+    return rk::makeFgStreamlineConstants(source,camera);
 }
 
 bool ok(const char* label,sl::Result result) {
@@ -213,7 +210,9 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             error=53;break;
         }
         const auto camera=constants(frame);
-        if(!ok("slSetConstants",slSetConstants(camera,*token,viewport))) {
+        if(!std::holds_alternative<sl::Constants>(camera)||
+           !ok("slSetConstants",slSetConstants(
+                std::get<sl::Constants>(camera),*token,viewport))) {
             error=54;break;
         }
         sl::Resource depth{sl::ResourceType::eTex2d,
