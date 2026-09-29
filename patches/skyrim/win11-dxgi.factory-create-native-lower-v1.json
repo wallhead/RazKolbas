@@ -1,0 +1,45 @@
+{
+  "id": "win11-dxgi.factory.create-native-lower-v1",
+  "purpose": "Observe the native D3D11 lower swap returned beneath the verified ReShade 6.8 factory wrapper before ReShade constructs its own swap wrapper.",
+  "target": {
+    "module": "System32/dxgi.dll",
+    "sha256": "25678116473558a56524b5b391f66f5c81febe8b2c463422f35807f77f3207c1",
+    "file_size": 1018016,
+    "image_size": 1011712,
+    "architecture": "x86-64",
+    "signature_observed": "Valid Microsoft Windows Authenticode signature on 2026-09-29"
+  },
+  "location": {
+    "factory_vtable_rva": "0xa1428",
+    "slot": 10,
+    "create_swap_chain_method_rva": "0x67c90",
+    "method_prologue_hex": "405553565741564157488dac2468ffff"
+  },
+  "original": {
+    "pointer": "module base + 0x67c90",
+    "validation": "The live ReShade 6.8 wrapper must match its own pinned hash/table/method, [wrapper+8] must name an executable downstream factory, its table and slot-10 method must share the loaded System32/dxgi.dll owner, and the full file hash/size, mapped image size, table RVA, slot pointer and 16-byte method prologue must match. An existing different slot owner is not replaced."
+  },
+  "replacement": {
+    "builder": "PointerPatch::apply",
+    "representation": "Atomic pointer-slot compare/exchange to a process-lifetime RazKolbas pass-through callback; no instruction bytes or on-disk file are changed."
+  },
+  "abi": {
+    "calling_convention": "Windows x64 IDXGIFactory::CreateSwapChain",
+    "arguments": "IDXGIFactory*, IUnknown* device, DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**",
+    "behavior": "Call the exact prior native method once and return its unchanged HRESULT/output; inspect the returned lower swap read-only for the selected factory only. FG remains Off and no swap pointer is substituted."
+  },
+  "lifetime": {
+    "installation": "Inside the verified ReShade factory callback before it calls its native delegate; a process-lifetime lease holds the expected method and selected factory identity.",
+    "ownership": "The callback DLL and native module are pinned; the pointer write is atomic and the previous method is called directly, avoiding recursion.",
+    "removal": "No hot removal while callbacks may execute; uninstall requires process exit."
+  },
+  "recovery": {
+    "disable": "Add win11-dxgi.factory.create-native-lower-v1 to Patching.DisabledPatchIds and restart Skyrim.",
+    "failure_scope": "Identity, path, prologue, ownership or compare/exchange rejection leaves the native method unchanged and calls through the existing ReShade factory route."
+  },
+  "evidence": [
+    "User-started 0.1.127 V5.4 game log: ReShade wrapper [this+8] was 0x1933ccfae10, native factory table 0x7ffc0b5f1428 and slot-10 method 0x7ffc0b5b7c90; the method page was executable and its owner was dxgi.dll.",
+    "A separate local x64 process loaded Microsoft-signed System32/dxgi.dll at 0x7ffc0b550000 and independently read that exact absolute table and method pointer, yielding RVAs 0xa1428 and 0x67c90.",
+    "A WARP integration test atomically replaced this exact native vtable slot in its own process, forwarded CreateSwapChain to the original method once, observed a real swap, and restored the slot."
+  ]
+}

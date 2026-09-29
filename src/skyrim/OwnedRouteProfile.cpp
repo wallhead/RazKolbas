@@ -40,6 +40,14 @@ const OwnedRouteSite& reshade680FactoryCreateSite() noexcept {
         {0x40,0x55,0x53,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8d,0x6c}};
     return site;
 }
+const OwnedRouteSite& win11DxgiFactoryCreateSite() noexcept {
+    static constexpr OwnedRouteSite site{"win11-dxgi.factory.create-native-lower-v1",
+        "25678116473558a56524b5b391f66f5c81febe8b2c463422f35807f77f3207c1",
+        1018016,0xf7000,0xa1428,0x67c90,10,
+        {0x40,0x55,0x53,0x56,0x57,0x41,0x56,0x41,0x57,0x48,0x8d,0xac,
+         0x24,0x68,0xff,0xff}};
+    return site;
+}
 const OwnedRouteSite& reshade680SwapGetBufferSite() noexcept {
     static constexpr OwnedRouteSite site{"reshade680.swap.get-buffer-owned-scene-v1",
         reshade680Hash,5255448,0x534000,0x3ee960,0x14c510,9,

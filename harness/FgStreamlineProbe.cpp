@@ -2,12 +2,17 @@
 #include <sl_dlss_g.h>
 #include <sl_reflex.h>
 #include "rk/FgD3D11SwapFacade.hpp"
+#include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
+#include "rk/PatchDescriptor.hpp"
+#include "rk/PointerPatch.hpp"
 #include "../tests/support/FgObservedSwap.hpp"
 #include <d3d11.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cwchar>
 #include <exception>
@@ -18,15 +23,162 @@
 using Microsoft::WRL::ComPtr;
 
 int probeSyntheticOn(ID3D12Device*, ID3D12CommandQueue*, IDXGISwapChain1*,
-    IDXGIAdapter1*, bool);
+    IDXGIAdapter1*, bool, const wchar_t*);
 
 namespace {
+struct ReShadeInsertion {
+    rk::FactoryCreateFn original{};
+    IDXGIFactory* nativeFactory{};
+    IUnknown* creationDevice{};
+    IDXGISwapChain4* facade{};
+    std::atomic<unsigned> substitutions{0};
+};
+std::atomic<ReShadeInsertion*> activeReShadeInsertion{nullptr};
+HRESULT WINAPI insertFacadeAtNativeFactory(IDXGIFactory* factory,
+    IUnknown* device,DXGI_SWAP_CHAIN_DESC* desc,
+    IDXGISwapChain** result) noexcept {
+    auto* state=activeReShadeInsertion.load(std::memory_order_acquire);
+    if(!state||!state->original)return E_UNEXPECTED;
+    if(factory!=state->nativeFactory||device!=state->creationDevice||
+       !desc||!result||desc->BufferDesc.Width==0||
+       desc->BufferDesc.Height==0)
+        return state->original(factory,device,desc,result);
+    *result=state->facade;
+    state->facade->AddRef();
+    state->substitutions.fetch_add(1,std::memory_order_relaxed);
+    return S_OK;
+}
+int wrapFacadeWithReshade(const wchar_t* path,ID3D11Device* d11,
+    IDXGISwapChain4* facade,ComPtr<IDXGISwapChain>& upper) {
+    const auto& site=rk::reshade680FactoryCreateSite();
+    const auto digest=rk::sha256File(path);
+    if(!std::holds_alternative<std::string>(digest)||
+       std::get<std::string>(digest)!=site.moduleSha256)return 61;
+    const auto module=LoadLibraryW(path);
+    if(!module)return 62;
+    using CreateFactory=HRESULT(WINAPI*)(REFIID,void**);
+    const auto create=reinterpret_cast<CreateFactory>(
+        GetProcAddress(module,"CreateDXGIFactory1"));
+    if(!create)return 63;
+    ComPtr<IDXGIFactory1> wrapper;
+    const auto made=create(IID_PPV_ARGS(&wrapper));
+    std::cout<<"ReShade CreateDXGIFactory1=0x"<<std::hex<<
+        static_cast<std::uint32_t>(made)<<std::dec<<'\n';
+    if(FAILED(made))return 64;
+    auto** wrapperTable=*reinterpret_cast<void***>(wrapper.Get());
+    const auto wrapperBase=reinterpret_cast<std::uintptr_t>(module);
+    if(reinterpret_cast<std::uintptr_t>(wrapperTable)-wrapperBase!=site.tableRva)
+        return 65;
+    const auto method=reinterpret_cast<rk::FactoryCreateFn>(
+        wrapperBase+site.methodRva);
+    if(!rk::isReshadeFactoryDelegateSite(wrapper.Get(),wrapperBase,
+        site.moduleSha256,method,site))return 66;
+    const auto facts=rk::inspectReshadeFactoryDelegate(wrapper.Get());
+    const auto& nativeSite=rk::win11DxgiFactoryCreateSite();
+    HMODULE nativeModule{};
+    if(!facts.methodExecutable||
+       !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+           reinterpret_cast<LPCWSTR>(facts.vtable),&nativeModule))return 67;
+    const auto nativeBase=reinterpret_cast<std::uintptr_t>(nativeModule);
+    wchar_t nativePath[32768]{},systemDirectory[MAX_PATH]{};
+    const auto pathLength=GetModuleFileNameW(nativeModule,nativePath,32768);
+    const auto systemLength=GetSystemDirectoryW(systemDirectory,MAX_PATH);
+    if(!pathLength||pathLength>=32768||!systemLength||
+       systemLength>=MAX_PATH) {
+        FreeLibrary(nativeModule);
+        return 68;
+    }
+    const auto expectedPath=std::filesystem::path(systemDirectory)/L"dxgi.dll";
+    const auto nativeHash=rk::sha256File(std::filesystem::path(nativePath));
+    std::wcout<<L"ReShade delegate module="<<nativePath<<L" expected="<<
+        expectedPath.wstring()<<L'\n';
+    std::cout<<"ReShade delegate tableRVA=0x"<<std::hex<<
+        (facts.vtable-nativeBase)<<std::dec<<" hash="<<
+        (std::holds_alternative<std::string>(nativeHash)?
+            std::get<std::string>(nativeHash):"unreadable")<<'\n';
+    HMODULE methodModule{};
+    bool streamlineSlot=false;
+    if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(facts.createMethod),&methodModule)) {
+        wchar_t methodPath[32768]{};
+        GetModuleFileNameW(methodModule,methodPath,32768);
+        std::wcout<<L"ReShade delegate slot10 owner="<<methodPath<<L'\n';
+        const auto methodHash=rk::sha256File(std::filesystem::path(methodPath));
+        const auto methodBase=reinterpret_cast<std::uintptr_t>(methodModule);
+        std::cout<<"ReShade delegate slot10 methodRVA=0x"<<std::hex<<
+            (facts.createMethod-methodBase)<<std::dec<<" hash="<<
+            (std::holds_alternative<std::string>(methodHash)?
+                std::get<std::string>(methodHash):"unreadable")<<'\n';
+        streamlineSlot=std::filesystem::path(methodPath).filename()==
+            L"sl.interposer.dll"&&
+            std::holds_alternative<std::string>(methodHash)&&
+            std::get<std::string>(methodHash)==
+                "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c";
+        FreeLibrary(methodModule);
+    }
+    if(!std::holds_alternative<std::string>(nativeHash)||
+       std::get<std::string>(nativeHash)!=nativeSite.moduleSha256||
+       _wcsicmp(nativePath,expectedPath.c_str())!=0||
+       facts.vtable-nativeBase!=nativeSite.tableRva||
+       (!streamlineSlot&&facts.createMethod-nativeBase!=
+           nativeSite.methodRva)) {
+        FreeLibrary(nativeModule);
+        return 68;
+    }
+    FreeLibrary(nativeModule);
+    DXGI_SWAP_CHAIN_DESC desc{};
+    if(FAILED(facade->GetDesc(&desc)))return 69;
+    ReShadeInsertion insertion{reinterpret_cast<rk::FactoryCreateFn>(
+        facts.createMethod),reinterpret_cast<IDXGIFactory*>(facts.delegate),
+        d11,facade};
+    rk::PointerPatch patch;
+    auto** nativeTable=reinterpret_cast<void**>(facts.vtable);
+    activeReShadeInsertion.store(&insertion,std::memory_order_release);
+    const auto applied=patch.apply(nativeTable+nativeSite.slot,
+        reinterpret_cast<void*>(facts.createMethod),
+        reinterpret_cast<void*>(&insertFacadeAtNativeFactory));
+    if(!std::holds_alternative<bool>(applied)) {
+        activeReShadeInsertion.store(nullptr,std::memory_order_release);
+        return 70;
+    }
+    const auto result=wrapper->CreateSwapChain(d11,&desc,&upper);
+    const auto restored=patch.restore();
+    activeReShadeInsertion.store(nullptr,std::memory_order_release);
+    std::cout<<"ReShade wrapper CreateSwapChain=0x"<<std::hex<<
+        static_cast<std::uint32_t>(result)<<std::dec<<
+        " facadeSubstitutions="<<insertion.substitutions.load()<<
+        " upper="<<static_cast<bool>(upper)<<'\n';
+    if(!std::holds_alternative<bool>(restored))return 71;
+    if(FAILED(result)||!upper||insertion.substitutions.load()!=1)return 72;
+    return 0;
+}
 int code(sl::Result result) { return static_cast<int>(result); }
 bool sameIdentity(IUnknown* a,IUnknown* b) {
     ComPtr<IUnknown> left,right;
     return a&&b&&SUCCEEDED(a->QueryInterface(IID_PPV_ARGS(&left)))&&
         SUCCEEDED(b->QueryInterface(IID_PPV_ARGS(&right)))&&
         left.Get()==right.Get();
+}
+bool acquireForeground(HWND window) {
+    ShowWindow(window,SW_SHOW);
+    for(unsigned attempt=0;attempt<6;++attempt) {
+        SetForegroundWindow(window);
+        if(GetForegroundWindow()==window)return true;
+        const auto previous=GetForegroundWindow();
+        const auto foregroundThread=previous?
+            GetWindowThreadProcessId(previous,nullptr):0;
+        const auto ownThread=GetCurrentThreadId();
+        if(foregroundThread&&foregroundThread!=ownThread&&
+           AttachThreadInput(ownThread,foregroundThread,TRUE)) {
+            BringWindowToTop(window);
+            SetActiveWindow(window);
+            SetForegroundWindow(window);
+            AttachThreadInput(ownThread,foregroundThread,FALSE);
+            if(GetForegroundWindow()==window)return true;
+        }
+        Sleep(100);
+    }
+    return GetForegroundWindow()==window;
 }
 bool readLowerPixel(ID3D12Device* device,ID3D12CommandQueue* queue,
     IDXGISwapChain1* swap,UINT index,std::array<std::uint8_t,4>& pixel) noexcept {
@@ -115,7 +267,8 @@ template<class T> sl::Result useProxy(T* original,
     return result;
 }
 int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
-    ID3D12CommandQueue* queue,IDXGISwapChain1* swap) {
+    ID3D12CommandQueue* queue,IDXGISwapChain1* swap,
+    const wchar_t* reshadePath=nullptr) {
     ComPtr<ID3D12Device> lowerDevice,queueDevice;
     const auto lowerHr=swap->GetDevice(IID_PPV_ARGS(&lowerDevice));
     const auto queueHr=queue->GetDevice(IID_PPV_ARGS(&queueDevice));
@@ -173,10 +326,17 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         return 21;
     }
     auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
+    ComPtr<IDXGISwapChain> reshadeUpper;
+    if(reshadePath) {
+        const auto wrapped=wrapFacadeWithReshade(reshadePath,d11.Get(),
+            facade.Get(),reshadeUpper);
+        if(wrapped)return wrapped;
+    }
+    IDXGISwapChain* gameSwap=reshadeUpper?reshadeUpper.Get():facade.Get();
     ComPtr<ID3D11Device> owner;
     ComPtr<ID3D12Device> hidden;
-    const auto gotD11=facade->GetDevice(IID_PPV_ARGS(&owner));
-    const auto gotD12=facade->GetDevice(IID_PPV_ARGS(&hidden));
+    const auto gotD11=gameSwap->GetDevice(IID_PPV_ARGS(&owner));
+    const auto gotD12=gameSwap->GetDevice(IID_PPV_ARGS(&hidden));
     std::cout<<"Facade GetDevice D3D11=0x"<<std::hex<<
         static_cast<std::uint32_t>(gotD11)<<" D3D12=0x"<<
         static_cast<std::uint32_t>(gotD12)<<std::dec<<
@@ -185,7 +345,7 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         return 22;
     const auto index=0u; // Game-facing D3D11 logical back buffer.
     ComPtr<ID3D11Texture2D> buffer;
-    const auto gotBuffer=facade->GetBuffer(index,IID_PPV_ARGS(&buffer));
+    const auto gotBuffer=gameSwap->GetBuffer(index,IID_PPV_ARGS(&buffer));
     std::cout<<"Facade GetBuffer=0x"<<std::hex<<
         static_cast<std::uint32_t>(gotBuffer)<<std::dec<<
         " index="<<index<<'\n';
@@ -201,9 +361,9 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         const float color[]{expected[0]/255.0f,expected[1]/255.0f,
             expected[2]/255.0f,1.0f};
         context->ClearRenderTargetView(view.Get(),color);
-        const auto test=facade->Present(0,DXGI_PRESENT_TEST);
+        const auto test=gameSwap->Present(0,DXGI_PRESENT_TEST);
         if(FAILED(test)||observedCount!=frame)return 25;
-        const auto present=facade->Present(0,0);
+        const auto present=gameSwap->Present(0,0);
         if(FAILED(present)||observedCount!=frame+1)return 25;
         const auto& got=observations[frame];
         std::cout<<"Facade pre-Present frame="<<frame<<" index="<<
@@ -228,7 +388,7 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
     buffer.Reset();
     context->ClearState();
     context->Flush();
-    const auto resized=facade->ResizeBuffers(2,128,80,
+    const auto resized=gameSwap->ResizeBuffers(2,128,80,
         DXGI_FORMAT_R8G8B8A8_UNORM,0);
     std::cout<<"Facade ResizeBuffers=0x"<<std::hex<<
         static_cast<std::uint32_t>(resized)<<std::dec<<'\n';
@@ -237,7 +397,7 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
     if(FAILED(facade->GetHwnd(&window))||!window||
        !SetWindowPos(window,nullptr,0,0,144,88,
            SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE))return 30;
-    const auto zeroResize=facade->ResizeBuffers(2,0,0,
+    const auto zeroResize=gameSwap->ResizeBuffers(2,0,0,
         DXGI_FORMAT_UNKNOWN,0);
     DXGI_SWAP_CHAIN_DESC after{};
     const auto descResult=facade->GetDesc(&after);
@@ -249,7 +409,8 @@ int probeFacade(IDXGIAdapter1* adapter,ID3D12Device* device,
         after.BufferDesc.Width==144&&after.BufferDesc.Height==88?0:31;
 }
 int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
-    ID3D12Device* device,bool facadeMode,bool onMode) {
+    ID3D12Device* device,bool facadeMode,bool onMode,
+    const wchar_t* reshadePath=nullptr) {
     ComPtr<ID3D12Device> proxyDevice;
     const auto deviceUpgrade=useProxy(device,proxyDevice,"device");
     if(deviceUpgrade!=sl::Result::eOk)return 9;
@@ -312,16 +473,16 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
                 swap3->GetCurrentBackBufferIndex()<<'\n';
         }
         if(onMode) {
-            ShowWindow(window,SW_SHOW);
-            SetForegroundWindow(window);
-            const bool foreground=GetForegroundWindow()==window;
+            const bool foreground=acquireForeground(window);
             std::cout<<"FG-On foreground="<<foreground<<'\n';
-            if(!foreground&&!result)result=59;
+            if(!foreground&&!reshadePath&&!result)result=59;
+            if(!foreground&&reshadePath)
+                std::cout<<"ReShade FG-On probe continues unfocused; generated presentation is not assumed\n";
             if(!result)result=probeSyntheticOn(proxyDevice.Get(),queue.Get(),
-                swap.Get(),adapter,facadeMode);
+                swap.Get(),adapter,facadeMode,reshadePath);
         } else if(facadeMode) {
             if(!result)result=probeFacade(adapter,proxyDevice.Get(),
-                queue.Get(),swap.Get());
+                queue.Get(),swap.Get(),reshadePath);
         } else {
         const auto test=swap->Present(0,DXGI_PRESENT_TEST);
         const auto presented=swap->Present(0,0);
@@ -356,13 +517,20 @@ int probeSwap(IDXGIFactory6* factory,IDXGIAdapter1* adapter,
 }
 }
 
+int wrapFacadeWithReshadeForProbe(const wchar_t* path,ID3D11Device* device,
+    IDXGISwapChain4* facade,ComPtr<IDXGISwapChain>& upper) {
+    return wrapFacadeWithReshade(path,device,facade,upper);
+}
+
 int wmain(int argc,wchar_t** argv) {
-    if((argc!=2&&argc!=3)||(argc==3&&
+    if((argc!=2&&argc!=3&&argc!=4)||(argc==4&&
+       std::wcscmp(argv[2],L"--reshade-facade")&&
+       std::wcscmp(argv[2],L"--reshade-facade-on"))||(argc==3&&
        std::wcscmp(argv[2],L"--swap")&&
        std::wcscmp(argv[2],L"--facade")&&
        std::wcscmp(argv[2],L"--on")&&
        std::wcscmp(argv[2],L"--facade-on"))) {
-        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on|--facade-on]\n";
+        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on|--facade-on|--reshade-facade <absolute ReShade dxgi.dll>]\n";
         return 1;
     }
     const wchar_t* pluginPaths[]{argv[1]};
@@ -381,7 +549,8 @@ int wmain(int argc,wchar_t** argv) {
     preferences.projectId="b3340e44-a57e-4b98-9318-d7150829d110";
     preferences.renderAPI=sl::RenderAPI::eD3D12;
     std::wstring logPath;
-    if(argc==3&&(!std::wcscmp(argv[2],L"--on")||
+    if(argc>=3&&(!std::wcscmp(argv[2],L"--on")||
+       !std::wcscmp(argv[2],L"--reshade-facade-on")||
        !std::wcscmp(argv[2],L"--facade-on"))) {
         const auto path=std::filesystem::current_path()/
             "artifacts"/"local"/"fg-on-probe";
@@ -436,11 +605,15 @@ int wmain(int argc,wchar_t** argv) {
                 const auto bound=slSetD3DDevice(device.Get());
                 std::cout<<"slSetD3DDevice="<<code(bound)<<'\n';
                 if(bound!=sl::Result::eOk)exitCode=6;
-                else if(argc==3)exitCode=probeSwap(factory.Get(),adapter.Get(),
+                else if(argc>=3)exitCode=probeSwap(factory.Get(),adapter.Get(),
                     device.Get(),!std::wcscmp(argv[2],L"--facade")||
-                    !std::wcscmp(argv[2],L"--facade-on"),
+                    !std::wcscmp(argv[2],L"--facade-on")||
+                    !std::wcscmp(argv[2],L"--reshade-facade")||
+                    !std::wcscmp(argv[2],L"--reshade-facade-on"),
                     !std::wcscmp(argv[2],L"--on")||
-                    !std::wcscmp(argv[2],L"--facade-on"));
+                    !std::wcscmp(argv[2],L"--facade-on")||
+                    !std::wcscmp(argv[2],L"--reshade-facade-on"),
+                    argc==4?argv[3]:nullptr);
             }
             if(support!=sl::Result::eOk||queried!=sl::Result::eOk)
                 if(!exitCode)exitCode=7;

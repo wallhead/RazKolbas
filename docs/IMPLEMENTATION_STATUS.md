@@ -1,5 +1,32 @@
 # Implementation checkpoint
 
+## Installed 0.1.128 native factory trace and offline wrapper proof (2026-09-29)
+
+The user-started 0.1.127 run identified ReShade's native delegate with
+System32 DXGI's exact vtable RVA `0xa1428` and method RVA `0x67c90`; the
+existing scene path kept presenting. 0.1.128 adds a hash- and RVA-guarded
+atomic pass-through hook to that native slot, observing the raw lower swap
+before ReShade wraps it. The pinned WARP factory integration test forwarded
+a real swap call and restored the slot. Debug and Release suites passed
+**57/57** and **60/60** groups. The full installed V5.4 MO2 package and
+download archive contain eight payloads matching the stage manifest. Archive
+SHA-256: `2be25cb3f08e7e030a18ec527ebf63557cdd78767b71a5c908b682eafb6c92b1`;
+DLL SHA-256: `428f5a4b0c48cf72861d0572b67330da89edc5b38e961c9f167edc7286cf78d9`.
+The previous mod was backed up under ignored
+`artifacts/local/mo2-install-backup-0.1.128-2026-09-29`.
+**0.1.128 has not run in Skyrim; FG remains Off in the game.**
+
+Separate-process reverse engineering and probes then loaded the exact
+installed ReShade DLL, found its native factory delegate, and showed that
+Streamline 2.14.1 takes that same slot with pinned `sl.interposer.dll`
+RVA `0x26510`. The probe chained it while returning the existing facade to
+ReShade. ReShade's wrapper passed FG-Off colour/resize checks and a focused
+FG-On run reported two actual presentations on each of eight submissions,
+with completion fence values 1–8. See
+`docs/re/FG_RESHADE_STREAMLINE_WRAP_OFFLINE_2026-09-29.md` for provenance
+and limits. Live game guide submission, ENB behavior, and production FG-On
+still require implementation and runtime verification.
+
 ## Installed 0.1.127 factory-site guard correction (2026-09-29)
 
 The user-started 0.1.126 V5.4 run confirmed the pinned ReShade 6.8 factory

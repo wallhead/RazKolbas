@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -50,10 +51,18 @@ struct FactoryTraceLease {
     FactoryCreateFn next{};
     IDXGIFactory* target{}; // identity only; do not retain the factory object
     HMODULE exactEnbOwner{};
+    std::string disabledPatchIds;
     std::atomic<unsigned> calls{0};
+    PointerPatch downstreamPatch;
+    std::atomic<FactoryCreateFn> downstreamNext{nullptr};
+    std::atomic<IDXGIFactory*> downstreamTarget{nullptr}; // identity only
+    std::atomic_flag downstreamAttempted=ATOMIC_FLAG_INIT;
+    std::atomic<unsigned> downstreamCalls{0};
 };
 std::atomic<FactoryTraceLease*> factoryTrace{nullptr};
 std::atomic_flag factoryTraceAttempted=ATOMIC_FLAG_INIT;
+HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory*,IUnknown*,
+    DXGI_SWAP_CHAIN_DESC*,IDXGISwapChain**) noexcept;
 struct BufferTraceLease {
     PointerPatch getBufferPatch,getDescPatch,presentPatch;
     SwapGetBufferFn next{};
@@ -621,11 +630,13 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
             wchar_t methodName[32768]{};
             if(delegateMethodOwner)
                 GetModuleFileNameW(delegateMethodOwner,methodName,32768);
-            spdlog::info("FG ReShade 6.8 factory delegate #{}: wrapper=0x{:x}; [this+8]=0x{:x}; delegateTable=0x{:x}; CreateSwapChainSlot10=0x{:x}; executable={}; methodOwner={}; read-only",
+            spdlog::info("FG ReShade 6.8 factory delegate #{}: wrapper=0x{:x}; [this+8]=0x{:x}; delegateTable=0x{:x}; CreateSwapChainSlot10=0x{:x}; executable={}; methodOwner={}; nativeTraceActive={}; read-only",
                 sequence,reinterpret_cast<std::uintptr_t>(factory),
                 delegate.delegate,delegate.vtable,delegate.createMethod,
                 delegate.methodExecutable,
-                std::filesystem::path(methodName).filename().string());
+                std::filesystem::path(methodName).filename().string(),
+                delegate.createMethod==reinterpret_cast<std::uintptr_t>(
+                    &nativeFactoryCreateProxy));
         }
         const auto traced=installSwapGetBufferTrace(swap);
         if(const auto error=std::get_if<Error>(&traced))
@@ -637,10 +648,136 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
         try {spdlog::warn("Nested factory trace unavailable");} catch(...) {}
     }
 }
+void nativeFactoryCreated(IDXGIFactory* factory,IUnknown* device,
+    const DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain* swap,HRESULT result,
+    void* context) noexcept {
+    auto* state=static_cast<FactoryTraceLease*>(context);
+    if(factory!=state->downstreamTarget.load(std::memory_order_acquire))return;
+    const auto sequence=state->downstreamCalls.fetch_add(1,
+        std::memory_order_relaxed)+1;
+    if(sequence>4)return;
+    try {
+        spdlog::info("FG native factory CreateSwapChain #{}: factory=0x{:x}; device=0x{:x}; requested={}x{}; result=0x{:08x}; rawSwap=0x{:x}; pass-through",
+            sequence,reinterpret_cast<std::uintptr_t>(factory),
+            reinterpret_cast<std::uintptr_t>(device),
+            requested?requested->BufferDesc.Width:0,
+            requested?requested->BufferDesc.Height:0,
+            static_cast<std::uint32_t>(result),
+            reinterpret_cast<std::uintptr_t>(swap));
+        if(FAILED(result)||!swap)return;
+        const auto facts=inspectFgSwapFacade(swap,device);
+        spdlog::info("FG native lower swap #{}: GetDesc=0x{:08x} {}x{}; IDXGISwapChain1/3/4=0x{:08x}/0x{:08x}/0x{:08x}; GetDevice D3D11/D3D12=0x{:08x}/0x{:08x}; creation-device identity={}; read-only",
+            sequence,static_cast<std::uint32_t>(facts.getDesc),
+            facts.desc.BufferDesc.Width,facts.desc.BufferDesc.Height,
+            static_cast<std::uint32_t>(facts.swap1),
+            static_cast<std::uint32_t>(facts.swap3),
+            static_cast<std::uint32_t>(facts.swap4),
+            static_cast<std::uint32_t>(facts.getD3D11Device),
+            static_cast<std::uint32_t>(facts.getD3D12Device),
+            facts.expectedDeviceIdentity);
+    } catch(...) {
+        try {spdlog::warn("FG native lower swap observation unavailable");}
+        catch(...) {}
+    }
+}
+HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
+    DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain** swap) noexcept {
+    auto* state=factoryTrace.load(std::memory_order_acquire);
+    const auto next=state?state->downstreamNext.load(
+        std::memory_order_acquire):nullptr;
+    if(!next)return E_UNEXPECTED;
+    return observeFactoryCreate(next,factory,device,requested,swap,
+        &nativeFactoryCreated,state);
+}
+Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
+    IDXGIFactory* factory,const DXGI_SWAP_CHAIN_DESC* requested) {
+    if(factory!=state.target||!isOwnedSceneFactoryCandidate(
+        factory,state.target,requested))return false;
+    if(state.downstreamAttempted.test_and_set(std::memory_order_acq_rel))
+        return false;
+    HMODULE wrapperOwner{};
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+       reinterpret_cast<LPCWSTR>(state.next),&wrapperOwner))
+        return Error{ErrorCode::Unsupported,"ReShade factory method owner unavailable"};
+    struct ModuleReference {HMODULE value;~ModuleReference(){if(value)FreeLibrary(value);}};
+    ModuleReference wrapperRef{wrapperOwner};
+    const auto& wrapperSite=reshade680FactoryCreateSite();
+    if(!isReshadeFactoryDelegateSite(factory,
+        reinterpret_cast<std::uintptr_t>(wrapperOwner),
+        identify(wrapperOwner).hash,state.next,wrapperSite))
+        return Error{ErrorCode::Unsupported,"ReShade factory delegate site differs"};
+    const auto delegate=inspectReshadeFactoryDelegate(factory);
+    if(!delegate.methodExecutable)return Error{ErrorCode::Unsupported,
+        "ReShade native delegate slot is not executable"};
+    HMODULE tableOwner{},methodOwner{};
+    constexpr DWORD fromAddress=GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    GetModuleHandleExW(fromAddress,
+        reinterpret_cast<LPCWSTR>(delegate.vtable),&tableOwner);
+    GetModuleHandleExW(fromAddress,
+        reinterpret_cast<LPCWSTR>(delegate.createMethod),&methodOwner);
+    ModuleReference tableRef{tableOwner},methodRef{methodOwner};
+    if(!tableOwner||tableOwner!=methodOwner)
+        return Error{ErrorCode::Unsupported,
+            "Native delegate table and method owners differ"};
+    wchar_t nativePath[32768]{},systemDirectory[MAX_PATH]{};
+    if(!GetModuleFileNameW(tableOwner,nativePath,32768)||
+       !GetSystemDirectoryW(systemDirectory,MAX_PATH))
+        return Error{ErrorCode::Unavailable,"Native DXGI path unavailable"};
+    const auto expectedPath=std::filesystem::path(systemDirectory)/L"dxgi.dll";
+    if(_wcsicmp(nativePath,expectedPath.c_str())!=0)
+        return Error{ErrorCode::Unsupported,
+            "Native delegate is not the exact system DXGI module"};
+    const auto& site=win11DxgiFactoryCreateSite();
+    if(patchDisabled(state.disabledPatchIds,site.id))return false;
+    const auto id=identify(tableOwner);
+    const auto base=reinterpret_cast<std::uintptr_t>(tableOwner);
+    if(delegate.vtable<base||delegate.vtable-base!=site.tableRva||
+       delegate.createMethod!=base+site.methodRva)
+        return Error{ErrorCode::Unsupported,
+            "Native delegate table or method RVA differs"};
+    const auto mapped=snapshotModule(tableOwner,site.imageSize);
+    const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+        static_cast<std::uint32_t>(delegate.vtable-base),site);
+    if(const auto error=std::get_if<Error>(&validated))return *error;
+    HMODULE pinnedSelf{},pinnedOwner{};
+    constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    if(!GetModuleHandleExW(pin,
+           reinterpret_cast<LPCWSTR>(&nativeFactoryCreateProxy),&pinnedSelf)||
+       !GetModuleHandleExW(pin,
+           reinterpret_cast<LPCWSTR>(delegate.vtable),&pinnedOwner))
+        return Error{ErrorCode::Unavailable,
+            "Cannot pin native factory callback lifetimes"};
+    state.downstreamNext.store(
+        reinterpret_cast<FactoryCreateFn>(delegate.createMethod),
+        std::memory_order_release);
+    state.downstreamTarget.store(
+        reinterpret_cast<IDXGIFactory*>(delegate.delegate),
+        std::memory_order_release);
+    auto** table=reinterpret_cast<void**>(delegate.vtable);
+    const auto applied=state.downstreamPatch.apply(table+site.slot,
+        reinterpret_cast<void*>(delegate.createMethod),
+        reinterpret_cast<void*>(&nativeFactoryCreateProxy));
+    if(const auto error=std::get_if<Error>(&applied))return *error;
+    spdlog::info("Installed {}: SHA256={}; tableRVA=0x{:x}; slot={}; methodRVA=0x{:x}; native lower creation pass-through",
+        site.id,id.hash,site.tableRva,site.slot,site.methodRva);
+    return true;
+}
 HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
     DXGI_SWAP_CHAIN_DESC* requested,IDXGISwapChain** swap) noexcept {
     auto* state=factoryTrace.load(std::memory_order_acquire);
     if(!state||!state->next)return E_UNEXPECTED;
+    try {
+        const auto installed=installNativeFactoryTrace(*state,factory,requested);
+        if(const auto error=std::get_if<Error>(&installed))
+            spdlog::warn("FG native factory trace not installed: {}",
+                error->message);
+    } catch(const std::exception& error) {
+        try {spdlog::warn("FG native factory trace unavailable: {}",error.what());}
+        catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("FG native factory trace unavailable");}catch(...) {}
+    }
     return observeFactoryCreate(state->next,factory,device,requested,swap,
         &factoryCreated,state);
 }
@@ -679,6 +816,7 @@ Result<bool> installFactoryCreationTrace(IDXGIAdapter* adapter) {
     pending->next=reinterpret_cast<FactoryCreateFn>(base+site.methodRva);
     pending->target=factory.Get();
     pending->exactEnbOwner=observer->exactEnbOwner;
+    pending->disabledPatchIds=observer->disabledPatchIds;
     HMODULE pinnedSelf=nullptr,pinnedOwner=nullptr;
     constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(pin,reinterpret_cast<LPCWSTR>(&factoryCreateProxy),&pinnedSelf)||

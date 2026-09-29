@@ -85,6 +85,33 @@ TEST_CASE("V5.4 selects its exact ReShade and ENB owned-route contracts", "[owne
     REQUIRE(rk::isVerifiedEnbReducedDescriptionCall(base+0x4872d,base,enb));
     REQUIRE_FALSE(rk::isVerifiedEnbOwnedSceneBufferCall(base+0x5e621,base,enb));
 }
+TEST_CASE("Native DXGI factory profile matches the local signed system DLL",
+    "[owned_route_profile]") {
+    const auto& site=rk::win11DxgiFactoryCreateSite();
+    wchar_t systemDirectory[MAX_PATH]{};
+    const auto count=GetSystemDirectoryW(systemDirectory,MAX_PATH);
+    REQUIRE(count>0);
+    REQUIRE(count<MAX_PATH);
+    const auto path=std::filesystem::path(systemDirectory)/L"dxgi.dll";
+    const auto hash=rk::sha256File(path);
+    REQUIRE(std::holds_alternative<std::string>(hash));
+    if(std::get<std::string>(hash)!=site.moduleSha256)
+        SKIP("Local Windows DXGI differs from the pinned V5.4 test profile");
+    HMODULE module=LoadLibraryW(path.c_str());
+    REQUIRE(module!=nullptr);
+    const auto base=reinterpret_cast<std::uintptr_t>(module);
+    std::vector<std::uint8_t> image(site.imageSize);
+    std::memcpy(image.data()+site.tableRva+site.slot*sizeof(void*),
+        reinterpret_cast<const void*>(base+site.tableRva+
+            site.slot*sizeof(void*)),sizeof(void*));
+    std::memcpy(image.data()+site.methodRva,
+        reinterpret_cast<const void*>(base+site.methodRva),
+        site.prologue.size());
+    REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(image,base,
+        std::get<std::string>(hash),std::filesystem::file_size(path),
+        site.tableRva,site)));
+    FreeLibrary(module);
+}
 TEST_CASE("V5.4 owned-route sites match local PE files without executing them",
     "[.local_v54_owned_route]") {
     const auto check=[](const wchar_t* env,bool reshade) {

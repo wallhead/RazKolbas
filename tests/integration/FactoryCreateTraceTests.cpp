@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
+#include "rk/PointerPatch.hpp"
+#include "rk/PatchDescriptor.hpp"
 #include <wrl/client.h>
+#include <filesystem>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -15,6 +18,13 @@ void observed(IDXGIFactory* factory,IUnknown*,const DXGI_SWAP_CHAIN_DESC*,
     IDXGISwapChain* swap,HRESULT result,void* value) noexcept {
     auto& state=*static_cast<Observation*>(value);
     ++state.calls;state.factory=factory;state.swap=swap;state.result=result;
+}
+rk::FactoryCreateFn nativeNext{};
+unsigned nativeCalls{};
+HRESULT WINAPI nativeProxy(IDXGIFactory* factory,IUnknown* device,
+    DXGI_SWAP_CHAIN_DESC* desc,IDXGISwapChain** swap) noexcept {
+    ++nativeCalls;
+    return nativeNext(factory,device,desc,swap);
 }
 }
 
@@ -118,4 +128,60 @@ TEST_CASE("ReShade delegate site selects the factory table, not the swap table",
     REQUIRE_FALSE(rk::isReshadeFactoryDelegateSite(
         reinterpret_cast<IDXGIFactory*>(&wrapper),base,site.moduleSha256,
         next,site));
+}
+
+TEST_CASE("Pinned native DXGI factory slot passes through a real WARP swap",
+    "[factory_create_trace]") {
+    const auto& site=rk::win11DxgiFactoryCreateSite();
+    wchar_t systemDirectory[MAX_PATH]{};
+    const auto length=GetSystemDirectoryW(systemDirectory,MAX_PATH);
+    REQUIRE(length>0);
+    REQUIRE(length<MAX_PATH);
+    const auto path=std::filesystem::path(systemDirectory)/L"dxgi.dll";
+    const auto hash=rk::sha256File(path);
+    REQUIRE(std::holds_alternative<std::string>(hash));
+    if(std::get<std::string>(hash)!=site.moduleSha256)
+        SKIP("Local Windows DXGI differs from the pinned profile");
+    ComPtr<ID3D11Device> device;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,nullptr,nullptr)));
+    ComPtr<IDXGIDevice> dxgiDevice;
+    REQUIRE(SUCCEEDED(device.As(&dxgiDevice)));
+    ComPtr<IDXGIAdapter> adapter;
+    REQUIRE(SUCCEEDED(dxgiDevice->GetAdapter(&adapter)));
+    ComPtr<IDXGIFactory> factory;
+    REQUIRE(SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory))));
+    auto** table=*reinterpret_cast<void***>(factory.Get());
+    HMODULE owner{};
+    REQUIRE(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(table),&owner));
+    const auto base=reinterpret_cast<std::uintptr_t>(owner);
+    if(reinterpret_cast<std::uintptr_t>(table)-base!=site.tableRva) {
+        FreeLibrary(owner);
+        SKIP("WARP factory uses another native DXGI vtable class");
+    }
+    REQUIRE(table[site.slot]==reinterpret_cast<void*>(base+site.methodRva));
+    nativeNext=reinterpret_cast<rk::FactoryCreateFn>(table[site.slot]);
+    nativeCalls=0;
+    const auto window=CreateWindowW(L"STATIC",L"RazKolbas native factory fixture",
+        WS_OVERLAPPED,0,0,64,64,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    REQUIRE(window!=nullptr);
+    rk::PointerPatch patch;
+    REQUIRE(std::holds_alternative<bool>(patch.apply(table+site.slot,
+        reinterpret_cast<void*>(nativeNext),reinterpret_cast<void*>(&nativeProxy))));
+    DXGI_SWAP_CHAIN_DESC desc{};
+    desc.BufferDesc.Width=64;desc.BufferDesc.Height=32;
+    desc.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount=2;desc.OutputWindow=window;
+    desc.Windowed=TRUE;desc.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
+    ComPtr<IDXGISwapChain> swap;
+    const auto result=factory->CreateSwapChain(device.Get(),&desc,&swap);
+    REQUIRE(SUCCEEDED(result));
+    REQUIRE(swap!=nullptr);
+    REQUIRE(nativeCalls==1);
+    REQUIRE(std::holds_alternative<bool>(patch.restore()));
+    swap.Reset();
+    DestroyWindow(window);
+    FreeLibrary(owner);
 }

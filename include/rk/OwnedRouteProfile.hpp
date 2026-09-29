@@ -34,6 +34,7 @@ const OwnedRouteSite& reshade673FactoryCreateSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
 const OwnedRouteSite& reshade680FactoryCreateSite() noexcept;
+const OwnedRouteSite& win11DxgiFactoryCreateSite() noexcept;
 const OwnedRouteSite& reshade680SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade680SwapGetDescSite() noexcept;
 const OwnedRouteSite* findFactoryCreateSite(std::string_view hash) noexcept;

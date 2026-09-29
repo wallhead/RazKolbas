@@ -17,6 +17,9 @@
 
 using Microsoft::WRL::ComPtr;
 
+int wrapFacadeWithReshadeForProbe(const wchar_t*,ID3D11Device*,
+    IDXGISwapChain4*,ComPtr<IDXGISwapChain>&);
+
 namespace {
 constexpr UINT kWidth=1280;
 constexpr UINT kHeight=720;
@@ -124,12 +127,14 @@ struct EventOwner {
 }
 
 int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
-    IDXGISwapChain1* swap,IDXGIAdapter1* adapter,bool facadeMode) {
+    IDXGISwapChain1* swap,IDXGIAdapter1* adapter,bool facadeMode,
+    const wchar_t* reshadePath) {
     ComPtr<IDXGISwapChain3> swap3;
     if(FAILED(swap->QueryInterface(IID_PPV_ARGS(&swap3))))return 40;
     ComPtr<ID3D11Device> d11;
     ComPtr<ID3D11DeviceContext> context;
     ComPtr<IDXGISwapChain4> facade;
+    ComPtr<IDXGISwapChain> reshadeUpper;
     ComPtr<ID3D11Texture2D> renderBuffer;
     ComPtr<ID3D11RenderTargetView> renderView;
     if(facadeMode) {
@@ -152,7 +157,13 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             return 62;
         }
         facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
-        if(FAILED(facade->GetBuffer(0,IID_PPV_ARGS(&renderBuffer)))||
+        if(reshadePath) {
+            const auto wrapped=wrapFacadeWithReshadeForProbe(reshadePath,
+                d11.Get(),facade.Get(),reshadeUpper);
+            if(wrapped)return wrapped;
+        }
+        IDXGISwapChain* gameSwap=reshadeUpper?reshadeUpper.Get():facade.Get();
+        if(FAILED(gameSwap->GetBuffer(0,IID_PPV_ARGS(&renderBuffer)))||
            FAILED(d11->CreateRenderTargetView(renderBuffer.Get(),nullptr,
                &renderView)))return 63;
         std::cout<<"FG-D3D11 facade=1\n";
@@ -306,7 +317,8 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
                 sl::PCLMarker::ePresentStart,*token))) {
             error=55;break;
         }
-        const auto present=facadeMode?facade->Present(0,0):swap->Present(0,0);
+        const auto present=reshadeUpper?reshadeUpper->Present(0,0):
+            facadeMode?facade->Present(0,0):swap->Present(0,0);
         std::cout<<"FG-On Present frame="<<frame<<" hr=0x"<<std::hex<<
             static_cast<UINT>(present)<<std::dec<<'\n';
         if(FAILED(present)||!ok("presentEnd",slPCLSetMarker(
@@ -338,7 +350,8 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
     options.mode=sl::DLSSGMode::eOff;
     std::cout<<"slDLSSGSetOptions(Off)="<<
         static_cast<int>(slDLSSGSetOptions(viewport,options))<<'\n';
-    const auto drain=facadeMode?facade->Present(0,0):swap->Present(0,0);
+    const auto drain=reshadeUpper?reshadeUpper->Present(0,0):
+        facadeMode?facade->Present(0,0):swap->Present(0,0);
     std::cout<<"FG-On drain Present=0x"<<std::hex<<
         static_cast<UINT>(drain)<<std::dec<<'\n';
     std::cout<<"FG-On generatedObserved="<<generated<<'\n';
