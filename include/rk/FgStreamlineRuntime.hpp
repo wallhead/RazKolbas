@@ -17,6 +17,7 @@ public:
     FgStreamlineRuntime(const FgStreamlineRuntime&)=delete;
     FgStreamlineRuntime& operator=(const FgStreamlineRuntime&)=delete;
     Result<bool> shutdown() noexcept;
+    Result<bool> verifyLoadedModules() const;
     sl::Result setD3DDevice(void* device) const noexcept;
     sl::Result upgradeInterface(void** value) const noexcept;
     sl::Result getNativeInterface(void* proxy,void** native) const noexcept;
@@ -26,6 +27,7 @@ public:
     const std::filesystem::path& directory() const noexcept { return directory_; }
 private:
     FgStreamlineRuntime()=default;
+    bool loadedModulesOwned() const noexcept;
     using Init=decltype(&::slInit);
     using Shutdown=decltype(&::slShutdown);
     using SetDevice=decltype(&::slSetD3DDevice);

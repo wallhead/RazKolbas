@@ -8,15 +8,25 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <iostream>
+#include <cstring>
 #include <variant>
 
 int wmain(int argc,wchar_t** argv) {
     if(argc!=2&&argc!=3&&
        !(argc==4&&(std::wcscmp(argv[2],L"--early-reshade")==0||
-           std::wcscmp(argv[2],L"--native-first")==0)))return 1;
+           std::wcscmp(argv[2],L"--native-first")==0||
+           std::wcscmp(argv[2],L"--preloaded-interposer")==0)))return 1;
     HMODULE reshade{};
     Microsoft::WRL::ComPtr<IDXGIFactory1> wrapper;
-    const auto reshadePath=argc==3?argv[2]:argc==4?argv[3]:nullptr;
+    const bool preload=argc==4&&
+        std::wcscmp(argv[2],L"--preloaded-interposer")==0;
+    const auto reshadePath=argc==3?argv[2]:argc==4&&!preload?argv[3]:nullptr;
+    HMODULE preloaded{};
+    if(preload) {
+        preloaded=LoadLibraryW(argv[3]);
+        if(!preloaded)return 29;
+        std::cout<<"foreign interposer preloaded=1\n";
+    }
     const auto createWrapper=[&]() -> int {
         const auto& site=rk::reshade680FactoryCreateSite();
         const auto digest=rk::sha256File(reshadePath);
@@ -47,27 +57,37 @@ int wmain(int argc,wchar_t** argv) {
        runtime->upgradeInterface(nullptr)!=sl::Result::eErrorInvalidParameter)
         return 3;
     Microsoft::WRL::ComPtr<ID3D12Device> d12;
+    Microsoft::WRL::ComPtr<IDXGIAdapter1> selectedAdapter;
     if(reshadePath) {
         Microsoft::WRL::ComPtr<IDXGIFactory1> nativeFactory;
         if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&nativeFactory))))return 13;
         for(UINT index=0;;++index) {
             Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
-            if(nativeFactory->EnumAdapters1(index,&adapter)==DXGI_ERROR_NOT_FOUND)
-                break;
+            const auto enumeration=nativeFactory->EnumAdapters1(index,&adapter);
+            if(enumeration==DXGI_ERROR_NOT_FOUND)break;
+            if(FAILED(enumeration)||!adapter)return 14;
             DXGI_ADAPTER_DESC1 description{};
             if(SUCCEEDED(adapter->GetDesc1(&description))&&
                description.VendorId==0x10de&&
                SUCCEEDED(D3D12CreateDevice(adapter.Get(),
-                   D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&d12))))break;
+                   D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&d12)))) {
+                selectedAdapter=adapter;
+                break;
+            }
         }
-        if(!d12)return 14;
+        if(!d12||!selectedAdapter)return 14;
         const auto set=runtime->setD3DDevice(d12.Get());
         std::cout<<"slSetD3DDevice="<<static_cast<int>(set)<<'\n';
         if(set!=sl::Result::eOk)return 15;
     }
-    Microsoft::WRL::ComPtr<IDXGIFactory6> nativeFactory6;
-    Microsoft::WRL::ComPtr<IDXGIFactory6> nativeProxy6;
     if(argc==4&&std::wcscmp(argv[2],L"--native-first")==0) {
+      const auto runNativeFirst=[&]() -> int {
+        const auto injected=_wgetenv(L"RK_FG_PROBE_INJECT");
+        const auto fault=[&](const wchar_t* stage) {
+            return injected&&std::wcscmp(injected,stage)==0;
+        };
+        Microsoft::WRL::ComPtr<IDXGIFactory6> nativeFactory6;
+        Microsoft::WRL::ComPtr<IDXGIFactory6> nativeProxy6;
         if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&nativeFactory6))))return 16;
         auto* upgraded=nativeFactory6.Get();
         void* nativeCheck{};
@@ -108,6 +128,10 @@ int wmain(int argc,wchar_t** argv) {
         const auto hwnd=CreateWindowExW(0,L"STATIC",L"RazKolbas private FG probe",
             WS_POPUP,0,0,96,72,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
         if(!hwnd)return 20;
+        struct WindowGuard {
+            HWND value;
+            ~WindowGuard(){if(value)DestroyWindow(value);}
+        } window{hwnd};
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width=96;desc.Height=72;
         desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -120,42 +144,83 @@ int wmain(int argc,wchar_t** argv) {
             hwnd,&desc,nullptr,nullptr,&lower);
         std::cout<<"private proxy lower swap=0x"<<std::hex<<
             static_cast<unsigned>(made)<<std::dec<<'\n';
-        if(SUCCEEDED(made)) {
+        if(FAILED(made)||!lower||fault(L"lower"))return 21;
+        if(SUCCEEDED(made)&&lower) {
             nativeCheck=nullptr;
             const auto nativeSwapResult=runtime->getNativeInterface(
                 lower.Get(),&nativeCheck);
             std::cout<<"lower swap get-native="<<
                 static_cast<int>(nativeSwapResult)<<" distinct="<<
                 (nativeCheck&&nativeCheck!=lower.Get())<<'\n';
+            const bool distinctNative=nativeCheck&&nativeCheck!=lower.Get();
             if(nativeCheck)static_cast<IUnknown*>(nativeCheck)->Release();
+            if(nativeSwapResult!=sl::Result::eOk||!distinctNative||
+               fault(L"unwrap"))return 23;
+            const auto presentMethod=reinterpret_cast<LPCWSTR>(
+                (*reinterpret_cast<void***>(lower.Get()))[8]);
+            HMODULE presentOwner{};
+            if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                presentMethod,&presentOwner))return 24;
+            wchar_t presentPath[32768]{};
+            const auto presentLength=GetModuleFileNameW(presentOwner,
+                presentPath,32768);
+            const auto presentHash=presentLength&&presentLength<32768?
+                rk::sha256File(presentPath):rk::Result<std::string>{rk::Error{
+                    rk::ErrorCode::Unavailable,"Present owner path unavailable"}};
+            FreeLibrary(presentOwner);
+            const bool managed=std::holds_alternative<std::string>(presentHash)&&
+                std::get<std::string>(presentHash)==
+                    rk::streamline2141FactoryCreateSite().moduleSha256;
+            std::cout<<"lower Present interposer-owned="<<managed<<'\n';
+            if(!managed||fault(L"managed"))return 24;
             void* function{};
             const auto resolved=runtime->getFeatureFunction(
                 sl::kFeatureDLSS_G,"slDLSSGSetOptions",function);
             std::cout<<"FG options function="<<
                 static_cast<int>(resolved)<<" present="<<(function!=nullptr)<<'\n';
-            if(resolved==sl::Result::eOk&&function) {
-                const auto set=reinterpret_cast<PFun_slDLSSGSetOptions*>(
-                    function);
-                sl::DLSSGOptions options{};
-                options.mode=sl::DLSSGMode::eOff;
-                const auto applied=set(sl::ViewportHandle{0u},options);
-                std::cout<<"FG Off options="<<static_cast<int>(applied)<<'\n';
-            }
+            if(resolved!=sl::Result::eOk||!function||
+               fault(L"function"))return 25;
+            const auto set=reinterpret_cast<PFun_slDLSSGSetOptions*>(function);
+            sl::DLSSGOptions options{};
+            options.mode=sl::DLSSGMode::eOff;
+            const auto applied=set(sl::ViewportHandle{0u},options);
+            std::cout<<"FG Off options="<<static_cast<int>(applied)<<'\n';
+            if(applied!=sl::Result::eOk||fault(L"off"))return 26;
         }
+        const bool lowerCreated=SUCCEEDED(made)&&lower;
         lower.Reset();
-        DestroyWindow(hwnd);
-        if(FAILED(made))return 21;
+        if(!lowerCreated)return 21;
         Microsoft::WRL::ComPtr<ID3D11Device> d11;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
         D3D_FEATURE_LEVEL level{};
-        const auto d11Result=D3D11CreateDevice(nullptr,
-            D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        const auto d11Result=D3D11CreateDevice(selectedAdapter.Get(),
+            D3D_DRIVER_TYPE_UNKNOWN,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,
             nullptr,0,D3D11_SDK_VERSION,&d11,&level,&context);
         std::cout<<"private probe D3D11=0x"<<std::hex<<
             static_cast<unsigned>(d11Result)<<std::dec<<'\n';
         if(FAILED(d11Result))return 22;
+        Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+        Microsoft::WRL::ComPtr<IDXGIAdapter> d11Adapter;
+        DXGI_ADAPTER_DESC d11Description{};
+        const auto d12Luid=d12->GetAdapterLuid();
+        if(FAILED(d11.As(&dxgiDevice))||
+           FAILED(dxgiDevice->GetAdapter(&d11Adapter))||
+           FAILED(d11Adapter->GetDesc(&d11Description))||
+           std::memcmp(&d11Description.AdapterLuid,
+               &d12Luid,sizeof(LUID))!=0||fault(L"adapter"))return 27;
+        std::cout<<"private probe same-adapter=1\n";
+        std::cout<<"private FG-Off checks: lower=1 unwrap=1 managedPresent=1 function=1 off=1 sameAdapter=1\n";
+        return 0;
+      };
+      const auto probeResult=runNativeFirst();
+      if(probeResult) {
+          d12.Reset();
+          const auto stopped=runtime->shutdown();
+          if(std::holds_alternative<rk::Error>(stopped))return 4;
+          return probeResult;
+      }
     }
-    if(argc==4)if(const auto result=createWrapper())return result;
+    if(argc==4&&!preload)if(const auto result=createWrapper())return result;
     if(wrapper) {
         const auto before=rk::inspectReshadeFactoryDelegate(wrapper.Get());
         auto* delegate=reinterpret_cast<IDXGIFactory*>(before.delegate);
@@ -218,6 +283,8 @@ int wmain(int argc,wchar_t** argv) {
         return 4;
     }
     std::cout<<"private-sl-shutdown=ok\n";
+    if(const auto injected=_wgetenv(L"RK_FG_PROBE_INJECT");
+       injected&&std::wcscmp(injected,L"shutdown")==0)return 4;
     if(reshade)FreeLibrary(reshade);
     return 0;
 }

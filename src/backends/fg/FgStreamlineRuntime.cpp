@@ -3,7 +3,9 @@
 #include <sl_dlss_g.h>
 #include <sl_pcl.h>
 #include <sl_reflex.h>
+#include <TlHelp32.h>
 #include <array>
+#include <mutex>
 #include <string>
 #include <variant>
 
@@ -23,25 +25,125 @@ constexpr std::array files{
         "f13d51cfa05f4cd514df2026049e2db8adf359221713170ad386fd499915b582"},
     RuntimeFile{L"nvngx_dlssg.dll",
         "ff6e90eb78b827927dff5b4ecc6b1c870c2e9bca29ed9f48c7d348cc9e170b82"}};
+std::mutex initializationMutex;
+struct ReadLock {
+    HANDLE handle{INVALID_HANDLE_VALUE};
+    ~ReadLock(){if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);}
+    ReadLock()=default;
+    ReadLock(const ReadLock&)=delete;
+    ReadLock& operator=(const ReadLock&)=delete;
+};
+struct Snapshot {
+    HANDLE handle{INVALID_HANDLE_VALUE};
+    ~Snapshot(){if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);}
+};
+Result<bool> inspectLoaded(const std::filesystem::path& directory,
+    HMODULE expectedInterposer,bool requireInterposer) {
+    Snapshot snapshot{CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|
+        TH32CS_SNAPMODULE32,GetCurrentProcessId())};
+    if(snapshot.handle==INVALID_HANDLE_VALUE)
+        return Error{ErrorCode::Unavailable,
+            "Cannot enumerate process modules for Streamline ownership"};
+    MODULEENTRY32W entry{};
+    entry.dwSize=sizeof(entry);
+    if(!Module32FirstW(snapshot.handle,&entry))
+        return Error{ErrorCode::Unavailable,
+            "Cannot begin process module ownership inspection"};
+    bool foundInterposer=false;
+    do {
+        for(const auto& file:files) {
+            if(_wcsicmp(entry.szModule,file.name)!=0)continue;
+            if(!expectedInterposer)
+                return Error{ErrorCode::Conflict,
+                    "A Streamline runtime module is already loaded"};
+            std::error_code ec;
+            const auto expected=directory/file.name;
+            if(!std::filesystem::equivalent(entry.szExePath,expected,ec)||ec)
+                return Error{ErrorCode::Conflict,
+                    "Loaded Streamline module path differs from pinned file"};
+            const auto digest=sha256File(entry.szExePath);
+            if(!std::holds_alternative<std::string>(digest)||
+               std::get<std::string>(digest)!=file.sha256)
+                return Error{ErrorCode::Conflict,
+                    "Loaded Streamline module hash differs from pinned file"};
+            if(_wcsicmp(file.name,L"sl.interposer.dll")==0) {
+                if(entry.hModule!=expectedInterposer)
+                    return Error{ErrorCode::Conflict,
+                        "Loaded Streamline interposer handle differs"};
+                foundInterposer=true;
+            }
+        }
+        entry.dwSize=sizeof(entry);
+    } while(Module32NextW(snapshot.handle,&entry));
+    if(GetLastError()!=ERROR_NO_MORE_FILES)
+        return Error{ErrorCode::Unavailable,
+            "Process module enumeration ended unexpectedly"};
+    if(requireInterposer&&!foundInterposer)
+        return Error{ErrorCode::Unavailable,
+            "Pinned Streamline interposer is absent from process modules"};
+    return true;
+}
 template<class Function> Function exportFrom(HMODULE module,const char* name) noexcept {
     return reinterpret_cast<Function>(GetProcAddress(module,name));
+}
+bool exportOwned(HMODULE expected,FARPROC address) noexcept {
+    HMODULE owner{};
+    if(!address||!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(address),&owner))return false;
+    const bool same=owner==expected;
+    FreeLibrary(owner);
+    return same;
+}
+bool pinnedFeatureOwner(const std::filesystem::path& directory,
+    void* function) {
+    HMODULE owner{};
+    if(!function||!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(function),&owner))return false;
+    wchar_t path[32768]{};
+    const auto count=GetModuleFileNameW(owner,path,32768);
+    FreeLibrary(owner);
+    if(!count||count>=32768)return false;
+    const auto moduleName=std::filesystem::path(path).filename().wstring();
+    for(const auto& file:files) {
+        if(_wcsicmp(moduleName.c_str(),file.name)!=0)continue;
+        std::error_code ec;
+        if(!std::filesystem::equivalent(path,directory/file.name,ec)||ec)
+            return false;
+        const auto digest=sha256File(path);
+        return std::holds_alternative<std::string>(digest)&&
+            std::get<std::string>(digest)==file.sha256;
+    }
+    return false;
 }
 }
 Result<std::unique_ptr<FgStreamlineRuntime>>
 FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
+    std::scoped_lock lock(initializationMutex);
     std::error_code ec;
     const auto directory=std::filesystem::canonical(binaryDirectory,ec);
     if(ec||!directory.is_absolute()||
        !std::filesystem::is_directory(directory,ec)||ec)
         return Error{ErrorCode::InvalidInput,
             "Streamline runtime directory is unavailable"};
-    for(const auto& file:files) {
+    const auto existing=inspectLoaded(directory,nullptr,false);
+    if(const auto error=std::get_if<Error>(&existing))return *error;
+    std::array<ReadLock,files.size()> retained;
+    for(std::size_t index=0;index<files.size();++index) {
+        const auto& file=files[index];
+        retained[index].handle=CreateFileW((directory/file.name).c_str(),
+            GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,nullptr);
+        if(retained[index].handle==INVALID_HANDLE_VALUE)
+            return Error{ErrorCode::Unavailable,
+                "Cannot hold pinned Streamline file through initialization"};
         const auto digest=sha256File(directory/file.name);
         if(!std::holds_alternative<std::string>(digest)||
            std::get<std::string>(digest)!=file.sha256)
             return Error{ErrorCode::Conflict,
                 "Pinned Streamline runtime file identity differs"};
     }
+    const auto rechecked=inspectLoaded(directory,nullptr,false);
+    if(const auto error=std::get_if<Error>(&rechecked))return *error;
     auto runtime=std::unique_ptr<FgStreamlineRuntime>(new FgStreamlineRuntime);
     runtime->directory_=directory;
     runtime->cookie_=AddDllDirectory(directory.c_str());
@@ -55,6 +157,8 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
     if(!runtime->module_)
         return Error{ErrorCode::Unavailable,
             "Cannot load pinned private Streamline interposer"};
+    const auto loadedModules=inspectLoaded(directory,runtime->module_,true);
+    if(const auto error=std::get_if<Error>(&loadedModules))return *error;
     runtime->init_=exportFrom<Init>(runtime->module_,"slInit");
     runtime->shutdown_=exportFrom<Shutdown>(runtime->module_,"slShutdown");
     runtime->setDevice_=exportFrom<SetDevice>(runtime->module_,"slSetD3DDevice");
@@ -66,6 +170,15 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
        !runtime->upgrade_||!runtime->native_||!runtime->featureFunction_)
         return Error{ErrorCode::Conflict,
             "Pinned Streamline core exports are incomplete"};
+    for(const auto address:{reinterpret_cast<FARPROC>(runtime->init_),
+        reinterpret_cast<FARPROC>(runtime->shutdown_),
+        reinterpret_cast<FARPROC>(runtime->setDevice_),
+        reinterpret_cast<FARPROC>(runtime->upgrade_),
+        reinterpret_cast<FARPROC>(runtime->native_),
+        reinterpret_cast<FARPROC>(runtime->featureFunction_)})
+        if(!exportOwned(runtime->module_,address))
+            return Error{ErrorCode::Conflict,
+                "Streamline core export is owned by another module"};
     const wchar_t* pluginPaths[]{runtime->directory_.c_str()};
     const sl::Feature features[]{sl::kFeatureDLSS_G,sl::kFeatureReflex,
         sl::kFeaturePCL};
@@ -87,7 +200,25 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
             "Pinned Streamline initialization failed: "+
                 std::to_string(static_cast<int>(result))};
     runtime->initialized_=true;
+    const auto initializedModules=runtime->verifyLoadedModules();
+    if(const auto error=std::get_if<Error>(&initializedModules)) {
+        const auto stopped=runtime->shutdown();
+        if(std::holds_alternative<Error>(stopped))
+            return Error{ErrorCode::Conflict,
+                "Streamline ownership conflict; shutdown failed and module retained"};
+        return *error;
+    }
     return runtime;
+}
+Result<bool> FgStreamlineRuntime::verifyLoadedModules() const {
+    if(!initialized_||!module_)
+        return Error{ErrorCode::Unavailable,
+            "Streamline runtime is not initialized"};
+    return inspectLoaded(directory_,module_,true);
+}
+bool FgStreamlineRuntime::loadedModulesOwned() const noexcept {
+    try {return std::holds_alternative<bool>(verifyLoadedModules());}
+    catch(...) {return false;}
 }
 FgStreamlineRuntime::~FgStreamlineRuntime() noexcept {
     // A live provider may still own callbacks into this module. In that case
@@ -105,23 +236,58 @@ Result<bool> FgStreamlineRuntime::shutdown() noexcept {
     return true;
 }
 sl::Result FgStreamlineRuntime::setD3DDevice(void* device) const noexcept {
-    return initialized_&&setDevice_&&device?setDevice_(device):
-        sl::Result::eErrorInvalidParameter;
+    if(!initialized_||!setDevice_||!device)
+        return sl::Result::eErrorInvalidParameter;
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    const auto result=setDevice_(device);
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    return result;
 }
 sl::Result FgStreamlineRuntime::upgradeInterface(void** value) const noexcept {
-    return initialized_&&upgrade_&&value&&*value?upgrade_(value):
-        sl::Result::eErrorInvalidParameter;
+    if(!initialized_||!upgrade_||!value||!*value)
+        return sl::Result::eErrorInvalidParameter;
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    const auto result=upgrade_(value);
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    return result;
 }
 sl::Result FgStreamlineRuntime::getNativeInterface(void* proxy,
     void** native) const noexcept {
-    return initialized_&&native_&&proxy&&native?native_(proxy,native):
-        sl::Result::eErrorInvalidParameter;
+    if(!initialized_||!native_||!proxy||!native)
+        return sl::Result::eErrorInvalidParameter;
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    const auto result=native_(proxy,native);
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    return result;
 }
 sl::Result FgStreamlineRuntime::getFeatureFunction(sl::Feature feature,
     const char* name,void*& function) const noexcept {
     function=nullptr;
-    return initialized_&&featureFunction_&&name?
-        featureFunction_(feature,name,function):
-        sl::Result::eErrorInvalidParameter;
+    if(!initialized_||!featureFunction_||!name)
+        return sl::Result::eErrorInvalidParameter;
+    if(!loadedModulesOwned())
+        return sl::Result::eErrorInvalidState;
+    const auto result=featureFunction_(feature,name,function);
+    if(!loadedModulesOwned()) {
+        function=nullptr;
+        return sl::Result::eErrorInvalidState;
+    }
+    try {
+        if(result==sl::Result::eOk&&
+           !pinnedFeatureOwner(directory_,function)) {
+            function=nullptr;
+            return sl::Result::eErrorInvalidState;
+        }
+    } catch(...) {
+        function=nullptr;
+        return sl::Result::eErrorInvalidState;
+    }
+    return result;
 }
 }

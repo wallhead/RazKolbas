@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## Branch review 34 corrections (2026-09-29)
+
+The supplied branch review's new probe and loader findings were checked
+against source and corrected. The private loader now holds and revalidates
+the pinned runtime files during initialization, refuses a pre-existing
+Streamline module, and verifies loaded module/export ownership. The
+native-first probe now gates every required lower/FG-Off milestone, uses
+the selected NVIDIA adapter for both APIs, and checks LUID equality.
+Seven injected failures returned their expected nonzero codes; the normal
+real-vendor run, foreign-module rejection and changed-byte rejection were
+observed in separate processes. The two probe executables import
+`CreateDXGIFactory1` from different DLLs (`sl.interposer.dll` versus
+System32 `dxgi.dll`), resolving the review's factory-entry hypothesis.
+Details and limits: `docs/re/FG_BRANCH_REVIEW34_2026-09-29.md`.
+
+Release CTest passed **60/60** and Debug **57/57**. No Skyrim run or mod
+installation occurred.
+Private FG remains outside `RazKolbas.dll`, and the V5.4 MO2 installation
+remains 0.1.128 with FG Off. The combined private-loader, ReShade-returned
+swap and managed Present test remains the next FG integration gate.
+
 ## Private Streamline loader and factory pointer contract (2026-09-29)
 
 Source now has a hash-pinned private Streamline 2.14.1 runtime loader and an
