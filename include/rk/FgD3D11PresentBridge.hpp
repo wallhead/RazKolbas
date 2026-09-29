@@ -1,6 +1,7 @@
 #pragma once
 #include "rk/FgLowerSwap.hpp"
 #include "rk/FgSharedInputs.hpp"
+#include "rk/FgD3D11AuxSwapSource.hpp"
 #include <d3d11.h>
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -22,7 +23,7 @@ public:
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
-        ID3D11Texture2D* externalRenderBuffer=nullptr);
+        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr);
     UINT currentIndex() const noexcept;
     ID3D11Texture2D* renderBuffer(UINT index) const noexcept;
     HRESULT copyToCurrent() noexcept;
@@ -40,13 +41,13 @@ private:
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap3_;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> render_;
+    std::unique_ptr<FgD3D11AuxSwapSource> auxiliary_;
     std::vector<FgSharedSurface> shared_;
     Microsoft::WRL::ComPtr<ID3D12Resource> inFlightBack_;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> inFlightAllocator_;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> inFlightCommands_;
     Microsoft::WRL::ComPtr<ID3D12Fence> inFlightFence_;
     bool prepared_{},poisoned_{};
-    bool externalRenderBuffer_{};
     UINT preparedIndex_{};
 };
 }

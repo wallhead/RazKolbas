@@ -1,5 +1,6 @@
 #include "rk/FgStreamlineRuntime.hpp"
 #include "rk/FgD3D11SwapFacade.hpp"
+#include "rk/FgD3D11AuxSwapSource.hpp"
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/PatchDescriptor.hpp"
@@ -53,11 +54,6 @@ bool ownedMethod(void* method,std::string_view digest) {
         std::get<std::string>(hash)==digest;
 }
 struct Insertion {
-    ~Insertion(){
-        facade.Reset();
-        auxiliarySwap.Reset();
-        if(auxiliaryWindow)DestroyWindow(auxiliaryWindow);
-    }
     rk::FactoryCreateFn original{};
     IDXGIFactory* delegate{};
     IUnknown* device{};
@@ -67,8 +63,6 @@ struct Insertion {
     ID3D12Device* verifiedNative{};
     ComPtr<IDXGISwapChain4> facade;
     ComPtr<ID3D11Device> nativeD11;
-    ComPtr<IDXGISwapChain> auxiliarySwap;
-    HWND auxiliaryWindow{};
     LUID adapterLuid{};
     HWND window{};
     std::atomic<unsigned> attempts{0};
@@ -98,36 +92,14 @@ HRESULT WINAPI insertFacade(IDXGIFactory* factory,IUnknown* device,
         state->nativeD11=nativeD11;
         ComPtr<ID3D11DeviceContext> nativeContext;
         nativeD11->GetImmediateContext(&nativeContext);
-        state->auxiliaryWindow=CreateWindowExW(0,L"STATIC",L"RazKolbas auxiliary D3D11",
-            WS_POPUP,0,0,160,96,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-        if(!state->auxiliaryWindow)return E_FAIL;
-        auto auxiliaryDesc=*desc;
-        auxiliaryDesc.OutputWindow=state->auxiliaryWindow;
-        auxiliaryDesc.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
-        auxiliaryDesc.BufferCount=1;
-        auxiliaryDesc.Flags=0;
-        const auto auxResult=state->original(factory,nativeD11.Get(),
-            &auxiliaryDesc,&state->auxiliarySwap);
-        ComPtr<ID3D11Texture2D> auxiliaryBuffer;
-        D3D11_RENDER_TARGET_VIEW_DESC srgbView{};
-        srgbView.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-        srgbView.ViewDimension=D3D11_RTV_DIMENSION_TEXTURE2D;
-        ComPtr<ID3D11RenderTargetView> auxiliarySrgb,auxiliaryDefault;
-        const auto auxBufferResult=SUCCEEDED(auxResult)?state->auxiliarySwap->GetBuffer(
-            0,IID_PPV_ARGS(&auxiliaryBuffer)):E_FAIL;
-        const auto auxSrgbResult=SUCCEEDED(auxBufferResult)?nativeD11->CreateRenderTargetView(
-            auxiliaryBuffer.Get(),&srgbView,&auxiliarySrgb):E_FAIL;
-        const auto auxDefaultResult=SUCCEEDED(auxBufferResult)?nativeD11->CreateRenderTargetView(
-            auxiliaryBuffer.Get(),nullptr,&auxiliaryDefault):E_FAIL;
-        std::cout<<"aux swap=0x"<<std::hex<<static_cast<unsigned>(auxResult)<<
-            " buffer=0x"<<static_cast<unsigned>(auxBufferResult)<<
-            " srgb=0x"<<static_cast<unsigned>(auxSrgbResult)<<
-            " default=0x"<<static_cast<unsigned>(auxDefaultResult)<<std::dec<<'\n';
-        if(FAILED(auxResult)||FAILED(auxBufferResult)||FAILED(auxSrgbResult)||
-           FAILED(auxDefaultResult))return E_FAIL;
+        auto auxiliary=rk::FgD3D11AuxSwapSource::create(state->original,
+            factory,nativeD11.Get(),*desc);
+        if(!std::holds_alternative<std::unique_ptr<rk::FgD3D11AuxSwapSource>>(
+            auxiliary))return E_FAIL;
         auto made=rk::FgD3D11SwapFacade::create(nativeD11.Get(),
             nativeContext.Get(),state->d12,state->queue,state->lower,
-            state->verifiedNative,auxiliaryBuffer.Get());
+            state->verifiedNative,std::move(std::get<
+                std::unique_ptr<rk::FgD3D11AuxSwapSource>>(auxiliary)));
         if(!std::holds_alternative<ComPtr<IDXGISwapChain4>>(made))return E_FAIL;
         state->facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
         *output=state->facade.Get();
@@ -227,11 +199,14 @@ int run(rk::FgStreamlineRuntime& runtime,const wchar_t* reshadePath) {
     ComPtr<IDXGISwapChain4> lower4;
     if(FAILED(lower.As(&lower4)))return 26;
     std::atomic<unsigned> lowerPresents{0};
+    std::atomic<bool> rejectNextResize{false};
     ComPtr<IDXGISwapChain4> observed;
     observed.Attach(new rk_test::FgObservedSwap(lower4.Get(),
         [&](UINT) noexcept {
             lowerPresents.fetch_add(1,std::memory_order_relaxed);
             return S_OK;
+        },[&]() noexcept {
+            return rejectNextResize.exchange(false)?DXGI_ERROR_INVALID_CALL:S_OK;
         }));
     using CreateFactory=HRESULT(WINAPI*)(REFIID,void**);
     const auto create=reinterpret_cast<CreateFactory>(
@@ -354,11 +329,80 @@ int run(rk::FgStreamlineRuntime& runtime,const wchar_t* reshadePath) {
         " actualPresented="<<state.numFramesActuallyPresented<<'\n';
     if(stateResult!=sl::Result::eOk||
        state.numFramesActuallyPresented!=1)return 48;
-    const auto deniedResize=facade->ResizeBuffers(2,192,108,
+    facadeBuffer.Reset();
+    nativeSrgb.Reset();
+    wrappedSrgb.Reset();
+    colour.Reset();
+    rtv.Reset();
+    context->ClearState();
+    context->Flush();
+    const auto resized=upper->ResizeBuffers(2,192,108,
         DXGI_FORMAT_R8G8B8A8_UNORM,0);
     std::cout<<"external surface resize=0x"<<std::hex<<
-        static_cast<unsigned>(deniedResize)<<std::dec<<'\n';
-    if(deniedResize!=DXGI_ERROR_UNSUPPORTED)return 50;
+        static_cast<unsigned>(resized)<<std::dec<<'\n';
+    if(FAILED(resized))return 50;
+    DXGI_SWAP_CHAIN_DESC afterResize{};
+    if(FAILED(upper->GetDesc(&afterResize))||
+       afterResize.BufferDesc.Width!=192||
+       afterResize.BufferDesc.Height!=108)return 51;
+    ComPtr<ID3D11Texture2D> resizedColour;
+    if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&resizedColour))))return 52;
+    D3D11_TEXTURE2D_DESC resizedDesc{};
+    resizedColour->GetDesc(&resizedDesc);
+    if(resizedDesc.Width!=192||resizedDesc.Height!=108)return 53;
+    ComPtr<ID3D11RenderTargetView> resizedView;
+    if(FAILED(d11->CreateRenderTargetView(resizedColour.Get(),
+        nullptr,&resizedView)))return 54;
+    const float yellow[4]{1.f,1.f,0.f,1.f};
+    context->ClearRenderTargetView(resizedView.Get(),yellow);
+    const auto afterPresent=upper->Present(0,0);
+    std::cout<<"post-resize Present=0x"<<std::hex<<
+        static_cast<unsigned>(afterPresent)<<std::dec<<
+        " lowerCallbacks="<<lowerPresents.load()<<'\n';
+    if(FAILED(afterPresent)||lowerPresents.load()!=4)return 55;
+    resizedView.Reset();
+    resizedColour.Reset();
+    context->ClearState();
+    context->Flush();
+    rejectNextResize.store(true);
+    const auto rejected=upper->ResizeBuffers(2,224,126,
+        DXGI_FORMAT_R8G8B8A8_UNORM,0);
+    DXGI_SWAP_CHAIN_DESC afterRejected{};
+    if(SUCCEEDED(rejected)||FAILED(upper->GetDesc(&afterRejected))||
+       afterRejected.BufferDesc.Width!=192||
+       afterRejected.BufferDesc.Height!=108)return 56;
+    std::cout<<"rejected resize=0x"<<std::hex<<
+        static_cast<unsigned>(rejected)<<std::dec<<
+        " retained="<<afterRejected.BufferDesc.Width<<'x'<<
+        afterRejected.BufferDesc.Height<<'\n';
+    if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&resizedColour)))||
+       FAILED(d11->CreateRenderTargetView(resizedColour.Get(),
+           nullptr,&resizedView)))return 57;
+    context->ClearRenderTargetView(resizedView.Get(),yellow);
+    const auto afterRejectedPresent=upper->Present(0,0);
+    std::cout<<"post-rejection Present=0x"<<std::hex<<
+        static_cast<unsigned>(afterRejectedPresent)<<std::dec<<
+        " lowerCallbacks="<<lowerPresents.load()<<'\n';
+    if(FAILED(afterRejectedPresent)||lowerPresents.load()!=5)return 58;
+    resizedView.Reset();
+    resizedColour.Reset();
+    context->ClearState();
+    context->Flush();
+    const auto invalidFlags=upper->ResizeBuffers(2,224,126,
+        DXGI_FORMAT_R8G8B8A8_UNORM,0x80000000u);
+    if(SUCCEEDED(invalidFlags)||FAILED(upper->GetDesc(&afterRejected))||
+       afterRejected.BufferDesc.Width!=192||
+       afterRejected.BufferDesc.Height!=108)return 59;
+    if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&resizedColour)))||
+       FAILED(d11->CreateRenderTargetView(resizedColour.Get(),
+           nullptr,&resizedView)))return 60;
+    context->ClearRenderTargetView(resizedView.Get(),yellow);
+    const auto afterInvalidFlagsPresent=upper->Present(0,0);
+    std::cout<<"invalid-flags resize=0x"<<std::hex<<
+        static_cast<unsigned>(invalidFlags)<<" following Present=0x"<<
+        static_cast<unsigned>(afterInvalidFlagsPresent)<<std::dec<<
+        " lowerCallbacks="<<lowerPresents.load()<<'\n';
+    if(FAILED(afterInvalidFlagsPresent)||lowerPresents.load()!=6)return 61;
     return 0;
 }
 }

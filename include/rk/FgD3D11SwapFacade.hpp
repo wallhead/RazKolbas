@@ -10,13 +10,12 @@ class FgD3D11SwapFacade final : public IDXGISwapChain4 {
 public:
     // Pass verifiedLowerNative only after proving its COM identity through
     // the lower proxy's official native-interface API. An external D3D11
-    // buffer can preserve swap-chain sRGB view compatibility, but ResizeBuffers
-    // fails closed until that buffer's owner can be resized transactionally.
+    // source supplies the typed swap-chain buffer and owns resize generations.
     static Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
-        ID3D11Texture2D* externalRenderBuffer=nullptr);
+        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;

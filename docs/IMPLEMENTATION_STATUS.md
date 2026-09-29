@@ -1,5 +1,22 @@
 # Implementation checkpoint
 
+## Private ReShade/Streamline FG-Off resize (2026-09-29)
+
+The offline D3D11 auxiliary swap now prepares a new back buffer before lower
+resize and commits it only after the Streamline-owned lower swap reports the
+expected extent. The exact ReShade outer swap resized from 160×96 to 192×108,
+rebuilt its runtime and successfully presented again. An injected lower
+resize rejection retained the old extent and following Present. A reserved
+flag was rejected before the Streamline proxy after a concrete probe showed
+that forwarding it poisoned the proxy's next Present. Details:
+`docs/re/FG_PRIVATE_FACADE_RESIZE_2026-09-29.md`.
+
+Release CTest passed **60/60**, Debug **57/57**, and the final private probe
+exited zero. This remains offline FG-Off evidence. The private path is not
+installed into Skyrim; V5.4 MO2 remains 0.1.128 with FG Off. Next is guarded
+game binding and one bundled, user-started FG-Off startup/Present test before
+any FG-On claim.
+
 ## Private ReShade/facade FG-Off boundary (2026-09-29)
 
 The isolated private-loader probe now creates a Streamline-owned D3D12 lower

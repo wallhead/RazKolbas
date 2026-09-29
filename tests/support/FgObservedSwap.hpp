@@ -11,8 +11,10 @@ namespace rk_test {
 // Present implementations may be noexcept.
 class FgObservedSwap final : public IDXGISwapChain4 {
 public:
-    FgObservedSwap(IDXGISwapChain4* lower,std::function<HRESULT(UINT)> observe):
-        lower_(lower),observe_(std::move(observe)) {}
+    FgObservedSwap(IDXGISwapChain4* lower,std::function<HRESULT(UINT)> observe,
+        std::function<HRESULT()> beforeResize={}):
+        lower_(lower),observe_(std::move(observe)),
+        beforeResize_(std::move(beforeResize)) {}
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** out) override {
         if(!out)return E_POINTER;
         *out=nullptr;
@@ -57,7 +59,14 @@ public:
     RK_TEST_FORWARD_HR(SetFullscreenState,(BOOL full,IDXGIOutput* output),(full,output))
     RK_TEST_FORWARD_HR(GetFullscreenState,(BOOL* full,IDXGIOutput** output),(full,output))
     RK_TEST_FORWARD_HR(GetDesc,(DXGI_SWAP_CHAIN_DESC* desc),(desc))
-    RK_TEST_FORWARD_HR(ResizeBuffers,(UINT n,UINT w,UINT h,DXGI_FORMAT format,UINT flags),(n,w,h,format,flags))
+    HRESULT STDMETHODCALLTYPE ResizeBuffers(UINT n,UINT w,UINT h,
+        DXGI_FORMAT format,UINT flags) override {
+        if(beforeResize_) {
+            const auto result=beforeResize_();
+            if(FAILED(result))return result;
+        }
+        return lower_->ResizeBuffers(n,w,h,format,flags);
+    }
     RK_TEST_FORWARD_HR(ResizeTarget,(const DXGI_MODE_DESC* target),(target))
     RK_TEST_FORWARD_HR(GetContainingOutput,(IDXGIOutput** output),(output))
     RK_TEST_FORWARD_HR(GetFrameStatistics,(DXGI_FRAME_STATISTICS* stats),(stats))
@@ -79,8 +88,15 @@ public:
     RK_TEST_FORWARD_HR(GetMatrixTransform,(DXGI_MATRIX_3X2_F* matrix),(matrix))
     RK_TEST_FORWARD_HR(CheckColorSpaceSupport,(DXGI_COLOR_SPACE_TYPE color,UINT* support),(color,support))
     RK_TEST_FORWARD_HR(SetColorSpace1,(DXGI_COLOR_SPACE_TYPE color),(color))
-    RK_TEST_FORWARD_HR(ResizeBuffers1,(UINT n,UINT w,UINT h,DXGI_FORMAT format,UINT flags,
-        const UINT* mask,IUnknown* const* queues),(n,w,h,format,flags,mask,queues))
+    HRESULT STDMETHODCALLTYPE ResizeBuffers1(UINT n,UINT w,UINT h,
+        DXGI_FORMAT format,UINT flags,const UINT* mask,
+        IUnknown* const* queues) override {
+        if(beforeResize_) {
+            const auto result=beforeResize_();
+            if(FAILED(result))return result;
+        }
+        return lower_->ResizeBuffers1(n,w,h,format,flags,mask,queues);
+    }
     RK_TEST_FORWARD_HR(SetHDRMetaData,(DXGI_HDR_METADATA_TYPE type,UINT size,void* data),(type,size,data))
 #undef RK_TEST_FORWARD_HR
     BOOL STDMETHODCALLTYPE IsTemporaryMonoSupported() override {
@@ -96,5 +112,6 @@ private:
     std::atomic<ULONG> refs_{1};
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower_;
     std::function<HRESULT(UINT)> observe_;
+    std::function<HRESULT()> beforeResize_;
 };
 }

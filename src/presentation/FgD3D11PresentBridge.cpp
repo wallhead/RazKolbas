@@ -12,6 +12,7 @@ struct QuarantinedBridge {
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> render;
+    std::unique_ptr<FgD3D11AuxSwapSource> auxiliary;
     std::vector<FgSharedSurface> shared;
     Microsoft::WRL::ComPtr<ID3D12Resource> back;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
@@ -64,11 +65,16 @@ FgD3D11PresentBridge::FgD3D11PresentBridge(FgLowerSwap lower,
     std::unique_ptr<FgSharedInputs> interop) noexcept:
     lower_(std::move(lower)),interop_(std::move(interop)) {}
 FgD3D11PresentBridge::~FgD3D11PresentBridge() noexcept {
-    if(!poisoned_)return;
+    if(!poisoned_) {
+        render_.clear();
+        auxiliary_.reset();
+        return;
+    }
     try {
         std::scoped_lock lock(quarantineMutex());
         quarantine().push_back({interop_->retainLifetime(),std::move(context_),
-            std::move(swap3_),std::move(render_),std::move(shared_),
+            std::move(swap3_),std::move(render_),std::move(auxiliary_),
+            std::move(shared_),
             std::move(inFlightBack_),std::move(inFlightAllocator_),
             std::move(inFlightCommands_),std::move(inFlightFence_)});
     } catch(...) {
@@ -79,7 +85,8 @@ FgD3D11PresentBridge::~FgD3D11PresentBridge() noexcept {
 Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
     ID3D12CommandQueue* queue,IDXGISwapChain* lower,
-    ID3D12Device* verifiedLowerNative,ID3D11Texture2D* externalRenderBuffer) {
+    ID3D12Device* verifiedLowerNative,
+    std::unique_ptr<FgD3D11AuxSwapSource> auxiliary) {
     if(!d11||!context||!d12||!queue||!lower)
         return Error{ErrorCode::InvalidInput,"FG D3D11 bridge requires all devices, context, queue and lower swap"};
     auto lowerResult=FgLowerSwap::create(lower);
@@ -140,7 +147,8 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     source.Usage=D3D11_USAGE_DEFAULT;
     source.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> render;
-    if(externalRenderBuffer) {
+    if(auxiliary) {
+        auto* externalRenderBuffer=auxiliary->buffer();
         Microsoft::WRL::ComPtr<ID3D11Device> renderDevice;
         D3D11_TEXTURE2D_DESC actual{};
         externalRenderBuffer->GetDevice(&renderDevice);
@@ -153,7 +161,7 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
            !(actual.BindFlags&D3D11_BIND_RENDER_TARGET))
             return Error{ErrorCode::Conflict,"External FG render buffer does not match the D3D11 device or lower swap"};
         render=externalRenderBuffer;
-        bridge->externalRenderBuffer_=true;
+        bridge->auxiliary_=std::move(auxiliary);
     } else if(FAILED(d11->CreateTexture2D(&source,nullptr,&render)))
         return Error{ErrorCode::Unavailable,"Cannot create FG D3D11 render buffer"};
     bridge->render_.push_back(std::move(render));
@@ -265,11 +273,15 @@ HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcep
 }
 HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     try {
-    if(externalRenderBuffer_)return DXGI_ERROR_UNSUPPORTED;
     if(prepared_||poisoned_)return DXGI_ERROR_INVALID_CALL;
     DXGI_SWAP_CHAIN_DESC old{};
     auto hr=lower_.getDesc(&old);
     if(FAILED(hr))return hr;
+    // Reject reserved bits before a proxy can alter the lower swap's Present
+    // state on a failed ResizeBuffers call. 0x1fff covers the DXGI flags in
+    // the pinned Windows SDK used by this build.
+    constexpr UINT knownSwapFlags=0x1fffu;
+    if(call.flags&~knownSwapFlags)return DXGI_ERROR_INVALID_CALL;
     auto width=call.width;
     auto height=call.height;
     if(!width||!height) {
@@ -298,23 +310,38 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     for(const auto& texture:render_) {
         if(boundAsOutput(context_.Get(),texture.Get()))
             return DXGI_ERROR_INVALID_CALL;
-        // The bridge owns one public reference. A caller-held texture adds a
-        // reference; an unbound view may not and remains a production gap.
-        const auto refs=texture->AddRef();
-        texture->Release();
-        if(refs>2)return DXGI_ERROR_INVALID_CALL;
+        if(!auxiliary_) {
+            // The bridge owns one public reference. A caller-held texture adds
+            // a reference; an unbound view may not and remains a production gap.
+            const auto refs=texture->AddRef();
+            texture->Release();
+            if(refs>2)return DXGI_ERROR_INVALID_CALL;
+        }
     }
     D3D11_TEXTURE2D_DESC source{};
     render_.front()->GetDesc(&source);
     source.Width=width;
     source.Height=height;
     source.Format=format;
+    std::unique_ptr<FgD3D11AuxSwapSource> nextAuxiliary;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> nextRender;
     std::vector<FgSharedSurface> nextShared;
     nextRender.reserve(1);
     nextShared.reserve(count);
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    if(FAILED(hr=d11_->CreateTexture2D(&source,nullptr,&texture)))return hr;
+    if(auxiliary_) {
+        auto prepared=auxiliary_->prepare(width,height,format);
+        if(!std::holds_alternative<
+           std::unique_ptr<FgD3D11AuxSwapSource>>(prepared))return E_FAIL;
+        nextAuxiliary=std::move(std::get<
+            std::unique_ptr<FgD3D11AuxSwapSource>>(prepared));
+        texture=nextAuxiliary->buffer();
+        D3D11_TEXTURE2D_DESC actualTexture{};
+        texture->GetDesc(&actualTexture);
+        if(actualTexture.Width!=width||actualTexture.Height!=height||
+           actualTexture.Format!=format)return E_FAIL;
+    } else if(FAILED(hr=d11_->CreateTexture2D(&source,nullptr,&texture)))
+        return hr;
     nextRender.push_back(std::move(texture));
     for(UINT i=0;i<count;++i) {
         auto shared=interop_->makeSurface(source);
@@ -333,6 +360,9 @@ HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     }
     render_.swap(nextRender);
     shared_.swap(nextShared);
+    auxiliary_.swap(nextAuxiliary);
+    nextRender.clear();
+    nextAuxiliary.reset();
     return S_OK;
     } catch(const std::bad_alloc&) {
         return E_OUTOFMEMORY;
