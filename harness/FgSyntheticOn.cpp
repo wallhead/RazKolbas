@@ -5,6 +5,7 @@
 #include "rk/FgD3D11SwapFacade.hpp"
 #include "rk/FgStreamlineFrameInputs.hpp"
 #include "rk/FgStreamlineSubmit.hpp"
+#include "rk/FgStreamlineInputLease.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -280,6 +281,8 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             std::cout<<"FG-On prepared inputs failed: "<<failure->message<<'\n';
             error=54;break;
         }
+        rk::FgStreamlineInputLease retained(
+            std::move(std::get<rk::FgStreamlineFrameInputs>(inputs)));
         rk::FgStreamlineCalls sdk{};
         sdk.setConstants=[](const sl::Constants& values,
             const sl::FrameToken& frameToken,const sl::ViewportHandle& view) {
@@ -294,7 +297,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             source.source,source.generation,source.presentToken,
             source.resetEpoch,token};
         const auto submitted=rk::submitFgStreamlineInputs(
-            std::get<rk::FgStreamlineFrameInputs>(inputs),binding,viewport,sdk);
+            retained.inputs(),binding,viewport,sdk);
         if(const auto failure=std::get_if<rk::Error>(&submitted)) {
             std::cout<<"FG-On input submission failed: "<<failure->message<<'\n';
             error=54;break;
@@ -319,10 +322,14 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             " minDimension="<<state.minWidthOrHeight<<'\n';
         if(stateResult!=sl::Result::eOk){error=57;break;}
         generated|=state.numFramesActuallyPresented>1;
-        if(!waitCompletion(reinterpret_cast<ID3D12Fence*>(
-                state.inputsProcessingCompletionFence),
-                state.lastPresentInputsProcessingCompletionFenceValue,
-                event.handle)) {
+        std::cout<<"FG-On input retirement frame="<<frame<<
+            " fencePresent="<<(state.inputsProcessingCompletionFence!=nullptr)<<
+            " value="<<state.lastPresentInputsProcessingCompletionFenceValue<<'\n';
+        const auto observed=retained.observeCompletion(state);
+        if(!std::holds_alternative<bool>(observed)||
+           !waitCompletion(retained.completionFence(),
+                retained.completionValue(),event.handle)||
+           !retained.releaseIfRetired()) {
             std::cout<<"FG-On provider input fence did not retire\n";
             error=59;break;
         }

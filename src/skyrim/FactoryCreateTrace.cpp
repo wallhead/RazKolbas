@@ -1,6 +1,42 @@
 #include "rk/FactoryCreateTrace.hpp"
+#include <Windows.h>
+#include <limits>
 
 namespace rk {
+ReshadeFactoryDelegateFacts inspectReshadeFactoryDelegate(
+    IDXGIFactory* verifiedReshadeFactory) noexcept {
+    ReshadeFactoryDelegateFacts facts{};
+    const auto wrapper=reinterpret_cast<std::uintptr_t>(
+        verifiedReshadeFactory);
+    if(!wrapper||wrapper>std::numeric_limits<std::uintptr_t>::max()-8)
+        return facts;
+    SIZE_T count{};
+    if(!ReadProcessMemory(GetCurrentProcess(),
+        reinterpret_cast<const void*>(wrapper+8),&facts.delegate,
+        sizeof(facts.delegate),&count)||count!=sizeof(facts.delegate)||
+       !facts.delegate)return facts;
+    if(!ReadProcessMemory(GetCurrentProcess(),
+        reinterpret_cast<const void*>(facts.delegate),&facts.vtable,
+        sizeof(facts.vtable),&count)||count!=sizeof(facts.vtable)||
+       !facts.vtable)return facts;
+    if(facts.vtable>std::numeric_limits<std::uintptr_t>::max()-0x50)
+        return facts;
+    if(!ReadProcessMemory(GetCurrentProcess(),
+        reinterpret_cast<const void*>(facts.vtable+0x50),
+        &facts.createMethod,sizeof(facts.createMethod),&count)||
+       count!=sizeof(facts.createMethod)||!facts.createMethod)return facts;
+    MEMORY_BASIC_INFORMATION page{};
+    if(!VirtualQuery(reinterpret_cast<const void*>(facts.createMethod),
+        &page,sizeof(page))||page.State!=MEM_COMMIT||
+       (page.Protect&PAGE_GUARD))return facts;
+    const auto protection=page.Protect&0xff;
+    facts.methodExecutable=protection==PAGE_EXECUTE||
+        protection==PAGE_EXECUTE_READ||
+        protection==PAGE_EXECUTE_READWRITE||
+        protection==PAGE_EXECUTE_WRITECOPY;
+    return facts;
+}
+
 bool isOwnedSceneFactoryCandidate(IDXGIFactory* factory,
     IDXGIFactory* expected,const DXGI_SWAP_CHAIN_DESC* description) noexcept {
     if(!factory||factory!=expected||!description)return false;

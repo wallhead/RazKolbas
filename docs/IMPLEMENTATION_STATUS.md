@@ -1,5 +1,26 @@
 # Implementation checkpoint
 
+## Installed 0.1.126 guarded ReShade factory delegate probe (2026-09-29)
+
+The installed V5.4 MO2 build adds one read-only structural observation of
+the native factory pointer loaded at ReShade 6.8's verified `[this+8]`
+site. It logs the downstream slot-10 method address, executable state and
+module owner after the normal nested swap is created. It does not hook that
+delegate, substitute a swap, load the FG SDK into Skyrim or change FG Off.
+The current game process was closed before replacement. Debug and Release
+built and passed **57/57** and **60/60** CTest groups respectively. The
+eight-payload archive
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.126-fg-factory-delegate.zip`
+has SHA-256
+`c4208115f697383aadcf4ac825c3253d8897a9311c52b18f6811a2467a303dc3`;
+all eight ZIP and installed MO2 payload hashes match the stage manifest.
+The installed DLL SHA-256 is
+`e34123286c896d0c1f47515c113d8470a32a131e0c5182ef38ccd2ff50627441`.
+The previous complete isolated mod is backed up outside Git under
+`artifacts/local/mo2-install-backup-0.1.126-2026-09-29`. Skyrim 0.1.126
+and its new log line are **NOT RUN**. The next action is a user-started
+Skyrim run to verify the actual runtime delegate before any lower-owner hook.
+
 ## Standalone D3D11 facade plus DLSS-G On (2026-09-29)
 
 The combined `--facade-on` probe now sends real D3D11-cleared colour through
@@ -11,6 +32,20 @@ groups. The D3D12-only On probe and FG-Off facade colour/resize probe still
 exit 0. See `docs/re/FG_D3D11_FACADE_ON_PROBE_2026-09-29.md` for the exact
 boundary and limits. The installed 0.1.125 game build is unchanged; Skyrim
 FG-On remains **NOT RUN**.
+
+The pinned Streamline state on this adapter reported an actual non-null
+input-processing fence and monotonically increasing values. A new retained
+lease keeps each standalone packet alive until that fence reaches its value;
+missing completion is quarantined rather than treated as success. WARP
+fence/quarantine tests and the repeated `--facade-on` hardware probe passed.
+Provider telemetry can vary with foreground/window state; one precondition
+attempt exited without a foreground window and a later D3D12-only probe
+reported one actual presentation on some frames despite requesting two.
+Capstone inspection of the hash-matched V5.4 ReShade factory found the exact
+underlying `CreateSwapChain` vtable dispatch under its wrapper constructor.
+This narrows the startup-owner insertion point but does not verify a hook or
+ENB/ReShade compatibility; see
+`docs/re/FG_RESHADE680_FACTORY_CALL_2026-09-29.md`.
 
 ## Source-side FG camera-to-Streamline mapping (2026-09-29)
 

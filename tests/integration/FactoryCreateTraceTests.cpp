@@ -82,3 +82,19 @@ TEST_CASE("Early owned scene admits only the captured native SDR factory contrac
     changed=desc;changed.OutputWindow=nullptr;
     REQUIRE_FALSE(rk::isOwnedSceneFactoryCandidate(expected,expected,&changed));
 }
+
+TEST_CASE("ReShade factory delegate probe reads the bounded native vtable slot",
+    "[factory_create_trace]") {
+    void* methods[11]{};
+    methods[10]=reinterpret_cast<void*>(&observed);
+    struct Native { void** table; } native{methods};
+    struct Wrapper { void* table; Native* delegate; } wrapper{methods,&native};
+    const auto facts=rk::inspectReshadeFactoryDelegate(
+        reinterpret_cast<IDXGIFactory*>(&wrapper));
+    REQUIRE(facts.delegate==reinterpret_cast<std::uintptr_t>(&native));
+    REQUIRE(facts.vtable==reinterpret_cast<std::uintptr_t>(methods));
+    REQUIRE(facts.createMethod==reinterpret_cast<std::uintptr_t>(&observed));
+    REQUIRE(facts.methodExecutable);
+    REQUIRE_FALSE(rk::inspectReshadeFactoryDelegate(
+        reinterpret_cast<IDXGIFactory*>(1)).methodExecutable);
+}

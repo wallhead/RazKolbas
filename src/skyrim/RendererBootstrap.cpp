@@ -595,6 +595,32 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
             static_cast<std::uint32_t>(fgFacts.getD3D11Device),
             static_cast<std::uint32_t>(fgFacts.getD3D12Device),
             fgFacts.expectedDeviceIdentity);
+        const auto& factorySite=reshade680FactoryCreateSite();
+        const auto factoryBase=reinterpret_cast<std::uintptr_t>(owner);
+        if(owner&&tableId.hash==factorySite.moduleSha256&&
+           reinterpret_cast<std::uintptr_t>(table)-factoryBase==
+               factorySite.tableRva&&
+           reinterpret_cast<std::uintptr_t>(state->next)==
+               factoryBase+factorySite.methodRva) {
+            const auto delegate=inspectReshadeFactoryDelegate(factory);
+            HMODULE delegateMethodOwner{};
+            if(delegate.methodExecutable)
+                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                    reinterpret_cast<LPCWSTR>(delegate.createMethod),
+                    &delegateMethodOwner);
+            struct DelegateModuleRef {
+                HMODULE value;
+                ~DelegateModuleRef(){if(value)FreeLibrary(value);}
+            } delegateRef{delegateMethodOwner};
+            wchar_t methodName[32768]{};
+            if(delegateMethodOwner)
+                GetModuleFileNameW(delegateMethodOwner,methodName,32768);
+            spdlog::info("FG ReShade 6.8 factory delegate #{}: wrapper=0x{:x}; [this+8]=0x{:x}; delegateTable=0x{:x}; CreateSwapChainSlot10=0x{:x}; executable={}; methodOwner={}; read-only",
+                sequence,reinterpret_cast<std::uintptr_t>(factory),
+                delegate.delegate,delegate.vtable,delegate.createMethod,
+                delegate.methodExecutable,
+                std::filesystem::path(methodName).filename().string());
+        }
         const auto traced=installSwapGetBufferTrace(swap);
         if(const auto error=std::get_if<Error>(&traced))
             spdlog::warn("Nested GetBuffer trace not installed: {}",error->message);

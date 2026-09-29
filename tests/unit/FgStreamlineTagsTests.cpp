@@ -2,6 +2,7 @@
 #include "rk/FgStreamlineTags.hpp"
 #include "rk/FgStreamlineFrameInputs.hpp"
 #include "rk/FgStreamlineSubmit.hpp"
+#include "rk/FgStreamlineInputLease.hpp"
 #include <dxgi1_6.h>
 #include <variant>
 
@@ -207,4 +208,46 @@ TEST_CASE("FG Streamline submission binds one SDK token and propagates tag failu
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::submitFgStreamlineInputs(packet,binding,viewport,sdk)));
     REQUIRE(calls==2);
+}
+
+TEST_CASE("FG Streamline input lease waits for the reported provider fence",
+    "[fg_streamline_tags]") {
+    Warp gpu;
+    auto prepared=submission(gpu);setCamera(prepared);
+    auto built=rk::prepareFgStreamlineFrameInputs(source(prepared),prepared,
+        states(prepared),DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE(std::holds_alternative<rk::FgStreamlineFrameInputs>(built));
+    rk::FgStreamlineInputLease lease(
+        std::move(std::get<rk::FgStreamlineFrameInputs>(built)));
+    ComPtr<ID3D12Fence> fence;
+    REQUIRE(SUCCEEDED(gpu.device->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&fence))));
+    sl::DLSSGState reported{};
+    reported.inputsProcessingCompletionFence=fence.Get();
+    reported.lastPresentInputsProcessingCompletionFenceValue=4;
+    REQUIRE(std::holds_alternative<bool>(lease.observeCompletion(reported)));
+    REQUIRE_FALSE(lease.retired());
+    REQUIRE_FALSE(lease.releaseIfRetired());
+    REQUIRE(SUCCEEDED(fence->Signal(4)));
+    REQUIRE(lease.retired());
+    REQUIRE(lease.releaseIfRetired());
+}
+
+TEST_CASE("FG Streamline lease retains resources when completion is unknown",
+    "[fg_streamline_tags]") {
+    Warp gpu;
+    auto prepared=submission(gpu);setCamera(prepared);
+    auto built=rk::prepareFgStreamlineFrameInputs(source(prepared),prepared,
+        states(prepared),DXGI_FORMAT_R8G8B8A8_UNORM);
+    REQUIRE(std::holds_alternative<rk::FgStreamlineFrameInputs>(built));
+    const auto before=rk::FgStreamlineInputLease::quarantinedCount();
+    {
+        rk::FgStreamlineInputLease lease(
+            std::move(std::get<rk::FgStreamlineFrameInputs>(built)));
+        sl::DLSSGState missing{};
+        REQUIRE(std::holds_alternative<rk::Error>(
+            lease.observeCompletion(missing)));
+        REQUIRE_FALSE(lease.releaseIfRetired());
+    }
+    REQUIRE(rk::FgStreamlineInputLease::quarantinedCount()==before+1);
 }

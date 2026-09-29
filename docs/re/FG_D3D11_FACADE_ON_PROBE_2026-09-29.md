@@ -40,3 +40,22 @@ D3D11-facing COM identity and existing early owned-scene publication,
 publish continuously fresh UI and guides, and retain each slot through
 Streamline's reported input-processing completion fence. A plain replacement
 of the nested or outer swap pointer is not sufficient.
+
+## Input-retirement follow-up
+
+The same local `--facade-on` probe subsequently logged a non-null
+`inputsProcessingCompletionFence` with successive values 1 through 8. The
+standalone submission now transfers each tag packet into a retained lease.
+It queries completion on the present thread, waits the reported D3D12 fence
+value before freeing the textures, and quarantines the packet for process
+lifetime if completion is missing or uncertain. A WARP fence test verified
+that an unsignaled lease cannot release and a signaled lease can; a missing
+fence test verified quarantine. The release suite again passed **60/60**.
+One immediately preceding probe attempt did not acquire foreground and
+exited before creating the facade; a repeat acquired foreground and
+completed. Three later retries also exited at that same foreground gate,
+before reaching the new lease or Present path. This is an intermittent
+window-focus precondition, not evidence of a GPU submission error.
+The D3D12-only `--on` route later exited 0 but reported only one presentation
+on some frames, illustrating why actual-presented telemetry must be used
+instead of assuming every requested interpolation displays.
