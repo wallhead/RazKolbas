@@ -1,5 +1,29 @@
 # Implementation checkpoint
 
+## Source 0.1.129 chains a pinned Streamline factory owner (2026-09-29)
+
+The separate-process ReShade/Streamline result was converted into a guarded
+factory-owner profile. If the System32 DXGI factory table is still native,
+the pass-through hook uses its original profile. If its method is owned by
+the **exact** Streamline 2.14.1 `sl.interposer.dll` at RVA `0x26510`, it
+validates the interposer file hash, size, mapped image, RVA and 16-byte
+prologue, then atomically chains that method. Any other owner is left alone.
+The callback and both prior-owner modules are pinned for process lifetime.
+The descriptor is
+`patches/skyrim/streamline2141.factory.create-native-lower-chain-v1.json`.
+The standalone ReShade probe now uses that same profile.
+
+This 0.1.129 source does **not** initialize Streamline in Skyrim or
+substitute a D3D12 lower swap, so FG remains Off. It has not been packaged,
+installed or run in Skyrim; V5.4 MO2 still contains 0.1.128. Debug and
+Release suites passed **57/57** and **60/60** CTest groups. The standalone
+ReShade FG-Off and focused FG-On probes were rerun against the shared
+owner profile: both exited 0; the FG-On run again reported two actual
+presentations on each of eight submissions and completion values 1–8. A bounded
+Capstone trace of exact ENB 0.505 also confirmed that after downstream D3D11
+creation succeeds, ENB immediately calls the returned swap's `GetDesc` and
+`GetBuffer`; see `docs/re/FG_ENB505_CREATION_BOUNDARY_2026-09-29.md`.
+
 ## Installed 0.1.128 native factory trace and offline wrapper proof (2026-09-29)
 
 The user-started 0.1.127 run identified ReShade's native delegate with

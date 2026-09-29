@@ -112,6 +112,31 @@ TEST_CASE("Native DXGI factory profile matches the local signed system DLL",
         site.tableRva,site)));
     FreeLibrary(module);
 }
+TEST_CASE("Pinned Streamline factory method requires exact foreign owner",
+    "[owned_route_profile]") {
+    const auto& site=rk::streamline2141FactoryCreateSite();
+    constexpr std::uintptr_t base=0x180000000;
+    REQUIRE(site.methodRva==0x26510);
+    std::vector<std::uint8_t> image(site.imageSize);
+    std::memcpy(image.data()+site.methodRva,site.prologue.data(),
+        site.prologue.size());
+    const auto valid=[&](std::uintptr_t method,std::string_view hash,
+        std::size_t size) {
+        return rk::validateForeignFactoryMethod(image,base,hash,size,
+            method,site);
+    };
+    REQUIRE(std::get<bool>(valid(base+site.methodRva,site.moduleSha256,
+        site.fileSize)));
+    REQUIRE(std::holds_alternative<rk::Error>(valid(base+site.methodRva+1,
+        site.moduleSha256,site.fileSize)));
+    REQUIRE(std::holds_alternative<rk::Error>(valid(base+site.methodRva,
+        std::string(64,'0'),site.fileSize)));
+    REQUIRE(std::holds_alternative<rk::Error>(valid(base+site.methodRva,
+        site.moduleSha256,site.fileSize+1)));
+    image[site.methodRva]^=1;
+    REQUIRE(std::holds_alternative<rk::Error>(valid(base+site.methodRva,
+        site.moduleSha256,site.fileSize)));
+}
 TEST_CASE("V5.4 owned-route sites match local PE files without executing them",
     "[.local_v54_owned_route]") {
     const auto check=[](const wchar_t* env,bool reshade) {

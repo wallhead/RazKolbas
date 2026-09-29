@@ -716,9 +716,9 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
     GetModuleHandleExW(fromAddress,
         reinterpret_cast<LPCWSTR>(delegate.createMethod),&methodOwner);
     ModuleReference tableRef{tableOwner},methodRef{methodOwner};
-    if(!tableOwner||tableOwner!=methodOwner)
+    if(!tableOwner||!methodOwner)
         return Error{ErrorCode::Unsupported,
-            "Native delegate table and method owners differ"};
+            "Native delegate table or method owner is unavailable"};
     wchar_t nativePath[32768]{},systemDirectory[MAX_PATH]{};
     if(!GetModuleFileNameW(tableOwner,nativePath,32768)||
        !GetSystemDirectoryW(systemDirectory,MAX_PATH))
@@ -728,24 +728,59 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
         return Error{ErrorCode::Unsupported,
             "Native delegate is not the exact system DXGI module"};
     const auto& site=win11DxgiFactoryCreateSite();
-    if(patchDisabled(state.disabledPatchIds,site.id))return false;
     const auto id=identify(tableOwner);
     const auto base=reinterpret_cast<std::uintptr_t>(tableOwner);
-    if(delegate.vtable<base||delegate.vtable-base!=site.tableRva||
-       delegate.createMethod!=base+site.methodRva)
+    if(delegate.vtable<base||delegate.vtable-base!=site.tableRva)
         return Error{ErrorCode::Unsupported,
-            "Native delegate table or method RVA differs"};
-    const auto mapped=snapshotModule(tableOwner,site.imageSize);
+            "Native delegate factory table RVA differs"};
+    auto mapped=snapshotModule(tableOwner,site.imageSize);
+    const bool nativeOwner=methodOwner==tableOwner&&
+        delegate.createMethod==base+site.methodRva;
+    const auto& foreign=streamline2141FactoryCreateSite();
+    if(!nativeOwner) {
+        // Validate the unmodified System32 image separately from the current
+        // slot owner. The synthetic pointer exists only in this local copy.
+        const auto slotOffset=site.tableRva+site.slot*sizeof(void*);
+        if(slotOffset+sizeof(void*)>mapped.size())
+            return Error{ErrorCode::Conflict,"Native delegate slot is outside DXGI image"};
+        std::uintptr_t actualSlot{};
+        std::memcpy(&actualSlot,mapped.data()+slotOffset,sizeof(actualSlot));
+        if(actualSlot!=delegate.createMethod)
+            return Error{ErrorCode::Conflict,"Native delegate slot changed during inspection"};
+        const auto original=base+site.methodRva;
+        std::memcpy(mapped.data()+slotOffset,&original,sizeof(original));
+    }
     const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(delegate.vtable-base),site);
     if(const auto error=std::get_if<Error>(&validated))return *error;
-    HMODULE pinnedSelf{},pinnedOwner{};
+    if(nativeOwner) {
+        if(patchDisabled(state.disabledPatchIds,site.id))return false;
+    } else {
+        if(patchDisabled(state.disabledPatchIds,foreign.id))return false;
+        wchar_t methodPath[32768]{};
+        const auto pathLength=GetModuleFileNameW(methodOwner,methodPath,32768);
+        if(!pathLength||pathLength>=32768||
+           _wcsicmp(std::filesystem::path(methodPath).filename().c_str(),
+               L"sl.interposer.dll")!=0)
+            return Error{ErrorCode::Unsupported,
+                "Foreign factory slot is not Streamline interposer"};
+        const auto foreignId=identify(methodOwner);
+        const auto methodBase=reinterpret_cast<std::uintptr_t>(methodOwner);
+        const auto foreignImage=snapshotModule(methodOwner,foreign.imageSize);
+        const auto verified=validateForeignFactoryMethod(foreignImage,
+            methodBase,foreignId.hash,foreignId.size,
+            delegate.createMethod,foreign);
+        if(const auto error=std::get_if<Error>(&verified))return *error;
+    }
+    HMODULE pinnedSelf{},pinnedOwner{},pinnedMethod{};
     constexpr DWORD pin=GET_MODULE_HANDLE_EX_FLAG_PIN|
         GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if(!GetModuleHandleExW(pin,
            reinterpret_cast<LPCWSTR>(&nativeFactoryCreateProxy),&pinnedSelf)||
        !GetModuleHandleExW(pin,
-           reinterpret_cast<LPCWSTR>(delegate.vtable),&pinnedOwner))
+           reinterpret_cast<LPCWSTR>(delegate.vtable),&pinnedOwner)||
+       !GetModuleHandleExW(pin,
+           reinterpret_cast<LPCWSTR>(delegate.createMethod),&pinnedMethod))
         return Error{ErrorCode::Unavailable,
             "Cannot pin native factory callback lifetimes"};
     state.downstreamNext.store(
@@ -759,8 +794,9 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
         reinterpret_cast<void*>(delegate.createMethod),
         reinterpret_cast<void*>(&nativeFactoryCreateProxy));
     if(const auto error=std::get_if<Error>(&applied))return *error;
-    spdlog::info("Installed {}: SHA256={}; tableRVA=0x{:x}; slot={}; methodRVA=0x{:x}; native lower creation pass-through",
-        site.id,id.hash,site.tableRva,site.slot,site.methodRva);
+    spdlog::info("Installed {}: tableSHA256={}; tableRVA=0x{:x}; slot={}; priorMethodRVA=0x{:x}; native lower creation pass-through",
+        nativeOwner?site.id:foreign.id,id.hash,site.tableRva,site.slot,
+        nativeOwner?site.methodRva:foreign.methodRva);
     return true;
 }
 HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,

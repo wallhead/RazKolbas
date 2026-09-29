@@ -35,6 +35,19 @@ const OwnedRouteSite& reshade673SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade673SwapGetDescSite() noexcept;
 const OwnedRouteSite& reshade680FactoryCreateSite() noexcept;
 const OwnedRouteSite& win11DxgiFactoryCreateSite() noexcept;
+// Streamline owns the System32 DXGI factory slot after slUpgradeInterface.
+// Its method belongs to a different image than the factory vtable.
+struct ForeignFactoryMethodSite {
+    std::string_view id,moduleSha256;
+    std::size_t fileSize{};
+    std::uint32_t imageSize{},methodRva{};
+    std::array<std::uint8_t,16> prologue{};
+};
+const ForeignFactoryMethodSite& streamline2141FactoryCreateSite() noexcept;
+Result<bool> validateForeignFactoryMethod(
+    std::span<const std::uint8_t> image,std::uintptr_t moduleBase,
+    std::string_view verifiedFileHash,std::size_t verifiedFileSize,
+    std::uintptr_t actualMethod,const ForeignFactoryMethodSite& site);
 const OwnedRouteSite& reshade680SwapGetBufferSite() noexcept;
 const OwnedRouteSite& reshade680SwapGetDescSite() noexcept;
 const OwnedRouteSite* findFactoryCreateSite(std::string_view hash) noexcept;

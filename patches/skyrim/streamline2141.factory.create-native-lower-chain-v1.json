@@ -1,0 +1,46 @@
+{
+  "id": "streamline2141.factory.create-native-lower-chain-v1",
+  "purpose": "Chain a verified Streamline 2.14.1 CreateSwapChain interposer already owning System32 DXGI factory slot 10, then observe the raw lower swap beneath ReShade.",
+  "target": {
+    "table_module": "System32/dxgi.dll",
+    "table_sha256": "25678116473558a56524b5b391f66f5c81febe8b2c463422f35807f77f3207c1",
+    "table_rva": "0xa1428",
+    "method_module": "sl.interposer.dll",
+    "method_sha256": "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c",
+    "method_file_size": 652928,
+    "method_image_size": 663552,
+    "architecture": "x86-64"
+  },
+  "location": {
+    "table_slot": 10,
+    "method_rva": "0x26510",
+    "method_prologue_hex": "40555356574154415541564157488d6c"
+  },
+  "original": {
+    "pointer": "loaded sl.interposer.dll base + 0x26510",
+    "validation": "Exact ReShade wrapper and System32 DXGI identities, current slot pointer, method-owner module hash/size/image/prologue and RVA must all match. Unknown hooks are not replaced."
+  },
+  "replacement": {
+    "builder": "PointerPatch::apply",
+    "representation": "Atomic compare/exchange of the DXGI factory vtable pointer with a process-lifetime callback. No code or disk bytes are modified."
+  },
+  "abi": {
+    "calling_convention": "Windows x64 IDXGIFactory::CreateSwapChain",
+    "arguments": "IDXGIFactory*, IUnknown* device, DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**",
+    "behavior": "Call the exact saved Streamline method once and preserve its HRESULT/output. Observe the selected raw swap read-only. The current build does not initialize Streamline or enable FG in Skyrim."
+  },
+  "lifetime": {
+    "installation": "Inside the verified ReShade factory callback before its downstream CreateSwapChain call.",
+    "ownership": "Pin RazKolbas, System32 DXGI and the Streamline method module; retain the saved method in a process-lifetime lease.",
+    "removal": "No hot removal while callback execution is possible; process exit removes it."
+  },
+  "recovery": {
+    "disable": "Add streamline2141.factory.create-native-lower-chain-v1 to Patching.DisabledPatchIds and restart Skyrim.",
+    "failure_scope": "Any identity or pointer mismatch leaves the existing chain untouched; the outer ReShade factory call continues."
+  },
+  "evidence": [
+    "Separate-process probe loaded the exact installed ReShade 6.8 wrapper and Streamline 2.14.1, observed native DXGI factory slot 10 owned by sl.interposer.dll RVA 0x26510, then chained it below ReShade.",
+    "Capstone 5 decoded exact-hash method 0x26510, including a downstream call with the original four CreateSwapChain arguments.",
+    "Focused standalone ReShade facade probe reported two actual presentations for eight FG-On submissions and completion fence values 1 through 8; no Skyrim FG-On result exists."
+  ]
+}

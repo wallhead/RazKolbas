@@ -48,6 +48,32 @@ const OwnedRouteSite& win11DxgiFactoryCreateSite() noexcept {
          0x24,0x68,0xff,0xff}};
     return site;
 }
+const ForeignFactoryMethodSite& streamline2141FactoryCreateSite() noexcept {
+    static constexpr ForeignFactoryMethodSite site{
+        "streamline2141.factory.create-native-lower-chain-v1",
+        "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c",
+        652928,0xa2000,0x26510,
+        {0x40,0x55,0x53,0x56,0x57,0x41,0x54,0x41,
+         0x55,0x41,0x56,0x41,0x57,0x48,0x8d,0x6c}};
+    return site;
+}
+Result<bool> validateForeignFactoryMethod(
+    std::span<const std::uint8_t> image,std::uintptr_t moduleBase,
+    std::string_view verifiedFileHash,std::size_t verifiedFileSize,
+    std::uintptr_t actualMethod,const ForeignFactoryMethodSite& site) {
+    if(site.id.empty()||site.moduleSha256.size()!=64||
+       verifiedFileHash!=site.moduleSha256||verifiedFileSize!=site.fileSize||
+       image.size()!=site.imageSize||!moduleBase||
+       moduleBase>std::numeric_limits<std::uintptr_t>::max()-site.imageSize||
+       site.methodRva>image.size()||
+       site.prologue.size()>image.size()-site.methodRva||
+       actualMethod!=moduleBase+site.methodRva)
+        return Error{ErrorCode::Conflict,"Foreign factory method identity differs"};
+    if(!std::equal(site.prologue.begin(),site.prologue.end(),
+            image.begin()+site.methodRva))
+        return Error{ErrorCode::Conflict,"Foreign factory method prologue differs"};
+    return true;
+}
 const OwnedRouteSite& reshade680SwapGetBufferSite() noexcept {
     static constexpr OwnedRouteSite site{"reshade680.swap.get-buffer-owned-scene-v1",
         reshade680Hash,5255448,0x534000,0x3ee960,0x14c510,9,

@@ -50,3 +50,7 @@ resource retirement. Therefore **Skyrim FG-On has not run**. The production
 0.1.128 pass-through hook currently expects the native System32 DXGI method
 at slot 10 and does not load Streamline; an FG-On path must explicitly
 recognize and chain this pinned interposer-owned slot.
+
+Source 0.1.129 adds that exact interposer-owned slot as a separate guarded
+pass-through profile. It still does not initialize Streamline or enable FG
+in Skyrim; the V5.4 installation remains 0.1.128 until a later bundled run.

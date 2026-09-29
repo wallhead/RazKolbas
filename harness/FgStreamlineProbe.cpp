@@ -100,8 +100,10 @@ int wrapFacadeWithReshade(const wchar_t* path,ID3D11Device* d11,
     bool streamlineSlot=false;
     if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
         reinterpret_cast<LPCWSTR>(facts.createMethod),&methodModule)) {
+        const auto& foreign=rk::streamline2141FactoryCreateSite();
         wchar_t methodPath[32768]{};
-        GetModuleFileNameW(methodModule,methodPath,32768);
+        const auto methodPathLength=GetModuleFileNameW(methodModule,
+            methodPath,32768);
         std::wcout<<L"ReShade delegate slot10 owner="<<methodPath<<L'\n';
         const auto methodHash=rk::sha256File(std::filesystem::path(methodPath));
         const auto methodBase=reinterpret_cast<std::uintptr_t>(methodModule);
@@ -109,11 +111,16 @@ int wrapFacadeWithReshade(const wchar_t* path,ID3D11Device* d11,
             (facts.createMethod-methodBase)<<std::dec<<" hash="<<
             (std::holds_alternative<std::string>(methodHash)?
                 std::get<std::string>(methodHash):"unreadable")<<'\n';
-        streamlineSlot=std::filesystem::path(methodPath).filename()==
-            L"sl.interposer.dll"&&
+        streamlineSlot=methodPathLength&&methodPathLength<32768&&
+            std::filesystem::path(methodPath).filename()==
+                L"sl.interposer.dll"&&
             std::holds_alternative<std::string>(methodHash)&&
-            std::get<std::string>(methodHash)==
-                "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c";
+            std::filesystem::file_size(methodPath)==foreign.fileSize&&
+            std::holds_alternative<bool>(rk::validateForeignFactoryMethod(
+                {reinterpret_cast<const std::uint8_t*>(methodBase),
+                    foreign.imageSize},methodBase,
+                std::get<std::string>(methodHash),foreign.fileSize,
+                facts.createMethod,foreign));
         FreeLibrary(methodModule);
     }
     if(!std::holds_alternative<std::string>(nativeHash)||
@@ -530,7 +537,7 @@ int wmain(int argc,wchar_t** argv) {
        std::wcscmp(argv[2],L"--facade")&&
        std::wcscmp(argv[2],L"--on")&&
        std::wcscmp(argv[2],L"--facade-on"))) {
-        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on|--facade-on|--reshade-facade <absolute ReShade dxgi.dll>]\n";
+        std::wcerr<<L"Usage: RazKolbasFgStreamlineProbe <absolute SDK bin/x64> [--swap|--facade|--on|--facade-on|--reshade-facade <absolute ReShade dxgi.dll>|--reshade-facade-on <absolute ReShade dxgi.dll>]\n";
         return 1;
     }
     const wchar_t* pluginPaths[]{argv[1]};
