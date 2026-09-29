@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include <wrl/client.h>
 
 namespace {
@@ -97,4 +98,24 @@ TEST_CASE("ReShade factory delegate probe reads the bounded native vtable slot",
     REQUIRE(facts.methodExecutable);
     REQUIRE_FALSE(rk::inspectReshadeFactoryDelegate(
         reinterpret_cast<IDXGIFactory*>(1)).methodExecutable);
+}
+
+TEST_CASE("ReShade delegate site selects the factory table, not the swap table",
+    "[factory_create_trace]") {
+    const auto& site=rk::reshade680FactoryCreateSite();
+    void* factoryMethods[11]{};
+    struct Wrapper { void** table; void* delegate; } wrapper{factoryMethods,nullptr};
+    const auto table=reinterpret_cast<std::uintptr_t>(factoryMethods);
+    const auto base=table-site.tableRva;
+    const auto next=reinterpret_cast<rk::FactoryCreateFn>(base+site.methodRva);
+    REQUIRE(rk::isReshadeFactoryDelegateSite(
+        reinterpret_cast<IDXGIFactory*>(&wrapper),base,site.moduleSha256,
+        next,site));
+    REQUIRE_FALSE(rk::isReshadeFactoryDelegateSite(
+        reinterpret_cast<IDXGIFactory*>(&wrapper),base,"different",next,site));
+    void* swapMethods[11]{};
+    wrapper.table=swapMethods;
+    REQUIRE_FALSE(rk::isReshadeFactoryDelegateSite(
+        reinterpret_cast<IDXGIFactory*>(&wrapper),base,site.moduleSha256,
+        next,site));
 }

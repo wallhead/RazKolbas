@@ -38,9 +38,13 @@ bytes/object identity, preserve competing hook owners, guard reentrancy and
 restore or fail closed. Do not replace the nested/outer pointer based solely
 on this disassembly.
 
-The 0.1.126 game build adds only a guarded read-only runtime observation of
-`[factory+8]`, that object's vtable and its slot-10 method. It checks the
-exact ReShade SHA, table RVA and original method before reading; `ReadProcessMemory`
-and page protection checks prevent blindly dereferencing a candidate. A
-synthetic bounded-memory fixture passes in Debug and Release. The installed
-run has not yet occurred, so the delegate's actual identity remains unknown.
+The user-started 0.1.126 game run on 2026-09-29 confirmed the exact ReShade
+factory CreateSwapChain trace and nested swap, but emitted no delegate probe
+line. Inspection found that the new guard compared the returned *swap-chain*
+vtable RVA (`0x3ee960`) to the factory vtable RVA (`0x3ee350`), so the
+read-only probe never executed. The 0.1.127 correction reads the factory's
+own vtable in a bounded operation and compares it to the factory RVA and
+original method in the exact ReShade module. The actual delegate identity is
+still unknown until a 0.1.127 game run. An external `OpenProcess` read of the
+running 0.1.126 game was denied with Windows error 5, so no live-memory result
+is inferred from that attempt.

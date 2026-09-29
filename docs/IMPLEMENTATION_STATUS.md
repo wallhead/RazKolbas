@@ -1,5 +1,33 @@
 # Implementation checkpoint
 
+## Installed 0.1.127 factory-site guard correction (2026-09-29)
+
+The user-started 0.1.126 V5.4 run confirmed the pinned ReShade 6.8 factory
+trace, returned swap and D3D11 preflight in `RazKolbas.log` at 19:41:58–59.
+Later log entries show the existing owned-scene path reaching frame 40200 and
+a successful observed Present. The new factory delegate line was absent.
+Source inspection identified a guard error: it compared the returned swap
+vtable RVA `0x3ee960` to the factory vtable RVA `0x3ee350`, so the read-only
+delegate probe was skipped. This run provides **no** native delegate identity
+and **no** game FG result. An external `OpenProcess` read returned Windows
+error 5 (access denied); `Stop-Process` was likewise denied, so the user must
+close the game before installation.
+
+0.1.127 checks the factory object's own vtable and the exact ReShade method
+and hash. A new regression fixture distinguishes factory and swap vtables.
+Debug and Release builds passed **57/57** and **60/60** CTest groups. The
+full nine-entry archive at
+`D:/TESV54BETA/BETA_TRUEAE_V54/downloads/RazKolbas-0.1.127-fg-factory-delegate.zip`
+has SHA-256
+`4b47f189943f4fdbc77e933b2345b4a8f9fb0bce0deea2d28b87eaa2eb6ac302`;
+all ZIP contents match the eight-payload stage manifest. The new DLL SHA-256
+is `2d314a7e403d0198beed523e0af5ccd8f52b554b5dac6fe97d110f211ec2300f`.
+The complete prior isolated mod was copied to ignored
+`artifacts/local/mo2-install-backup-0.1.127-2026-09-29` after Skyrim exited.
+The V5.4 `mods/RazKolbas` DLL and manifest were replaced; all eight installed
+payload hashes match the stage manifest. **0.1.127 has not run in Skyrim.**
+The next step is a user-started game run to observe the actual delegate.
+
 ## Installed 0.1.126 guarded ReShade factory delegate probe (2026-09-29)
 
 The installed V5.4 MO2 build adds one read-only structural observation of
@@ -17,9 +45,8 @@ all eight ZIP and installed MO2 payload hashes match the stage manifest.
 The installed DLL SHA-256 is
 `e34123286c896d0c1f47515c113d8470a32a131e0c5182ef38ccd2ff50627441`.
 The previous complete isolated mod is backed up outside Git under
-`artifacts/local/mo2-install-backup-0.1.126-2026-09-29`. Skyrim 0.1.126
-and its new log line are **NOT RUN**. The next action is a user-started
-Skyrim run to verify the actual runtime delegate before any lower-owner hook.
+`artifacts/local/mo2-install-backup-0.1.126-2026-09-29`. The later
+user-started game run exposed the guard error recorded above.
 
 ## Standalone D3D11 facade plus DLSS-G On (2026-09-29)
 

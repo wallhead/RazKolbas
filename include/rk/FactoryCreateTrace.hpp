@@ -2,8 +2,10 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <cstdint>
+#include <string_view>
 
 namespace rk {
+struct OwnedRouteSite;
 struct ReshadeFactoryDelegateFacts {
     std::uintptr_t delegate{},vtable{},createMethod{};
     bool methodExecutable{};
@@ -15,6 +17,10 @@ ReshadeFactoryDelegateFacts inspectReshadeFactoryDelegate(
     IDXGIFactory* verifiedReshadeFactory) noexcept;
 using FactoryCreateFn=HRESULT(STDMETHODCALLTYPE*)(IDXGIFactory*,IUnknown*,
     DXGI_SWAP_CHAIN_DESC*,IDXGISwapChain**);
+// Verify the wrapper's own vtable, not the swap chain returned by it.
+bool isReshadeFactoryDelegateSite(IDXGIFactory* factory,
+    std::uintptr_t moduleBase,std::string_view moduleHash,
+    FactoryCreateFn originalMethod,const OwnedRouteSite& site) noexcept;
 using FactoryCreatedFn=void(*)(IDXGIFactory*,IUnknown*,
     const DXGI_SWAP_CHAIN_DESC*,IDXGISwapChain*,HRESULT,void*) noexcept;
 HRESULT observeFactoryCreate(FactoryCreateFn next,IDXGIFactory* factory,

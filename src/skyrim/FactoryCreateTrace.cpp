@@ -1,8 +1,23 @@
 #include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include <Windows.h>
 #include <limits>
 
 namespace rk {
+bool isReshadeFactoryDelegateSite(IDXGIFactory* factory,
+    std::uintptr_t moduleBase,std::string_view moduleHash,
+    FactoryCreateFn originalMethod,const OwnedRouteSite& site) noexcept {
+    if(!factory||!moduleBase||moduleHash!=site.moduleSha256||
+       moduleBase>std::numeric_limits<std::uintptr_t>::max()-site.methodRva||
+       reinterpret_cast<std::uintptr_t>(originalMethod)!=
+           moduleBase+site.methodRva)return false;
+    std::uintptr_t table{};
+    SIZE_T count{};
+    if(!ReadProcessMemory(GetCurrentProcess(),factory,&table,sizeof(table),
+           &count)||count!=sizeof(table)||table<moduleBase)return false;
+    return table-moduleBase==site.tableRva;
+}
+
 ReshadeFactoryDelegateFacts inspectReshadeFactoryDelegate(
     IDXGIFactory* verifiedReshadeFactory) noexcept {
     ReshadeFactoryDelegateFacts facts{};

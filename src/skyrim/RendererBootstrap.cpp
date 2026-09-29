@@ -596,12 +596,18 @@ void factoryCreated(IDXGIFactory* factory,IUnknown* device,
             static_cast<std::uint32_t>(fgFacts.getD3D12Device),
             fgFacts.expectedDeviceIdentity);
         const auto& factorySite=reshade680FactoryCreateSite();
-        const auto factoryBase=reinterpret_cast<std::uintptr_t>(owner);
-        if(owner&&tableId.hash==factorySite.moduleSha256&&
-           reinterpret_cast<std::uintptr_t>(table)-factoryBase==
-               factorySite.tableRva&&
-           reinterpret_cast<std::uintptr_t>(state->next)==
-               factoryBase+factorySite.methodRva) {
+        HMODULE factoryOwner{};
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(state->next),&factoryOwner);
+        struct FactoryModuleRef {
+            HMODULE value;
+            ~FactoryModuleRef(){if(value)FreeLibrary(value);}
+        } factoryRef{factoryOwner};
+        const auto factoryId=factoryOwner?identify(factoryOwner):
+            FileIdentity{"unowned",0};
+        if(isReshadeFactoryDelegateSite(factory,
+           reinterpret_cast<std::uintptr_t>(factoryOwner),factoryId.hash,
+           state->next,factorySite)) {
             const auto delegate=inspectReshadeFactoryDelegate(factory);
             HMODULE delegateMethodOwner{};
             if(delegate.methodExecutable)
