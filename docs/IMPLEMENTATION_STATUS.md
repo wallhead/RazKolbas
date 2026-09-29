@@ -1,5 +1,22 @@
 # Implementation checkpoint
 
+## Private ReShade/facade FG-Off boundary (2026-09-29)
+
+The isolated private-loader probe now creates a Streamline-owned D3D12 lower
+swap, inserts a D3D11 facade at the exact ReShade native delegate, and receives
+a **distinct ReShade outer swap**. A normal D3D11 texture blocked ReShade's
+sRGB render-target view; an auxiliary D3D11 swap-chain back buffer supports
+both view formats. ReShade initialized its effect runtime and three upper
+Presents reached the lower swap with FG Off. The probe and private shutdown
+returned success. See `docs/re/FG_PRIVATE_FACADE_RESHADE_OFF_2026-09-29.md`.
+
+Release CTest passed **60/60**, Debug **57/57**. This is an offline proof only:
+external-buffer resize is explicitly unsupported, no game interception uses
+the private loader, and no FG-On frame has been observed. V5.4 MO2 remains
+0.1.128 with FG Off; Skyrim was not started. Next is transactional auxiliary
+buffer resize/retirement, then guarded game binding and a bundled user-started
+test.
+
 ## Branch review 34 corrections (2026-09-29)
 
 The supplied branch review's new probe and loader findings were checked

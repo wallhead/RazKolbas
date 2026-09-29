@@ -4,16 +4,19 @@
 #include <atomic>
 
 namespace rk {
-// Offline COM proof of the V5.4 game-facing swap contract. Resize and wrapper
-// interception are deliberately gated until their lifetime tests exist.
+// Offline COM proof of the V5.4 game-facing swap contract. Game interception
+// remains gated until external-buffer resize and lifetime tests exist.
 class FgD3D11SwapFacade final : public IDXGISwapChain4 {
 public:
     // Pass verifiedLowerNative only after proving its COM identity through
-    // the lower proxy's official native-interface API.
+    // the lower proxy's official native-interface API. An external D3D11
+    // buffer can preserve swap-chain sRGB view compatibility, but ResizeBuffers
+    // fails closed until that buffer's owner can be resized transactionally.
     static Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
-        ID3D12Device* verifiedLowerNative=nullptr);
+        ID3D12Device* verifiedLowerNative=nullptr,
+        ID3D11Texture2D* externalRenderBuffer=nullptr);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;

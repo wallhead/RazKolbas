@@ -79,7 +79,7 @@ FgD3D11PresentBridge::~FgD3D11PresentBridge() noexcept {
 Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
     ID3D12CommandQueue* queue,IDXGISwapChain* lower,
-    ID3D12Device* verifiedLowerNative) {
+    ID3D12Device* verifiedLowerNative,ID3D11Texture2D* externalRenderBuffer) {
     if(!d11||!context||!d12||!queue||!lower)
         return Error{ErrorCode::InvalidInput,"FG D3D11 bridge requires all devices, context, queue and lower swap"};
     auto lowerResult=FgLowerSwap::create(lower);
@@ -140,7 +140,21 @@ Result<std::unique_ptr<FgD3D11PresentBridge>> FgD3D11PresentBridge::create(
     source.Usage=D3D11_USAGE_DEFAULT;
     source.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> render;
-    if(FAILED(d11->CreateTexture2D(&source,nullptr,&render)))
+    if(externalRenderBuffer) {
+        Microsoft::WRL::ComPtr<ID3D11Device> renderDevice;
+        D3D11_TEXTURE2D_DESC actual{};
+        externalRenderBuffer->GetDevice(&renderDevice);
+        externalRenderBuffer->GetDesc(&actual);
+        if(!sameIdentity(renderDevice.Get(),d11)||
+           actual.Width!=source.Width||actual.Height!=source.Height||
+           actual.Format!=source.Format||actual.MipLevels!=1||
+           actual.ArraySize!=1||actual.SampleDesc.Count!=1||
+           actual.SampleDesc.Quality!=0||
+           !(actual.BindFlags&D3D11_BIND_RENDER_TARGET))
+            return Error{ErrorCode::Conflict,"External FG render buffer does not match the D3D11 device or lower swap"};
+        render=externalRenderBuffer;
+        bridge->externalRenderBuffer_=true;
+    } else if(FAILED(d11->CreateTexture2D(&source,nullptr,&render)))
         return Error{ErrorCode::Unavailable,"Cannot create FG D3D11 render buffer"};
     bridge->render_.push_back(std::move(render));
     for(UINT i=0;i<desc.BufferCount;++i) {
@@ -251,6 +265,7 @@ HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcep
 }
 HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     try {
+    if(externalRenderBuffer_)return DXGI_ERROR_UNSUPPORTED;
     if(prepared_||poisoned_)return DXGI_ERROR_INVALID_CALL;
     DXGI_SWAP_CHAIN_DESC old{};
     auto hr=lower_.getDesc(&old);

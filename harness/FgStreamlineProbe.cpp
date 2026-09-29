@@ -26,6 +26,7 @@ int probeSyntheticOn(ID3D12Device*, ID3D12CommandQueue*, IDXGISwapChain1*,
     IDXGIAdapter1*, bool, const wchar_t*);
 
 namespace {
+bool sameIdentity(IUnknown* a,IUnknown* b);
 struct ReShadeInsertion {
     rk::FactoryCreateFn original{};
     IDXGIFactory* nativeFactory{};
@@ -154,7 +155,8 @@ int wrapFacadeWithReshade(const wchar_t* path,ID3D11Device* d11,
     std::cout<<"ReShade wrapper CreateSwapChain=0x"<<std::hex<<
         static_cast<std::uint32_t>(result)<<std::dec<<
         " facadeSubstitutions="<<insertion.substitutions.load()<<
-        " upper="<<static_cast<bool>(upper)<<'\n';
+        " upper="<<static_cast<bool>(upper)<<
+        " sameIdentity="<<sameIdentity(upper.Get(),facade)<<'\n';
     if(!std::holds_alternative<bool>(restored))return 71;
     if(FAILED(result)||!upper||insertion.substitutions.load()!=1)return 72;
     return 0;
