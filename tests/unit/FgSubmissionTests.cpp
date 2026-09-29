@@ -57,6 +57,8 @@ rk::FgSourceFrame frame() {
 }
 rk::FgCameraData camera() {
     rk::FgCameraData result{};
+    result.source=17;result.generation=3;result.presentToken=41;
+    result.resetEpoch=9;result.sampleRevision=72;
     for(auto* matrix:{&result.viewToClip,&result.clipToView,
         &result.clipToPrevClip,&result.prevClipToClip})
         for(unsigned i=0;i<4;++i)(*matrix)[i*4+i]=1.0f;
@@ -112,6 +114,21 @@ TEST_CASE("FG submission binds the exact same-frame resources and camera",
     REQUIRE(record.physicalOutputIndex==1);
     REQUIRE(record.resources[4].Get()==input.resources[4].Get());
     REQUIRE(record.camera.mvecScale==view.mvecScale);
+    REQUIRE(record.camera.sampleRevision==72);
+}
+
+TEST_CASE("FG submission accepts a noncommuting temporal transform and inverse",
+    "[fg_submission]") {
+    Warp gpu;
+    const auto source=frame();
+    const auto planes=ui(gpu,source);
+    const auto input=lease(gpu,source,planes);
+    auto view=camera();
+    view.clipToPrevClip={2,0,0,0, 0,3,0,0, 0,0,1,0, 4,5,0,1};
+    view.prevClipToClip={0.5f,0,0,0, 0,1.0f/3,0,0,
+        0,0,1,0, -2,-5.0f/3,0,1};
+    REQUIRE(std::holds_alternative<rk::FgPreparedSubmission>(
+        rk::prepareFgSubmission(source,input,planes,view,1,2)));
 }
 
 TEST_CASE("FG submission rejects altered token, UI, guide and camera",
@@ -147,6 +164,18 @@ TEST_CASE("FG submission rejects altered token, UI, guide and camera",
     auto badCamera=view;badCamera.mvecScale[0]=0;
     rejected(input,planes,badCamera);
     badCamera=view;badCamera.viewToClip[0]=std::numeric_limits<float>::quiet_NaN();
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.clipToPrevClip[12]=1.0f;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.source++;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.generation++;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.presentToken++;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.resetEpoch++;
+    rejected(input,planes,badCamera);
+    badCamera=view;badCamera.sampleRevision=0;
     rejected(input,planes,badCamera);
     rejected(input,planes,view,2,2);
 }

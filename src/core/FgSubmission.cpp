@@ -1,6 +1,7 @@
 #include "rk/FgSubmission.hpp"
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 namespace rk {
 namespace {
@@ -21,9 +22,29 @@ bool matrix(const std::array<float,16>& values) noexcept {
     return finite(values)&&std::any_of(values.begin(),values.end(),
         [](float value){return value!=0.0f;});
 }
+bool inversePair(const std::array<float,16>& forward,
+    const std::array<float,16>& reverse) noexcept {
+    constexpr double tolerance=0.01;
+    for(const auto* pair:{&forward,&reverse}) {
+        const auto& left=*pair;
+        const auto& right=pair==&forward?reverse:forward;
+        for(std::size_t row=0;row<4;++row)
+            for(std::size_t column=0;column<4;++column) {
+                double result=0;
+                for(std::size_t term=0;term<4;++term)
+                    result+=static_cast<double>(left[row*4+term])*
+                        right[term*4+column];
+                const double expected=row==column?1.0:0.0;
+                if(!std::isfinite(result)||
+                   std::fabs(result-expected)>tolerance)return false;
+            }
+    }
+    return true;
+}
 bool cameraReady(const FgCameraData& camera) noexcept {
     return matrix(camera.viewToClip)&&matrix(camera.clipToView)&&
         matrix(camera.clipToPrevClip)&&matrix(camera.prevClipToClip)&&
+        inversePair(camera.clipToPrevClip,camera.prevClipToClip)&&
         finite(camera.position)&&finite(camera.up)&&
         finite(camera.right)&&finite(camera.forward)&&
         finite(camera.jitter)&&finite(camera.mvecScale)&&
@@ -62,6 +83,12 @@ Result<FgPreparedSubmission> prepareFgSubmission(
        physicalOutputIndex>=swapBufferCount||!cameraReady(camera))
         return Error{ErrorCode::InvalidInput,
             "FG frame, camera or physical output index is invalid"};
+    if(camera.source!=frame.source||camera.generation!=frame.generation||
+       camera.presentToken!=frame.presentToken||
+       camera.resetEpoch!=frame.resetEpoch||!camera.sampleRevision||
+       camera.sampleRevision==UINT64_MAX)
+        return Error{ErrorCode::Conflict,
+            "FG camera sample belongs to a different real frame"};
     if(!lease.serial||!lease.lastCopy.producer||!lease.lastCopy.copy||
        lease.source!=frame.source||lease.generation!=frame.generation||
        lease.presentToken!=frame.presentToken||

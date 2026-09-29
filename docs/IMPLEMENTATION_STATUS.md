@@ -1,5 +1,21 @@
 # Implementation checkpoint
 
+## AIO DLSS-G camera/token RE30 audit (2026-09-29)
+
+The supplied RE30 archive passed an independent 121-file manifest check;
+its exact AIO host/PDPerf identities and 60 original instruction-byte
+anchors match the pristine local binaries. Its named `SetCameraData` path
+belongs to a separate Latewarp owner, while the RTTI-identified Streamline
+method's live game-camera producer remains unknown. Host source number and
+SL frame counter are distinct; synthetic CPU schedules demonstrate stale
+constants and log-and-continue token failures, not actual Skyrim failures.
+Source-only `FgCameraData` now requires a matching real-frame stamp and
+nonzero sample revision. Submission also checks the row-major temporal
+matrix/inverse pair. Debug and Release each passed 54/54 CTest groups. The
+installed 0.1.116 DLL and armed UI capture are
+unchanged; Skyrim FG-On and game camera validation are **NOT RUN**. See
+`docs/re/AIO_DLSSG_CAMERA_TOKENS_RE30_AUDIT.md`.
+
 ## V5.4 UI capture and diagnostic trigger correction (2026-09-29)
 
 The user-started 0.1.115 run produced verified SR, empty first-frame UI,
