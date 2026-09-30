@@ -135,6 +135,13 @@ CaptureFirstDlssFrame = false
 ; One cold and one post-world loading frame: bounded reduced/native raw snapshots.
 ; Restart required. Can pause each sampled frame; no camera or FG observation.
 ProbeLoadingPicture = false
+; FG-off A/B trial: draw post-Main-Menu loading art in the reduced scene and
+; publish spatially at Present. Loading UI is scaled with the picture.
+; Restart required; leave Off after diagnosis unless validated in game.
+ProbeLoadingReducedRoute = false
+; FG-off trial: retain the native loading picture across HUD Menu's observed
+; full-target wipe, then allow later loading-menu draws. Restart required.
+ProbeLoadingNativeRestore = false
 ; One-frame experimental transparent UI route and raw alpha/composite capture.
 ; Requires a game restart. Frame generation remains off during this probe.
 ProbeDirectUiPlane = false

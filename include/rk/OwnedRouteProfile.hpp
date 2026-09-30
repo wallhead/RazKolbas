@@ -12,8 +12,8 @@ namespace rk {
 // A transient source rejection may select spatial fallback for the scene, but
 // must not move publication after UI and change composition order.
 constexpr bool shouldUseMenuPublication(bool routeActivated,bool sourceReady,
-    bool routeAvailable) noexcept {
-    return routeAvailable&&(routeActivated||sourceReady);
+    bool routeAvailable,bool deferLoading=false) noexcept {
+    return !deferLoading&&routeAvailable&&(routeActivated||sourceReady);
 }
 // A sparse readback admits the first provider frame. Once NGX has successfully
 // published for this exact owned-scene generation, later diagnostic samples do

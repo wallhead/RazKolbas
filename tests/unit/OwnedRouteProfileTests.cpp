@@ -39,6 +39,7 @@ TEST_CASE("Native UI publication boundary remains stable after admission",
     REQUIRE(rk::shouldUseMenuPublication(false,true,true));
     REQUIRE(rk::shouldUseMenuPublication(true,false,true));
     REQUIRE_FALSE(rk::shouldUseMenuPublication(true,true,false));
+    REQUIRE_FALSE(rk::shouldUseMenuPublication(true,true,true,true));
 }
 
 TEST_CASE("Successful menu provider admission remains stable within its scene generation",

@@ -22,6 +22,7 @@
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/NativeUiRedirector.hpp"
 #include "rk/LoadingPictureProbe.hpp"
+#include "rk/LoadingNativeBackground.hpp"
 #include "rk/UiPlaneComposite.hpp"
 #include "rk/HudMovieViewport.hpp"
 #ifdef RK_WITH_NGX
@@ -105,11 +106,20 @@ struct WorldState {
         std::vector<ProbeImage> images;
         std::vector<std::string> names;
         std::string lastDigest;
+        bool loadingProbe{};
     };
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
     bool menuUiSequenceAttempted{};
     bool probeLoadingPicture{};
+    bool probeLoadingReducedRoute{};
+    bool probeLoadingNativeRestore{};
+    bool loadingRouteSawMainMenu{},loadingReducedRouteLogged{};
+    bool loadingRestoreLogged{},loadingRestoreFailureLogged{};
+    std::uint64_t loadingRestoreFrame{},loadingRestoreCapturedFrame{};
+    unsigned loadingRestoreOrdinal{};
+    bool loadingRestoreSawHud{};
+    LoadingNativeBackground loadingNativeBackground;
     LoadingPictureProbe loadingPictureProbe;
     struct LoadingPictureSequence {
         LoadingPictureSelection selection;
@@ -963,9 +973,88 @@ void armLoadingPictureCapture(WorldState* state,std::uint64_t frame) {
         state->loadingPictureSequence.emplace(WorldState::LoadingPictureSequence{
             *selected,{},{}});
     }
+    if(!state->probeLoadingReducedRoute) {
+        auto* domain=activeOwnedSceneDomain();
+        if(domain&&domain->phase()==ScenePhase::NativeUi&&
+           domain->frame()==frame) {
+            std::scoped_lock lock(state->menuUiSequenceMutex);
+            if(!state->menuUiSequence) {
+                state->menuUiSequence.emplace(WorldState::MenuUiSequence{
+                    frame,0,{},{},{},true});
+                spdlog::info("Loading picture frame {} armed per-menu native target sequence",
+                    frame);
+            }
+        }
+    }
     spdlog::info("Loading picture capture armed at frame {} phase={}",frame,
         selected->phase==LoadingPicturePhase::Cold?"cold":"after-world");
     captureLoadingPictureSnapshot(state,frame,"before-first-PostDisplay",true);
+}
+void restoreLoadingNativeBackgroundAtMenuEntry(WorldState* state,
+    std::uint64_t frame) {
+    if(!state||!state->probeLoadingNativeRestore||
+       !state->loadingRouteSawMainMenu||
+       !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)||
+       titleMenuOnStack(state))return;
+    if(state->loadingRestoreFrame!=frame) {
+        state->loadingRestoreFrame=frame;
+        state->loadingRestoreCapturedFrame=0;
+        state->loadingRestoreOrdinal=0;
+        state->loadingRestoreSawHud=false;
+    }
+    const auto ordinal=state->loadingRestoreOrdinal++;
+    if(ordinal>=16)return;
+    const auto [identity,name]=menuAtOrdinal(state,ordinal);
+    (void)identity;
+    auto* domain=activeOwnedSceneDomain();
+    if(!domain||domain->phase()!=ScenePhase::NativeUi||
+       domain->frame()!=frame||domain->renderThread()!=GetCurrentThreadId())
+        return;
+    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+    const auto context=state->createdContext.load(std::memory_order_relaxed);
+    const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+    if(!device||!context||!swap)return;
+    auto target=acquireNativeFlipTarget(
+        reinterpret_cast<IDXGISwapChain*>(swap),
+        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+    if(const auto error=std::get_if<Error>(&target)) {
+        if(!state->loadingRestoreFailureLogged) {
+            state->loadingRestoreFailureLogged=true;
+            spdlog::warn("Loading native-background trial target unavailable: {}",
+                error->message);
+        }
+        return;
+    }
+    auto* texture=std::get<NativeFlipTarget>(target).texture.Get();
+    auto* immediate=reinterpret_cast<ID3D11DeviceContext*>(context);
+    if(ordinal==0) {
+        const auto hr=state->loadingNativeBackground.capture(immediate,texture,
+            frame,domain->plan().generation);
+        if(SUCCEEDED(hr))state->loadingRestoreCapturedFrame=frame;
+        else if(!state->loadingRestoreFailureLogged) {
+            state->loadingRestoreFailureLogged=true;
+            spdlog::warn("Loading native-background trial capture failed: HRESULT=0x{:08x}",
+                static_cast<std::uint32_t>(hr));
+        }
+    }
+    if(name==RE::HUDMenu::MENU_NAME)state->loadingRestoreSawHud=true;
+    if(name==RE::FaderMenu::MENU_NAME&&state->loadingRestoreSawHud&&
+       state->loadingRestoreCapturedFrame==frame) {
+        const auto hr=state->loadingNativeBackground.restore(immediate,texture,
+            frame,domain->plan().generation);
+        state->loadingRestoreCapturedFrame=0;
+        if(SUCCEEDED(hr)) {
+            if(!state->loadingRestoreLogged) {
+                state->loadingRestoreLogged=true;
+                spdlog::info("Loading native-background trial restored published background after HUD Menu at frame {}; Fader and later menus remain native",
+                    frame);
+            }
+        } else if(!state->loadingRestoreFailureLogged) {
+            state->loadingRestoreFailureLogged=true;
+            spdlog::warn("Loading native-background trial restore failed: HRESULT=0x{:08x}",
+                static_cast<std::uint32_t>(hr));
+        }
+    }
 }
 void completeLoadingPictureCapture(WorldState* state,std::uint64_t frame) {
     captureLoadingPictureSnapshot(state,frame,"pre-Present",false);
@@ -1011,6 +1100,7 @@ void captureMenuUiSnapshot(WorldState* state,std::uint64_t frame,
     std::scoped_lock lock(state->menuUiSequenceMutex);
     if(!state->menuUiSequence||state->menuUiSequence->frame!=frame)return;
     auto& sequence=*state->menuUiSequence;
+    if(sequence.loadingProbe&&sequence.images.size()>=12)return;
     if(std::ranges::find(sequence.names,label)!=sequence.names.end())return;
     auto* domain=activeOwnedSceneDomain();
     const auto device=state->createdDevice.load(std::memory_order_relaxed);
@@ -1050,7 +1140,8 @@ void captureMenuUiEntry(WorldState* state,std::uint64_t frame) {
     {
         std::scoped_lock lock(state->menuUiSequenceMutex);
         if(!state->menuUiSequence||state->menuUiSequence->frame!=frame||
-           state->menuUiSequence->nextOrdinal>=63)return;
+           state->menuUiSequence->nextOrdinal>=
+               (state->menuUiSequence->loadingProbe?16u:63u))return;
         ordinal=state->menuUiSequence->nextOrdinal++;
     }
     const auto [identity,name]=menuAtOrdinal(state,ordinal);
@@ -1547,8 +1638,13 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         sequence,std::get<Error>(sample).message);
             }
         }
-        const auto presented=presentSdrSrFrame(context,scene,display,
-            [&]()->Result<bool> {
+          const auto presented=presentSdrSrFrame(context,scene,display,
+              [&]()->Result<bool> {
+                if(boundary==OwnedPublicationBoundary::PrePresent&&
+                   state->probeLoadingReducedRoute&&state->loadingRouteSawMainMenu&&
+                   namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME))
+                    return Error{ErrorCode::Unavailable,
+                        "Reduced loading-route trial uses spatial publication"};
                 const auto sourceReady=boundary==OwnedPublicationBoundary::MenuDisplay?
                     shouldSubmitOwnedProvider(state->menuSceneGate.ready(),
                         state->menuProviderAdmissionGeneration,
@@ -1870,6 +1966,14 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
             }
             const bool coldTitle=titleMenuOnStack(state);
             const bool coldLoading=namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
+            if(coldTitle)state->loadingRouteSawMainMenu=true;
+            const bool reducedLoading=state->probeLoadingReducedRoute&&
+                state->loadingRouteSawMainMenu&&coldLoading&&!coldTitle;
+            if(reducedLoading&&!state->loadingReducedRouteLogged) {
+                state->loadingReducedRouteLogged=true;
+                spdlog::info("Reduced Loading Menu trial active at frame {}: menu remains on reduced scene until spatial pre-Present publication; provider skipped; FG configured Off",
+                    frame);
+            }
             bool coldMenuReady=false;
             if(frame>12&&!state->ownedSceneGate.ready()&&
                (coldTitle||coldLoading)&&ui->latePassRoutingAvailable()&&
@@ -1905,9 +2009,9 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
                     } else state->ownedNgxInitFailed=true;
                 }
             }
-            if(frame>12&&(coldMenuReady||shouldUseMenuPublication(
+            if(frame>12&&((coldMenuReady&&!reducedLoading)||shouldUseMenuPublication(
                    state->nativeUiRouteActivated,state->menuSceneGate.ready(),
-                   ui->latePassRoutingAvailable()))) {
+                   ui->latePassRoutingAvailable(),reducedLoading))) {
                 if(processOwnedWorldFrame(state,
                     reinterpret_cast<void*>(state->expectedRenderer),frame,
                     OwnedPublicationBoundary::MenuDisplay)&&
@@ -1955,6 +2059,11 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     catch(const std::exception& error) {
         try {spdlog::warn("Loading picture capture arming failed: {}",error.what());}
         catch(...) {}
+    } catch(...) {}
+    try {restoreLoadingNativeBackgroundAtMenuEntry(state,frame);}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Loading native-background trial failed safely: {}",
+            error.what());}catch(...) {}
     } catch(...) {}
     beginNativeHudMovieViewportWindow(state,frame);
 #endif
@@ -3642,6 +3751,12 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Diagnostics.CaptureFirstDlssFrame");
     pending->probeLoadingPicture=
         settings.get<bool>("Diagnostics.ProbeLoadingPicture");
+    pending->probeLoadingReducedRoute=
+        settings.get<bool>("Diagnostics.ProbeLoadingReducedRoute")&&
+        !settings.get<bool>("FrameGeneration.Enabled");
+    pending->probeLoadingNativeRestore=
+        settings.get<bool>("Diagnostics.ProbeLoadingNativeRestore")&&
+        !settings.get<bool>("FrameGeneration.Enabled");
     pending->probeDirectUiPlane=
         settings.get<bool>("Diagnostics.ProbeDirectUiPlane");
     pending->probeFgCameraBuffer=

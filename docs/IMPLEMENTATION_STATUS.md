@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-## 0.1.135 loading-picture probe after native-presentation isolation (2026-09-30)
+## 0.1.136 loading-route trial after pixel capture (2026-09-30)
 
 The user reports a warmer/yellower image with RazKolbas and nearly black
 loading background pictures when loading a save or fast travelling; the
@@ -35,12 +35,20 @@ loading-picture capture now selects one post-menu save-load and one post-world
 loading frame. Release build/CTest passed **64/64** and Debug **59/59**. The
 0.1.135 diagnostic is installed, with only DLL and INI changed; all 14 payload
 hashes match its manifest and the user's other settings are preserved. Game
-runtime evidence for that diagnostic is **NOT RUN**. TRP is a reference for
+runtime evidence for that diagnostic is **RUN**: both save-load and fast-travel
+bundles were captured and the user confirms the darkness persists throughout.
+The native target drops from mean RGB 157/132/92 to 5/5/5 on save load and
+47/48/40 to 9/8/6 on fast travel during menu drawing. Reduced pixels stay
+unchanged; later EndFrame and pre-Present pixels match the dark target. The
+artwork is present, so a missing-artwork hook is not the immediate fix. Source
+0.1.136 adds an opt-in reduced-loading spatial-route A/B trial, default Off.
+Release CTest passed **64/64**, Debug **59/59**. Its game test is **NOT RUN**.
+TRP is a reference for
 current work only, per the user's clarification; no donor code was copied.
 
-**Next: run one user-started save-load and fast travel with FG Off, inspect
-the probe's raw picture stages, then
-fix the evidenced loss. Colour/loading repair unverified; game FG-On NOT RUN.**
+**Next: install the bounded 0.1.136 trial with FG Off, run one user-started
+save-load and fast travel, and compare the loading art and raw reduced/native
+pixels. Colour/loading repair unverified; game FG-On NOT RUN.**
 The external read-only process inspection was denied once, error 5; no retry
 or new game hook. The in-process FG phase diagnostic is deferred while these
 visual regressions are isolated. Details and source/runtime evidence:
@@ -5625,3 +5633,25 @@ the assistant did not start it. Status is
 `EXPERIMENTAL_GUARDED_MENU_BOUNDARY_DLSS_NATIVE_UI_PENDING_GAME_TEST`.
 The next action is a user-started save-load test of visual parity, ENB/ReShade
 ordering and native-size UI after the log reports native UI route activation.
+
+## Current 0.1.138 loading-route checkpoint (2026-09-30)
+
+The 0.1.135 game captures established that the native target changes from
+bright artwork to nearly black during Loading Menu drawing, before Scaleform
+EndFrame; the reduced scene and the later native stages were unchanged. The
+0.1.136 FG-off spatial loading trial made both save and fast-travel artwork
+visible again, but the user reported it was pixelated at the reduced render
+resolution. This is a diagnostic result, not a final-quality repair. TRP's
+spatial loading route is a design reference; no TRP code was copied.
+
+0.1.137 per-menu captures found the native picture nearly black between the
+recorded HUD Menu and Fader Menu call boundaries on both save load and fast
+travel. 0.1.138 is installed as a default-off FG-off hypothesis test: save
+the earlier full-resolution native background and restore it after the
+darkening interval before later menu draws. The WARP restore test passes;
+Release **64/64** and Debug **59/59** CTest groups passed; all 14 installed
+payload hashes match the new manifest. The user has been asked for one save
+load and one fast-travel load. **0.1.137 game capture: RUN; 0.1.138 game
+visual test: NOT RUN; permanent loading repair: OPEN; game FG-On: NOT RUN.**
+Full capture and installation evidence is in
+`docs/re/FG_OFF_VISUAL_REGRESSION_2026-09-30.md`.

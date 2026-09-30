@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/LoadingNativeBackground.hpp"
 #include "rk/ReducedSdrSurface.hpp"
 #include <wrl/client.h>
 #include <array>
@@ -11,6 +12,46 @@ using Microsoft::WRL::ComPtr;
 void STDMETHODCALLTYPE forwardOm(ID3D11DeviceContext* context,UINT count,
     ID3D11RenderTargetView* const* views,ID3D11DepthStencilView* depth) {
     context->OMSetRenderTargets(count,views,depth);
+}
+
+TEST_CASE("WARP loading background survives an intervening native target wipe",
+    "[native_ui]") {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    D3D_FEATURE_LEVEL level{};
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,
+        nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=64;desc.Height=32;desc.MipLevels=1;desc.ArraySize=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> native;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&native)));
+    ComPtr<ID3D11RenderTargetView> view;
+    REQUIRE(SUCCEEDED(device->CreateRenderTargetView(native.Get(),nullptr,&view)));
+    const float bright[4]{0.75f,0.5f,0.25f,1.f};
+    const float black[4]{0,0,0,1};
+    context->ClearRenderTargetView(view.Get(),bright);
+    rk::LoadingNativeBackground background;
+    REQUIRE(SUCCEEDED(background.capture(context.Get(),native.Get(),42,7)));
+    context->ClearRenderTargetView(view.Get(),black);
+    REQUIRE(FAILED(background.restore(context.Get(),native.Get(),43,7)));
+    auto* bound=view.Get();
+    context->OMSetRenderTargets(1,&bound,nullptr);
+    REQUIRE(SUCCEEDED(background.restore(context.Get(),native.Get(),42,7)));
+    desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;
+    desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    ComPtr<ID3D11Texture2D> staging;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&staging)));
+    context->CopyResource(staging.Get(),native.Get());
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    REQUIRE(SUCCEEDED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)));
+    const auto* pixel=static_cast<const std::uint8_t*>(mapped.pData)+
+        16*mapped.RowPitch+32*4;
+    REQUIRE(pixel[0]==191);
+    REQUIRE(pixel[1]==128);
+    REQUIRE(pixel[2]==64);
+    context->Unmap(staging.Get(),0);
 }
 
 TEST_CASE("V5.4 final scene bind is admitted only by its exact UI layout",

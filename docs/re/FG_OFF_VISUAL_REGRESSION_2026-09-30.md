@@ -176,7 +176,179 @@ Installed 0.1.135 hashes:
 - INI: `f4337edfa204495cf59d4c603af07d4670785381adfe623111ed4fd952a04eb1`.
 - Manifest: `db64ad6318c2bab8f4e25f6ec51eae9adc7f7818041f253acbe375f636d9abc9`.
 
-All 14 installed payload hashes match the manifest. **Game loading-picture
-capture and visual repair: NOT RUN. Game FG-On: NOT RUN.** The next evidence is
-one user-started save load and fast travel with FG Off, followed by raw-stage
-inspection and a targeted repair.
+All 14 installed payload hashes match the manifest. The one-shot game captures
+were subsequently **RUN** as described below. Visual repair and game FG-On
+remain **NOT RUN** at this checkpoint.
+
+## 0.1.135 game capture result and bounded 0.1.136 trial
+
+The user loaded the same save and fast-travelled with FG Off, then confirmed
+the artwork was nearly black **throughout** each loading screen. Two complete
+six-snapshot bundles were saved outside Git:
+
+| Context | Frame | Capture manifest SHA-256 |
+|---|---:|---|
+| Save load after Main Menu | 18314 | `ddb48b64fe302f7a1ba4220930013fa4fd373fa231dbc4eb8e81ab79e8c67467` |
+| After-world fast travel | 20180 | `62cf1a702d20e7ccdf75bc6a1ed4d3d777e79e386b2d55ca3925b4a64eda6327` |
+
+The saved 0.1.135 session has 1,167 lines, SHA-256
+`ef169a9eb5033f4f9e279bb179a750707611393aa1043193eb173d918289adfb`.
+Both captures have complete manifests and verified per-stage hashes. In the
+save-load frame, the native target's mean RGB changes from **157/132/92**
+before the first menu PostDisplay to **5/5/5** before Scaleform EndFrame. Fast
+travel changes from **47/48/40** to **9/8/6**. The reduced scene is byte-for-byte
+unchanged across those two stages in each frame. The native target then stays
+byte-for-byte unchanged after EndFrame and through pre-Present. Visual previews
+show the loading artwork and text are present in the very dark target. Thus the
+art is not simply absent, and the dim result is established during the menu
+draw or its native-route handling; later Scaleform flush and pre-Present
+publication do not cause the drop. This does not yet prove the exact draw
+call, blend state or effect owner.
+
+TRP's current HEAD `cbe7504afda28a84fca0b6c040522b6b692d18ca` still
+keeps a separate spatial loading-background evaluation and resets temporal
+history on return to world rendering. It also has an exact Skyrim loading
+transition policy and optional fade for forced artwork. Those are design
+references only; the live RazKolbas capture already contains artwork, so a
+missing-artwork hook would not explain these pixels.
+
+The independent FPS lead is concrete but unproven as the whole cause: TRP's
+pinned interop allocates a ring of command allocators/lists during setup and
+waits when reusing a slot. RazKolbas's private bridge currently allocates an
+allocator, command list and fence and waits on a CPU event for each submitted
+copy. The controlled native-route A/B shows that path affects world image/FPS;
+it does not measure how much time the command-object and CPU-wait sequence
+contributes separately. No TRP code was copied.
+
+Source 0.1.136 adds default-off `ProbeLoadingReducedRoute`. After Main Menu,
+this isolated FG-off trial leaves Loading Menu drawing on the reduced scene
+and uses spatial pre-Present publication, skipping DLSS for those frames and
+resetting its temporal history through the existing spatial fallback. Initial
+pre-menu loading and ordinary world/native HUD remain on their prior routes.
+Release CTest passed **64/64** and Debug **59/59**. **0.1.136 game test: NOT RUN;
+visual repair: NOT VERIFIED; game FG-On: NOT RUN.**
+
+### 0.1.136 installed trial and first game captures
+
+The 0.1.136 staged mod was installed after verifying all 14 payloads. The
+previous 0.1.135 DLL, INI and manifest were copied to ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0136-reduced-loading-trial`.
+Only the DLL and INI changed; the INI preserves the previous bytes and appends
+`Diagnostics.ProbeLoadingReducedRoute=true`. FG remains Off. Installed SHA-256:
+
+- DLL: `71e081de66e2959b17d18600459c8a88b4b23466c7157fc39d259521370f1bde`.
+- INI: `d9f279fc0058b54f114d3674e5748e7628c26ff9589585db0cee434994219bf8`.
+- Manifest: `2721c52029f996d2001fbe6f27ec45ace3de287eb24723c409b12c193660b11a`.
+
+The user started Skyrim through MO2. The log confirms the reduced-loading
+trial activated at frame 8099. The one-shot save-loading frame 8128 and
+after-world frame 9611 captured four stages each. The reduced scene already
+contains loading artwork. With menu-boundary publication deferred, the native
+target remains unchanged through Scaleform EndFrame; spatial publication at
+pre-Present then copies the reduced artwork to native size. The native
+pre-Present mean RGB was **39/36/44** for save loading and **74/70/58** for
+after-world loading, versus **5/5/5** and **9/8/6** in the prior 0.1.135
+captures. The artwork differs between runs, so these means are supporting
+evidence rather than matched-image brightness ratios. Visual previews of both
+new pre-Present frames show legible artwork and text. Capture manifests are
+complete, with SHA-256 `4c36305a00ac3742146fe5f2c3d5dfc2e77c7622ca1cac1772f48fe6121f7ab2`
+and `9302b7e38135aecfe3440590a382da09c941bf2621c27b871582368db42bd888`.
+
+The user judged both loading screens visually bright again, but reported the
+artwork was pixelated because it was rendered at the reduced resolution before
+being enlarged. The trial therefore isolates the darkening to the native
+loading/UI route, but is not an acceptable final-quality repair. In the prior
+native-route log, the loading frame enters PostDisplay with a 2560x1440 RTV,
+DSV and viewport while its Scaleform movie still reports a 1485x835 buffer;
+before EndFrame the scissor is 1485x835. The exact menu call or render state
+that darkens the native target has not been identified.
+
+**0.1.136 game capture and user visual test: RUN. Darkness improved;
+native-resolution quality: FAILED. Permanent repair: OPEN. Game FG-On:
+NOT RUN.**
+
+### 0.1.137 native loading-menu sequence diagnostic
+
+The next bounded diagnostic reuses the existing per-menu native target
+readback. When `ProbeLoadingPicture` selects a stable loading frame and the
+native UI route is active, it records changed native full frames before up to
+16 individual `PostDisplay` calls, plus the EndFrame and pre-Present
+boundaries. At most 12 intermediate images are retained. This locates the
+menu-call interval that darkens the picture without changing production
+rendering. The known Ghidra/Capstone trace establishes that these individual
+calls precede the common Scaleform EndFrame; the capture will provide the
+missing per-call pixels. The default-off probe remains bounded to one save
+load and one after-world load.
+
+Release build and CTest passed **64/64**; Debug build and CTest passed
+**59/59**. The 14 staged payload hashes and all 14 old installed payload
+hashes matched their manifests. Only the DLL and INI changed. The INI changes
+`ProbeLoadingReducedRoute=true` back to `false`, keeps
+`ProbeLoadingPicture=true`, and otherwise preserves user settings. The
+0.1.136 DLL/INI/manifest backup is under ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0137-native-loading-sequence`.
+Installed 0.1.137 SHA-256:
+
+- DLL: `57a19f1070dec90499f9882ceafefaa449cc5e7447ef0bde1f4d1c5fb21c50f0`.
+- INI: `ef2bf95d3c675e94cc2df497301e98e3e8f4af58a966f50a820851edc225296c`.
+- Manifest: `c5d953b0137762df55a7c3beef1ba4794640bd5fce278fe2145be9749a8ae571`.
+
+All 14 installed payloads match. The existing MO2 `meta.ini` was preserved.
+The user started the game and completed both loads. The two per-menu manifests
+are complete with SHA-256 `f17362b17cef0136a26a8ab26b9281e7e46ceb0d83551f36613ce4cdc57a0f79`
+(save load, frame 21983) and
+`3594812dae9085c3bf8c93ef10ab587df3cd71ee0d4cb66481f3ced12fdd69d1`
+(fast travel, frame 23654). The companion picture-capture manifests are also
+complete; the fast-travel one hashes to
+`a1299559389676c52366b0f5592d64ff3ad1532ffbbf2f2f9d6b6664935a202f`.
+
+Both native sequences have the same five menu calls in order: SkyParkour,
+TrueHUD, HUD Menu, Fader Menu, Mist Menu. The readback before HUD Menu remains
+bright (mean RGB **50/48/63** on save load, **56/58/50** on fast travel). The
+next readback, before Fader Menu, is essentially black (**0.01/0.01/0.01** and
+**0.02/0.02/0.02**). Respectively **3,686,297** and **3,629,862** RGB pixels
+change during that one HUD Menu call interval. Fader and Mist Menu then add
+small amounts of picture/text onto the black native target; final mean RGB is
+**5.8/5.1/4.8** and **3.3/4.0/3.6**. EndFrame and pre-Present are unchanged.
+The reduced picture remains byte-for-byte unchanged across this interval.
+
+This identifies the destructive native-target transition as HUD Menu
+`PostDisplay` or work immediately within that call interval. A whole-target
+clear is plausible from the almost entirely black result, but the current
+captures do not distinguish an explicit D3D11 clear from a full-screen draw.
+The next isolated hypothesis is to preserve the already-published native
+background across this interval, then let the later loading-menu calls draw.
+That still requires a game visual test for brightness, full-resolution
+quality, UI layering, and transition safety. **0.1.137 game capture: RUN;
+permanent repair: OPEN; game FG-On: NOT RUN.**
+
+### 0.1.138 native-background restore trial
+
+Source 0.1.138 adds default-off, restart-scoped
+`Diagnostics.ProbeLoadingNativeRestore`. With FG configured Off, after the
+Main Menu it copies the already published full-resolution native target at
+the start of each Loading Menu UI sequence, then copies it back immediately
+before the Fader Menu callback if a HUD Menu callback was observed in that
+same frame and resource generation. Later menu draws remain native. The
+guarded copy checks an immediate context, device, texture identity, format,
+size, frame, and generation. It does not affect ordinary world frames or FG-On
+configuration. This is a hypothesis test: the prior capture established the
+darkening interval, not whether reusing the earlier native target produces
+the right image and layering.
+
+A WARP test wipes a captured native RTV, rejects a wrong-frame restore, then
+restores the exact sampled colour with the RTV still bound. Release CTest
+passed **64/64** and Debug **59/59**. The staged and prior installed packages
+each verified **14/14** hashes; only DLL and INI changed. The INI preserves
+the existing settings and appends `ProbeLoadingNativeRestore=true` while
+leaving FG Off and the reduced-loading trial Off. The 0.1.137 DLL, INI and
+manifest are backed up under ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0138-native-background-restore`.
+The installed 0.1.138 package verified **14/14** hashes; its DLL is
+`4878793cf9925dda8dc53b425cf58af3e9b30878063396ed3594ee5b6cc1cbc7`,
+INI is `166d86f7a95eff479ddaf82830656e68b829619e9c9904cc913637bc1a226251`,
+and manifest is
+`0c3222607c7a39546317b43d37550c0af2f73acb7cf453458087feeb935fd29b`.
+The game was closed at install time and MO2 `meta.ini` was preserved. The
+user has been asked to load the same save and fast-travel once. **0.1.138
+game visual test: NOT RUN; permanent repair: OPEN; game FG-On: NOT RUN.**
