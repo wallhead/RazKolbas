@@ -5761,3 +5761,22 @@ ledger is therefore not the sole cause; a matched numerical comparison and
 root cause remain open. Trace-off log hash and the still-running disabled
 observer stubs are recorded in the session document. Skyrim is closed again.
 FG implementation continues with the trace setting Off.
+
+0.1.144 queue-owned FG copy checkpoint: the private FG-Off presentation route
+now retains one D3D12 copy allocator/list per physical lower buffer after first
+use and uses the exact lower-swap queue's ordering rather than two CPU waits
+per frame. Unproved bridge callers retain the prior synchronous path. WARP
+blocked-queue, exact rotating-pixel, facade Present-boundary, resize and
+uncertain-retirement tests passed. Full Release/Debug builds and CTest passed
+**65/65** and **60/60**. The pinned ENB/ReShade game-route reproduction passed
+240 Presents and resize both with and without Steam overlay; the synthetic
+FG-On probe still observed generated frames. These are offline tests. An
+unchanged-settings package and a one-key private-route On trial were staged;
+with Skyrim closed, the latter was installed with FG Off and **14/14** payload
+hashes verified. The previous DLL/INI/manifest are backed up. Exact hashes,
+reproduction output and rollback location are in
+`docs/re/FG_ASYNC_COPY_RING_2026-09-30.md`. **0.1.144 Skyrim visuals,
+loading and FPS: NOT RUN; actual game FG-On: NOT RUN; six-FPS root cause:
+OPEN.** Next is one user-started MO2 save-load test at the same viewpoint, then
+restore the private-route Off package if the prior colour or FPS regression
+persists.

@@ -9,7 +9,15 @@
 #include <vector>
 
 namespace rk {
-// Offline D3D11-to-D3D12 colour path. D3D11 callers render to one stable
+// A physical lower buffer and the commands that last wrote it. Its allocator
+// may be reset only after fenceValue has completed on the owning queue.
+struct FgD3D11CopySlot {
+    Microsoft::WRL::ComPtr<ID3D12Resource> back;
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commands;
+    std::uint64_t fenceValue{};
+};
+// D3D11-to-D3D12 colour path. D3D11 callers render to one stable
 // logical buffer zero; valid facade indices alias it while the lower D3D12
 // chain rotates physical destinations.
 // Provider integration is separate.
@@ -19,12 +27,15 @@ public:
     // verifiedLowerNative is optional for native DXGI. For a proxy lower,
     // the caller must obtain and verify it from that proxy's official
     // native-interface API; adapter equality alone is not sufficient.
+    // queueOwnsLowerSwap is true only when the caller created the lower swap
+    // using this exact direct queue. Other callers retain CPU completion.
     static Result<std::unique_ptr<FgD3D11PresentBridge>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
         std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr,
-        std::shared_ptr<void> providerLifetime=nullptr);
+        std::shared_ptr<void> providerLifetime=nullptr,
+        bool queueOwnsLowerSwap=false);
     UINT currentIndex() const noexcept;
     ID3D11Texture2D* renderBuffer(UINT index) const noexcept;
     HRESULT copyToCurrent() noexcept;
@@ -37,8 +48,14 @@ public:
     const char* presentPhase() const noexcept { return presentPhase_; }
     const char* firstCopyFailurePhase() const noexcept { return firstCopyFailurePhase_; }
     HRESULT firstCopyFailure() const noexcept { return firstCopyFailure_; }
+    std::uint64_t copyCommandAllocations() const noexcept {
+        return copyCommandAllocations_;
+    }
 private:
     HRESULT copyToCurrentImpl() noexcept;
+    HRESULT copyToCurrentQueued(UINT index) noexcept;
+    bool waitCopyFence(std::uint64_t value) const noexcept;
+    bool drainCopySlots() const noexcept;
     FgD3D11PresentBridge(FgLowerSwap lower,
         std::unique_ptr<FgSharedInputs> interop) noexcept;
     std::shared_ptr<void> providerLifetime_;
@@ -53,6 +70,11 @@ private:
     FgSourceLease sourceLease_;
     std::unique_ptr<FgD3D11AuxSwapSource> auxiliary_;
     std::vector<FgSharedSurface> shared_;
+    std::vector<FgD3D11CopySlot> copySlots_;
+    Microsoft::WRL::ComPtr<ID3D12Fence> copyFence_;
+    std::uint64_t nextCopyFenceValue_{};
+    std::uint64_t copyCommandAllocations_{};
+    bool queueOwnsLowerSwap_{};
     Microsoft::WRL::ComPtr<ID3D12Resource> inFlightBack_;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> inFlightAllocator_;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> inFlightCommands_;

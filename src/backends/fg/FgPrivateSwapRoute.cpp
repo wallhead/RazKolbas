@@ -202,7 +202,7 @@ Result<ComPtr<IDXGISwapChain4>> FgPrivateSwapRoute::createFacade(
         auto result=FgD3D11SwapFacade::create(nativeD11,context.Get(),
             upgradedD12_.Get(),queue_.Get(),lower_.Get(),
             verifiedNative_.Get(),std::move(std::get<
-                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)),runtime_);
+                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)),runtime_,true);
         if(std::holds_alternative<ComPtr<IDXGISwapChain4>>(result))
             issued_.store(true,std::memory_order_release);
         return result;

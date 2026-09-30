@@ -174,7 +174,8 @@ TEST_CASE("FG bridge presents a cached D3D11 buffer zero across physical rotatio
     for(const auto buffers:{2u,3u}) {
     Devices gpu(buffers);
     auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
-        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get());
+        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+        nullptr,nullptr,nullptr,true);
     REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
     auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
     auto* cached=bridge->renderBuffer(0);
@@ -195,6 +196,7 @@ TEST_CASE("FG bridge presents a cached D3D11 buffer zero across physical rotatio
         REQUIRE(pixel[3]==255);
         REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
     }
+    REQUIRE(bridge->copyCommandAllocations()==buffers);
     }
 }
 
@@ -255,6 +257,60 @@ TEST_CASE("FG bridge retains its provider when copy retirement is uncertain",
     }
 }
 
+TEST_CASE("FG owned lower queue accepts a copy while its GPU work is blocked",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+        nullptr,nullptr,nullptr,true);
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    ComPtr<ID3D11RenderTargetView> view;
+    REQUIRE(SUCCEEDED(gpu.d11->CreateRenderTargetView(
+        bridge->renderBuffer(0),nullptr,&view)));
+    const float colour[]{0.0f,1.0f,0.25f,1.0f};
+    gpu.context->ClearRenderTargetView(view.Get(),colour);
+    ComPtr<ID3D12Fence> gate;
+    REQUIRE(SUCCEEDED(gpu.d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&gate))));
+    REQUIRE(SUCCEEDED(gpu.queue->Wait(gate.Get(),1)));
+    struct ReleaseGate {
+        ID3D12Fence* fence;
+        ~ReleaseGate() {fence->Signal(1);}
+    } release{gate.Get()};
+    const auto index=bridge->currentIndex();
+    REQUIRE(SUCCEEDED(bridge->copyToCurrent()));
+    REQUIRE(bridge->prepared());
+    REQUIRE(SUCCEEDED(gate->Signal(1)));
+    const auto pixel=readPixel(gpu,index);
+    REQUIRE((pixel==std::array<std::uint8_t,4>{0,255,64,255}));
+    REQUIRE(SUCCEEDED(bridge->presentPrepared({rk::FgPresentMethod::Present,0,0})));
+}
+
+TEST_CASE("FG owned lower queue retains pending resources on uncertain teardown",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    auto provider=std::make_shared<unsigned>(9);
+    std::weak_ptr<unsigned> lifetime=provider;
+    auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+        nullptr,nullptr,provider,true);
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+    ComPtr<ID3D12Fence> gate;
+    REQUIRE(SUCCEEDED(gpu.d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&gate))));
+    REQUIRE(SUCCEEDED(gpu.queue->Wait(gate.Get(),1)));
+    struct ReleaseGate {
+        ID3D12Fence* fence;
+        ~ReleaseGate() {fence->Signal(1);}
+    } release{gate.Get()};
+    REQUIRE(SUCCEEDED(bridge->copyToCurrent()));
+    provider.reset();
+    bridge.reset(); // A bounded drain times out; the provider/slots remain held.
+    REQUIRE_FALSE(lifetime.expired());
+}
+
 TEST_CASE("FG facade submits cached D3D11 colour before each lower Present",
     "[fg_d3d11_present_bridge]") {
     Devices gpu;
@@ -276,7 +332,8 @@ TEST_CASE("FG facade submits cached D3D11 colour before each lower Present",
         return frame.read?S_OK:E_FAIL;
     }));
     auto made=rk::FgD3D11SwapFacade::create(gpu.d11.Get(),gpu.context.Get(),
-        gpu.d12.Get(),gpu.queue.Get(),observed.Get());
+        gpu.d12.Get(),gpu.queue.Get(),observed.Get(),
+        nullptr,nullptr,nullptr,true);
     REQUIRE(std::holds_alternative<ComPtr<IDXGISwapChain4>>(made));
     auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
     ComPtr<ID3D11Texture2D> cached;
@@ -311,7 +368,8 @@ TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers"
     "[fg_d3d11_present_bridge]") {
     Devices gpu;
     auto made=rk::FgD3D11SwapFacade::create(gpu.d11.Get(),gpu.context.Get(),
-        gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get());
+        gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+        nullptr,nullptr,nullptr,true);
     REQUIRE(std::holds_alternative<ComPtr<IDXGISwapChain4>>(made));
     auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
     ComPtr<IDXGISwapChain1> one;

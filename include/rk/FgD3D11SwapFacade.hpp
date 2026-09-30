@@ -12,12 +12,14 @@ public:
     // Pass verifiedLowerNative only after proving its COM identity through
     // the lower proxy's official native-interface API. An external D3D11
     // source supplies the typed swap-chain buffer and owns resize generations.
+    // queueOwnsLowerSwap requires the caller's exact lower-swap creation proof.
     static Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> create(
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
         std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr,
-        std::shared_ptr<void> providerLifetime=nullptr);
+        std::shared_ptr<void> providerLifetime=nullptr,
+        bool queueOwnsLowerSwap=false);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;

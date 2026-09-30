@@ -13,13 +13,14 @@ Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> FgD3D11SwapFacade::create(
     ID3D12CommandQueue* queue,IDXGISwapChain* lower,
     ID3D12Device* verifiedLowerNative,
     std::unique_ptr<FgD3D11AuxSwapSource> auxiliary,
-    std::shared_ptr<void> providerLifetime) {
+    std::shared_ptr<void> providerLifetime,bool queueOwnsLowerSwap) {
     if(!lower)return Error{ErrorCode::InvalidInput,"FG facade lower swap is null"};
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower4;
     if(FAILED(lower->QueryInterface(IID_PPV_ARGS(&lower4))))
         return Error{ErrorCode::Unsupported,"FG facade requires lower IDXGISwapChain4"};
     auto made=FgD3D11PresentBridge::create(d11,context,d12,queue,lower,
-        verifiedLowerNative,std::move(auxiliary),providerLifetime);
+        verifiedLowerNative,std::move(auxiliary),providerLifetime,
+        queueOwnsLowerSwap);
     if(!std::holds_alternative<std::unique_ptr<FgD3D11PresentBridge>>(made))
         return std::get<Error>(std::move(made));
     Microsoft::WRL::ComPtr<IDXGISwapChain4> facade;
