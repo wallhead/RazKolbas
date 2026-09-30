@@ -166,8 +166,12 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
     runtime->native_=exportFrom<Native>(runtime->module_,"slGetNativeInterface");
     runtime->featureFunction_=exportFrom<FeatureFunction>(runtime->module_,
         "slGetFeatureFunction");
+    runtime->newFrameToken_=exportFrom<NewFrameToken>(runtime->module_,"slGetNewFrameToken");
+    runtime->setConstants_=exportFrom<SetConstants>(runtime->module_,"slSetConstants");
+    runtime->setTags_=exportFrom<SetTags>(runtime->module_,"slSetTagForFrame");
     if(!runtime->init_||!runtime->shutdown_||!runtime->setDevice_||
-       !runtime->upgrade_||!runtime->native_||!runtime->featureFunction_)
+       !runtime->upgrade_||!runtime->native_||!runtime->featureFunction_||
+       !runtime->newFrameToken_||!runtime->setConstants_||!runtime->setTags_)
         return Error{ErrorCode::Conflict,
             "Pinned Streamline core exports are incomplete"};
     for(const auto address:{reinterpret_cast<FARPROC>(runtime->init_),
@@ -175,7 +179,10 @@ FgStreamlineRuntime::initialize(const std::filesystem::path& binaryDirectory) {
         reinterpret_cast<FARPROC>(runtime->setDevice_),
         reinterpret_cast<FARPROC>(runtime->upgrade_),
         reinterpret_cast<FARPROC>(runtime->native_),
-        reinterpret_cast<FARPROC>(runtime->featureFunction_)})
+        reinterpret_cast<FARPROC>(runtime->featureFunction_),
+        reinterpret_cast<FARPROC>(runtime->newFrameToken_),
+        reinterpret_cast<FARPROC>(runtime->setConstants_),
+        reinterpret_cast<FARPROC>(runtime->setTags_)})
         if(!exportOwned(runtime->module_,address))
             return Error{ErrorCode::Conflict,
                 "Streamline core export is owned by another module"};
@@ -289,5 +296,22 @@ sl::Result FgStreamlineRuntime::getFeatureFunction(sl::Feature feature,
         return sl::Result::eErrorInvalidState;
     }
     return result;
+}
+sl::Result FgStreamlineRuntime::newFrameToken(sl::FrameToken*& token) const noexcept {
+    token=nullptr;
+    if(!initialized_||!newFrameToken_)return sl::Result::eErrorInvalidState;
+    return newFrameToken_(token,nullptr);
+}
+sl::Result FgStreamlineRuntime::setConstants(const sl::Constants& values,
+    const sl::FrameToken& token,const sl::ViewportHandle& viewport) const noexcept {
+    if(!initialized_||!setConstants_)return sl::Result::eErrorInvalidState;
+    return setConstants_(values,token,viewport);
+}
+sl::Result FgStreamlineRuntime::setTags(const sl::FrameToken& token,
+    const sl::ViewportHandle& viewport,const sl::ResourceTag* tags,
+    std::uint32_t count,sl::CommandBuffer* commands) const noexcept {
+    if(!initialized_||!setTags_)return sl::Result::eErrorInvalidState;
+    if(!tags||!count)return sl::Result::eErrorInvalidParameter;
+    return setTags_(token,viewport,tags,count,commands);
 }
 }

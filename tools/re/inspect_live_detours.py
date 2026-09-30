@@ -20,6 +20,13 @@ SITES = {
     "mouse_metadata_call": 0x913efb,
     "screen_size_call": 0xe4cd52,
     "native_transition_call": 0x972d34,
+    # Exact 1.6.1170 Address Library candidates for FG phase research.
+    # These reads identify the existing chain; they do not install a hook or
+    # certify simulation timing. Main Update is already patched in the old
+    # decoded-text capture, so its original target cannot be inferred there.
+    "fg_main_update_call_candidate": 0x63ead0,
+    "fg_input_dispatch_call": 0xcd8fbb,
+    "fg_renderer_begin_call_candidate": 0x643c47,
 }
 
 

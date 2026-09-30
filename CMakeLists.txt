@@ -108,6 +108,7 @@ if(WIN32)
       src/backends/fg/FgStreamlineOptions.cpp
       src/backends/fg/FgStreamlineFrameInputs.cpp
       src/backends/fg/FgStreamlineSubmit.cpp
+      src/backends/fg/FgStreamlineFrameSession.cpp
       src/backends/fg/FgStreamlineInputLease.cpp
       src/backends/fg/FgPrivateSwapRoute.cpp
       src/backends/dlss/FgStreamlineTags.cpp)
@@ -246,10 +247,12 @@ if(BUILD_TESTING)
     target_sources(rk_tests PRIVATE tests/unit/FgStreamlineConstantsTests.cpp)
     target_sources(rk_tests PRIVATE tests/unit/FgStreamlineOptionsTests.cpp)
     target_sources(rk_tests PRIVATE tests/unit/FgStreamlineTagsTests.cpp)
+    target_sources(rk_tests PRIVATE tests/unit/FgStreamlineFrameSessionTests.cpp)
     target_link_libraries(rk_tests PRIVATE rk_fg_streamline)
     add_test(NAME unit.fg_streamline_constants COMMAND rk_tests "[fg_streamline_constants]")
     add_test(NAME unit.fg_streamline_options COMMAND rk_tests "[fg_streamline_options]")
     add_test(NAME unit.fg_streamline_tags COMMAND rk_tests "[fg_streamline_tags]")
+    add_test(NAME unit.fg_streamline_session COMMAND rk_tests "[fg_streamline_session]")
   endif()
   target_sources(rk_tests PRIVATE tests/unit/FgPresentationCoordinatorTests.cpp)
   add_test(NAME unit.fg_presentation COMMAND rk_tests "[fg_presentation]")

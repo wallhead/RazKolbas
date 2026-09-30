@@ -1,5 +1,33 @@
 # Implementation checkpoint
 
+## FG real-frame token/phase owner, source-only (2026-09-30)
+
+The user resumed FG implementation and explicitly chose to keep doing FG while
+recording the supplied FPS Review 35. The new Streamline session owns one SDK
+token, ordered simulation/render/Present markers and matching constants/tags
+per real frame, with numeric-token, thread, identity and no-retry guards. The
+pinned private runtime now supplies the dynamic core/feature calls. It does not
+install a guessed game simulation hook or enable Skyrim FG.
+
+The production session passed real synthetic DLSS-G probes directly and through
+the D3D11 facade/ReShade: **8 real frames each, actualPresented=2 on every frame,
+status 0, provider input fences retired**. Exact ENB/ReShade/Steam FG-Off passed
+**240 Presents**, resize and teardown. Release build/CTest passed **63/63**;
+configured Debug **58/58**, plus SDK-enabled Debug session/tag tests **642
+assertions in 19 cases**. Independent review's exception-cleanup token finding
+was reproduced RED and fixed; final Release session tests passed 501 assertions
+in 13 cases. Details: `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
+
+Ghidra and Capstone phase research identified multiple renderer paths and a
+Main Update candidate already patched in the historical decoded capture.
+A bounded read-only inspector is prepared to identify its current call/relay
+owner in a user-started FG-Off run. Simulation/render timing, continuous input
+ownership and **generated Skyrim frames remain NOT RUN**. No new installation
+or settings change: installed 0.1.134, FG Off, camera diagnostic Off, all 14
+payloads verified. FPS Review 35's verified source findings and measurement
+limits are recorded in `docs/re/FPS_REVIEW35_2026-09-30.md`; FPS recovery remains
+unresolved.
+
 ## 0.1.134 live camera evidence and sustained FPS regression (2026-09-30)
 
 The user loaded a save and confirmed a good image, but reported a continuous

@@ -6,6 +6,7 @@
 #include "rk/FgStreamlineFrameInputs.hpp"
 #include "rk/FgStreamlineSubmit.hpp"
 #include "rk/FgStreamlineInputLease.hpp"
+#include "rk/FgStreamlineFrameSession.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -217,16 +218,34 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         return 47;
     bool generated=false;
     int error=0;
+    rk::FgStreamlineFrameCalls calls{};
+    calls.currentThread=[]{return GetCurrentThreadId();};
+    calls.newToken=[](sl::FrameToken*& token){return slGetNewFrameToken(token);};
+    calls.sleep=[](const sl::FrameToken& token){return slReflexSleep(token);};
+    calls.marker=[](sl::PCLMarker marker,const sl::FrameToken& token) {
+        return slPCLSetMarker(marker,token);
+    };
+    calls.inputs.setConstants=[](const sl::Constants& values,
+        const sl::FrameToken& token,const sl::ViewportHandle& view) {
+        return slSetConstants(values,token,view);
+    };
+    calls.inputs.setTags=[](const sl::FrameToken& token,const sl::ViewportHandle& view,
+        const sl::ResourceTag* tags,std::uint32_t count,sl::CommandBuffer* commands) {
+        return slSetTagForFrame(token,view,tags,count,commands);
+    };
+    rk::FgStreamlineFrameSession session(std::move(calls),viewport);
+    const auto phaseOk=[](const char* phase,const rk::Result<bool>& result) {
+        if(const auto* failure=std::get_if<rk::Error>(&result)) {
+            std::cout<<"FG-On session "<<phase<<" failed: "<<failure->message<<'\n';
+            return false;
+        }
+        return std::get<bool>(result);
+    };
     for(unsigned frame=0;frame<8;++frame) {
-        sl::FrameToken* token{};
-        if(!ok("slGetNewFrameToken",slGetNewFrameToken(token))||!token||
-           !ok("simulationStart",slPCLSetMarker(
-                sl::PCLMarker::eSimulationStart,*token))||
-           !ok("slReflexSleep",slReflexSleep(*token))||
-           !ok("simulationEnd",slPCLSetMarker(
-                sl::PCLMarker::eSimulationEnd,*token))||
-           !ok("renderSubmitStart",slPCLSetMarker(
-                sl::PCLMarker::eRenderSubmitStart,*token))) {
+        const auto source=sourceFrame(frame);
+        if(!phaseOk("begin",session.begin(source))||
+           !phaseOk("simulationEnd",session.simulationEnd())||
+           !phaseOk("renderSubmitStart",session.renderSubmitStart())) {
             error=48;break;
         }
         const auto physical=swap3->GetCurrentBackBufferIndex();
@@ -265,11 +284,9 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         if(!waitFor(queue,fence.Get(),frame+1,event.handle)){
             error=52;break;
         }
-        if(!ok("renderSubmitEnd",slPCLSetMarker(
-                sl::PCLMarker::eRenderSubmitEnd,*token))) {
+        if(!phaseOk("renderSubmitEnd",session.renderSubmitEnd())) {
             error=53;break;
         }
-        const auto source=sourceFrame(frame);
         rk::FgPreparedSubmission prepared{};
         prepared.source=source.source;prepared.generation=source.generation;
         prepared.presentToken=source.presentToken;
@@ -294,35 +311,23 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         }
         rk::FgStreamlineInputLease retained(
             std::move(std::get<rk::FgStreamlineFrameInputs>(inputs)));
-        rk::FgStreamlineCalls sdk{};
-        sdk.setConstants=[](const sl::Constants& values,
-            const sl::FrameToken& frameToken,const sl::ViewportHandle& view) {
-            return slSetConstants(values,frameToken,view);
-        };
-        sdk.setTags=[](const sl::FrameToken& frameToken,
-            const sl::ViewportHandle& view,const sl::ResourceTag* tags,
-            std::uint32_t count,sl::CommandBuffer* commands) {
-            return slSetTagForFrame(frameToken,view,tags,count,commands);
-        };
-        const rk::FgStreamlineTokenBinding binding{
-            source.source,source.generation,source.presentToken,
-            source.resetEpoch,token};
-        const auto submitted=rk::submitFgStreamlineInputs(
-            retained.inputs(),binding,viewport,sdk);
+        const auto submitted=session.submit(retained.inputs());
         if(const auto failure=std::get_if<rk::Error>(&submitted)) {
             std::cout<<"FG-On input submission failed: "<<failure->message<<'\n';
             error=54;break;
         }
-        if(!ok("presentStart",slPCLSetMarker(
-                sl::PCLMarker::ePresentStart,*token))) {
+        const auto presented=session.present([&] {
+            return reshadeUpper?reshadeUpper->Present(0,0):
+                facadeMode?facade->Present(0,0):swap->Present(0,0);
+        });
+        if(const auto failure=std::get_if<rk::Error>(&presented)) {
+            std::cout<<"FG-On session Present failed: "<<failure->message<<'\n';
             error=55;break;
         }
-        const auto present=reshadeUpper?reshadeUpper->Present(0,0):
-            facadeMode?facade->Present(0,0):swap->Present(0,0);
+        const auto present=std::get<HRESULT>(presented);
         std::cout<<"FG-On Present frame="<<frame<<" hr=0x"<<std::hex<<
             static_cast<UINT>(present)<<std::dec<<'\n';
-        if(FAILED(present)||!ok("presentEnd",slPCLSetMarker(
-                sl::PCLMarker::ePresentEnd,*token))) {
+        if(FAILED(present)) {
             error=56;break;
         }
         sl::DLSSGState state{};

@@ -1,8 +1,10 @@
 #include "rk/FgStreamlineRuntime.hpp"
+#include "rk/FgStreamlineFrameSession.hpp"
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/PatchDescriptor.hpp"
 #include <sl_dlss_g.h>
+#include <sl_reflex.h>
 #include <d3d11.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -20,7 +22,8 @@ int wmain(int argc,wchar_t** argv) {
     Microsoft::WRL::ComPtr<IDXGIFactory1> wrapper;
     const bool preload=argc==4&&
         std::wcscmp(argv[2],L"--preloaded-interposer")==0;
-    const auto reshadePath=argc==3?argv[2]:argc==4&&!preload?argv[3]:nullptr;
+    const bool frameSession=argc==3&&std::wcscmp(argv[2],L"--frame-session")==0;
+    const auto reshadePath=argc==3&&!frameSession?argv[2]:argc==4&&!preload?argv[3]:nullptr;
     HMODULE preloaded{};
     if(preload) {
         preloaded=LoadLibraryW(argv[3]);
@@ -44,21 +47,21 @@ int wmain(int argc,wchar_t** argv) {
             before.createMethod<<std::dec<<'\n';
         return 0;
     };
-    if(argc==3)if(const auto result=createWrapper())return result;
+    if(argc==3&&reshadePath)if(const auto result=createWrapper())return result;
     auto loaded=rk::FgStreamlineRuntime::initialize(argv[1]);
     if(const auto error=std::get_if<rk::Error>(&loaded)) {
         std::cerr<<"private-sl-init: "<<error->message<<'\n';
         return 2;
     }
-    auto runtime=std::move(std::get<std::unique_ptr<rk::FgStreamlineRuntime>>(
-        loaded));
+    auto runtime=std::shared_ptr<rk::FgStreamlineRuntime>(
+        std::move(std::get<std::unique_ptr<rk::FgStreamlineRuntime>>(loaded)));
     std::wcout<<L"private-sl-init=ok directory="<<runtime->directory()<<L'\n';
     if(runtime->setD3DDevice(nullptr)!=sl::Result::eErrorInvalidParameter||
        runtime->upgradeInterface(nullptr)!=sl::Result::eErrorInvalidParameter)
         return 3;
     Microsoft::WRL::ComPtr<ID3D12Device> d12;
     Microsoft::WRL::ComPtr<IDXGIAdapter1> selectedAdapter;
-    if(reshadePath) {
+    if(reshadePath||frameSession) {
         Microsoft::WRL::ComPtr<IDXGIFactory1> nativeFactory;
         if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&nativeFactory))))return 13;
         for(UINT index=0;;++index) {
@@ -79,6 +82,33 @@ int wmain(int argc,wchar_t** argv) {
         const auto set=runtime->setD3DDevice(d12.Get());
         std::cout<<"slSetD3DDevice="<<static_cast<int>(set)<<'\n';
         if(set!=sl::Result::eOk)return 15;
+    }
+    if(frameSession) {
+        void* function{};
+        if(runtime->getFeatureFunction(sl::kFeatureReflex,"slReflexSetOptions",
+            function)!=sl::Result::eOk||!function)return 30;
+        sl::ReflexOptions options{};options.mode=sl::ReflexMode::eOff;
+        if(reinterpret_cast<PFun_slReflexSetOptions*>(function)(options)!=
+            sl::Result::eOk)return 31;
+        auto resolved=rk::makeFgStreamlineFrameCalls(runtime);
+        if(const auto error=std::get_if<rk::Error>(&resolved)) {
+            std::cerr<<"private-frame-calls: "<<error->message<<'\n';return 32;
+        }
+        rk::FgStreamlineFrameSession session(
+            std::move(std::get<rk::FgStreamlineFrameCalls>(resolved)),
+            sl::ViewportHandle{0u});
+        rk::FgSourceFrame frame{};
+        frame.source=1;frame.generation=1;frame.presentToken=1;
+        frame.resetEpoch=1;frame.ownerReady=true;
+        frame.render={96,72};frame.display=frame.render;
+        for(const auto result:{session.begin(frame),session.simulationEnd(),
+            session.renderSubmitStart(),session.renderSubmitEnd()}) {
+            if(const auto error=std::get_if<rk::Error>(&result)) {
+                std::cerr<<"private-frame-phase: "<<error->message<<'\n';return 33;
+            }
+        }
+        // A phase-only probe: no invented game input, lower Present or FG-On.
+        std::cout<<"private-frame-phase=ok inputs=not-submitted Present=not-attempted\n";
     }
     if(argc==4&&std::wcscmp(argv[2],L"--native-first")==0) {
       const auto runNativeFirst=[&]() -> int {

@@ -23,6 +23,11 @@ public:
     sl::Result getNativeInterface(void* proxy,void** native) const noexcept;
     sl::Result getFeatureFunction(sl::Feature feature,const char* name,
         void*& function) const noexcept;
+    sl::Result newFrameToken(sl::FrameToken*& token) const noexcept;
+    sl::Result setConstants(const sl::Constants& values,const sl::FrameToken& token,
+        const sl::ViewportHandle& viewport) const noexcept;
+    sl::Result setTags(const sl::FrameToken& token,const sl::ViewportHandle& viewport,
+        const sl::ResourceTag* tags,std::uint32_t count,sl::CommandBuffer* commands) const noexcept;
     bool initialized() const noexcept { return initialized_; }
     const std::filesystem::path& directory() const noexcept { return directory_; }
 private:
@@ -34,6 +39,9 @@ private:
     using Upgrade=decltype(&::slUpgradeInterface);
     using Native=decltype(&::slGetNativeInterface);
     using FeatureFunction=decltype(&::slGetFeatureFunction);
+    using NewFrameToken=decltype(&::slGetNewFrameToken);
+    using SetConstants=decltype(&::slSetConstants);
+    using SetTags=decltype(&::slSetTagForFrame);
     std::filesystem::path directory_;
     HMODULE module_{};
     DLL_DIRECTORY_COOKIE cookie_{};
@@ -43,6 +51,9 @@ private:
     Upgrade upgrade_{};
     Native native_{};
     FeatureFunction featureFunction_{};
+    NewFrameToken newFrameToken_{};
+    SetConstants setConstants_{};
+    SetTags setTags_{};
     bool initialized_{};
 };
 }
