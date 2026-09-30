@@ -21,6 +21,8 @@ inline constexpr std::string_view deferredUiFlushPatchId=
 Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedGameHash,
     const Settings& settings);
 std::uint64_t worldDrawForwardedCalls() noexcept;
+// Read-only candidate renderer-entry event at the verified GetClientRect call.
+void recordFgRendererBegin() noexcept;
 std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
     std::uint64_t thread,bool test) noexcept;
 void resetFgFrameBoundary(std::uintptr_t swap) noexcept;

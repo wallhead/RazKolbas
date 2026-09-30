@@ -275,3 +275,66 @@ The installed **14/14** payload hashes verify; MO2 `meta.ini` remains
 FG Off, the bright reduced-loading route, and the prior read-only phase-site
 probe remain configured as before. Next, a user-started main-menu and same-save
 world run must establish the actual per-frame boundary counts/thread relation.
+
+### 0.1.142 user-started boundary result
+
+The user started Skyrim through MO2, loaded the same save, stayed in the world
+and fast-travelled. PID 19084 began at 21:24:32 local time. The live log was
+copied read-only with sharing to ignored
+`artifacts/local/fg-boundary-2026-09-30/runtime-0142/RazKolbas.log` (22,975,178
+bytes; SHA-256
+`2867ac4aa957a829c0a4df89d8f5c021361f9f100f0f598c1d962668d8c0af25`).
+The snapshot contains the new trace from real Present 1 through checkpoint
+19,800. All 36 emitted boundary checkpoints report `kind=0`, world serial
+equal to real Present count, matching world/Present thread IDs, epoch 1, and
+zero cumulative no-world, multiple-world or thread-mismatch events. The
+matching outer swap reports `S_OK`, zero TEST/occluded/failed counts at the
+same checkpoints. The frame thread changed from 22196 to 17512 by checkpoint
+6,600, returned to 22196 at 13,800 and 15,600, and matched within each
+sampled frame. This validates the completed-world-to-Present pairing over the
+observed run, including thread migration between frames. Aggregate counters
+cover the intervening frames; individual thread identity is logged only at
+the sampled checkpoints.
+
+The game calls this world callback during loading as well. At frame 1 the
+log reports Loading Menu rendering and an unadmitted world colour/depth pair,
+yet the boundary is `kind=0`. During the later loading interval, frame 6,000,
+6,600 and 12,000 publications use spatial fallback (`mode=3`) with zero
+provider submissions, while the boundary remains ready. At frame 18,000 the
+log again reports DLSS SR (`mode=2`) and 3,439 provider submissions. Thus
+boundary readiness is necessary for the Streamline frame phase, but **not**
+evidence of eligible world guides or camera/UI input. Production FG admission
+must combine it with the existing current-generation resource/camera/UI and
+loading gates. No marker, tag, generated frame or private D3D12 swap was
+enabled in this run. **0.1.142 boundary timing: RUN; Skyrim FG-On: NOT RUN.**
+
+### 0.1.143 renderer/world phase trace prepared
+
+The next read-only trace brackets the original world call and samples the
+existing, hash-verified Renderer Begin `GetClientRect` relay when it targets
+the bound game window. The ledger accepts a phase candidate only when one
+renderer entry, one world entry, one completed world call and one real Present
+arrive in order on one thread. TEST and foreign swap calls do not consume the
+candidate; resize invalidates it. The renderer entry is only a candidate for
+Streamline's early render phase, not proof of simulation start. Loading can
+still satisfy timing while lacking admissible camera/guides/UI, so this trace
+cannot turn FG on by itself.
+
+Tests for missing, duplicate, late, cross-thread and resize-stale events were
+written before the implementation; Release compilation failed on the absent
+interface. The before/original/after world-call test likewise failed to
+compile before adding the observer. Focused tests then passed. Release DLL
+and test build, Debug DLL and test build, and full CTest **65/65** Release and
+**60/60** Debug groups passed. These are offline checks.
+
+Skyrim was confirmed closed before installation. The 0.1.143 package and the
+installed mod both verify **14/14** payload hashes. Only the DLL and manifest
+were replaced; the installed INI is byte-for-byte unchanged, with FG Off,
+`ProbeFgFrameBoundaries=true`, and the brighter reduced-loading route On.
+The prior DLL/INI/manifest were copied to ignored
+`artifacts/local/fg-phase-2026-09-30/backup-before-0143`. Installed DLL
+SHA-256 is `1e943ebca863f23279d10ff0b3ff8fc3e9274b38725eb8151f6143c8f3c6dadd`,
+INI is `43c6a0b12ecd228b34ffb6baaccbe19221dde0dd0a2f0e9283921e34e4dfa33c`,
+and manifest is
+`578db8691e05b5302ddc08117442b0388cbef229a3eb572f58b80089672e91d4`.
+**0.1.143 game phase trace: NOT RUN; FG-On: NOT RUN.**

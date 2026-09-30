@@ -52,3 +52,63 @@ TEST_CASE("FG boundary rejects intra-frame thread change but accepts next-frame 
     boundaries.world(21);
     REQUIRE(boundaries.present(21,false,true).kind==rk::FgBoundaryKind::Ready);
 }
+
+TEST_CASE("FG phase needs one ordered renderer, world entry and completion", "[fg_real_boundaries]") {
+    rk::FgRealFrameBoundaries boundaries;
+    boundaries.rendererBegin(31);
+    boundaries.worldBegin(31);
+    boundaries.world(31);
+    const auto test=boundaries.present(31,true,true);
+    REQUIRE(test.rendererBegins==1);
+    REQUIRE(test.worldBegins==1);
+    REQUIRE(boundaries.present(31,false,false).worldBegins==1);
+    const auto ready=boundaries.present(31,false,true);
+    REQUIRE(ready.kind==rk::FgBoundaryKind::Ready);
+    REQUIRE(ready.phaseReady);
+    REQUIRE(ready.phaseReadyCount==1);
+    REQUIRE(ready.rendererThread==31);
+    REQUIRE(ready.worldBeginThread==31);
+    REQUIRE_FALSE(boundaries.present(31,false,true).phaseReady);
+    boundaries.rendererBegin(32);
+    boundaries.worldBegin(32);
+    boundaries.world(32);
+    REQUIRE(boundaries.present(32,false,true).phaseReady);
+}
+
+TEST_CASE("FG phase rejects missing duplicate and late entries", "[fg_real_boundaries]") {
+    rk::FgRealFrameBoundaries boundaries;
+    boundaries.worldBegin(41);
+    boundaries.world(41);
+    REQUIRE_FALSE(boundaries.present(41,false,true).phaseReady);
+    boundaries.rendererBegin(41);
+    boundaries.rendererBegin(41);
+    boundaries.worldBegin(41);
+    boundaries.world(41);
+    const auto duplicate=boundaries.present(41,false,true);
+    REQUIRE(duplicate.rendererBegins==2);
+    REQUIRE_FALSE(duplicate.phaseReady);
+    boundaries.worldBegin(41);
+    boundaries.rendererBegin(41);
+    boundaries.world(41);
+    REQUIRE_FALSE(boundaries.present(41,false,true).phaseReady);
+    boundaries.rendererBegin(41);
+    boundaries.world(41);
+    REQUIRE_FALSE(boundaries.present(41,false,true).phaseReady);
+}
+
+TEST_CASE("FG phase rejects cross-thread events and resize-stale entry", "[fg_real_boundaries]") {
+    rk::FgRealFrameBoundaries boundaries;
+    boundaries.rendererBegin(51);
+    boundaries.worldBegin(52);
+    boundaries.world(52);
+    REQUIRE_FALSE(boundaries.present(52,false,true).phaseReady);
+    boundaries.rendererBegin(52);
+    boundaries.worldBegin(52);
+    boundaries.world(52);
+    boundaries.reset();
+    REQUIRE_FALSE(boundaries.present(52,false,true).phaseReady);
+    boundaries.rendererBegin(51);
+    boundaries.worldBegin(51);
+    boundaries.world(51);
+    REQUIRE(boundaries.present(51,false,true).phaseReady);
+}

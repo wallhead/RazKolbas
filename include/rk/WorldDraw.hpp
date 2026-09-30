@@ -12,11 +12,13 @@ using WorldDrawFn=void(*)(void*,std::uint32_t) noexcept;
 
 class WorldDrawForwarder {
 public:
-    Result<bool> configure(WorldDrawFn original,WorldDrawFn afterOriginal);
+    Result<bool> configure(WorldDrawFn original,WorldDrawFn afterOriginal,
+        WorldDrawFn beforeOriginal=nullptr);
     void dispatch(void* first,std::uint32_t second) noexcept;
 private:
     std::mutex configureMutex_;
     std::atomic<WorldDrawFn> original_{nullptr};
+    std::atomic<WorldDrawFn> beforeOriginal_{nullptr};
     std::atomic<WorldDrawFn> afterOriginal_{nullptr};
 };
 }

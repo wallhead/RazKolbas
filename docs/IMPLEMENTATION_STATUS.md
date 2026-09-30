@@ -5718,3 +5718,25 @@ hashes match and the prior DLL/INI/manifest are backed up. **Skyrim 0.1.142
 runtime boundary trace: NOT RUN; FG-On: NOT RUN.** Exact hashes and the next
 user-started trace are recorded in
 `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
+
+0.1.142 user-started Skyrim trace: the verified world callback and real
+Present paired through checkpoint 19,800 on the same swap, with zero
+aggregate no-world/multi-world/thread-mismatch counts and zero sampled
+Present failures. The owning thread changed between real frames while each
+sampled frame remained single-threaded. Loading also produced boundary-ready
+events even when the current output was spatial fallback with no DLSS input;
+the boundary alone therefore cannot admit FG. Read-only log snapshot SHA-256,
+per-phase evidence and limits are in
+`docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`. **Game timing trace: RUN;
+FG-On: NOT RUN.**
+
+0.1.143 FG phase-candidate checkpoint: read-only callbacks now count the
+verified renderer-entry relay and bracket the original world call before the
+real Present. Tests reject missing, duplicate, out-of-order, cross-thread and
+resize-stale phase candidates while preserving TEST/foreign-swap behavior.
+Release and Debug DLL/test builds passed; CTest **65/65** and **60/60**.
+With Skyrim closed, the new DLL and manifest were installed, the user's INI
+remained byte-for-byte unchanged, and all **14/14** installed payload hashes
+verified. This does not invoke Streamline or enable FG. Exact installation
+hashes are in `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
+**0.1.143 game phase trace: NOT RUN; FG-On: NOT RUN.**

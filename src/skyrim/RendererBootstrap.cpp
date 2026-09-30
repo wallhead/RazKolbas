@@ -133,6 +133,7 @@ BOOL WINAPI rendererRectProxy(HWND window,RECT* rect) noexcept {
     if(!state||!state->prior)return FALSE;
     auto* logical=state->logical.load(std::memory_order_acquire);
     if(!logical||window!=state->gameWindow)return state->prior(window,rect);
+    recordFgRendererBegin();
     auto& domain=*state->domain;
     const auto phase=domain.phase();
     if(phase==ScenePhase::Dormant) {
@@ -1080,13 +1081,19 @@ void swapObserved(const SwapEvent& event) {
                 (boundary->kind==FgBoundaryKind::MultipleWorlds&&
                     boundary->multipleWorlds<=3)||
                 (boundary->kind==FgBoundaryKind::ThreadMismatch&&
-                    boundary->threadMismatch<=3);
+                    boundary->threadMismatch<=3)||
+                (boundary->kind==FgBoundaryKind::Ready&&
+                    !boundary->phaseReady&&boundary->phaseRejectedCount<=3);
             if(logRegular||logAnomaly)
-                spdlog::info("FG real boundary #{}: kind={} world={} epoch={} worldThread={} presentThread={} ready={} noWorld={} multiWorld={} threadMismatch={}; read-only, no marker",
+                spdlog::info("FG real boundary #{}: kind={} world={} epoch={} worldThread={} presentThread={} ready={} noWorld={} multiWorld={} threadMismatch={} rendererBegins={} worldBegins={} rendererThread={} worldBeginThread={} phaseReady={} phaseReadyCount={} phaseRejectedCount={}; read-only, no marker",
                     boundary->realPresent,static_cast<unsigned>(boundary->kind),
                     boundary->world,boundary->epoch,boundary->worldThread,
                     boundary->presentThread,boundary->ready,boundary->noWorld,
-                    boundary->multipleWorlds,boundary->threadMismatch);
+                    boundary->multipleWorlds,boundary->threadMismatch,
+                    boundary->rendererBegins,boundary->worldBegins,
+                    boundary->rendererThread,boundary->worldBeginThread,
+                    boundary->phaseReady,boundary->phaseReadyCount,
+                    boundary->phaseRejectedCount);
         }
         if(!(event.flags&DXGI_PRESENT_TEST))
             pollDiagnosticsFgHotkey(

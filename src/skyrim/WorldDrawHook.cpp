@@ -499,6 +499,11 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
         try { spdlog::warn("Owned SR input copy aborted by unknown exception"); } catch (...) {}
     }
 }
+void beforeOriginal(void*,std::uint32_t) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(state&&state->probeFgFrameBoundaries)
+        try {state->fgFrameBoundaries.worldBegin(GetCurrentThreadId());}catch(...) {}
+}
 void afterOriginal(void*,std::uint32_t) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     state->forwarded.fetch_add(1,std::memory_order_relaxed);
@@ -3122,6 +3127,11 @@ std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
 }
+void recordFgRendererBegin() noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(state&&state->probeFgFrameBoundaries)
+        try {state->fgFrameBoundaries.rendererBegin(GetCurrentThreadId());}catch(...) {}
+}
 std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
     std::uint64_t thread,bool test) noexcept {
     auto* state=active.load(std::memory_order_acquire);
@@ -3878,7 +3888,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         spdlog::info("Skyrim camera jitter source armed: game RVA=0x328cc20; exact caller/CALL/target bytes verified; same-frame SR/DLAA jitter enabled");
     } else spdlog::warn("Skyrim camera jitter source unavailable: caller/CALL/target bytes differ; DLAA will retain native frames");
     const auto configured=pending->forwarder.configure(
-        reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),&afterOriginal);
+        reinterpret_cast<WorldDrawFn>(base+plan.originalTargetRva),
+        &afterOriginal,&beforeOriginal);
     if(const auto error=std::get_if<Error>(&configured))return *error;
     const auto menuConfigured=pending->menuForwarder.configure(
         reinterpret_cast<MenuDisplayFn>(base+menuPlan.originalTargetRva),
