@@ -10,6 +10,29 @@
 #include <vector>
 #include <d3d11.h>
 
+TEST_CASE("Camera observation rejects changed ENB Map or Unmap ownership",
+    "[owned_route_profile]") {
+    const auto sites=rk::enb505CameraWriteSites();
+    REQUIRE(sites.size()==2);
+    constexpr std::uintptr_t base=0x180000000;
+    std::vector<std::uint8_t> image(sites.front().imageSize);
+    for(const auto& site:sites) {
+        const auto address=base+site.methodRva;
+        std::memcpy(image.data()+site.tableRva+site.slot*8,&address,8);
+        std::memcpy(image.data()+site.methodRva,site.prologue.data(),16);
+    }
+    for(const auto& site:sites) {
+        REQUIRE(std::get<bool>(rk::validateOwnedRouteSite(image,base,
+            site.moduleSha256,site.fileSize,site.tableRva,site)));
+        auto changed=image;changed[site.methodRva]^=1;
+        REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(changed,base,
+            site.moduleSha256,site.fileSize,site.tableRva,site)));
+        changed=image;changed[site.tableRva+site.slot*8]^=1;
+        REQUIRE(std::holds_alternative<rk::Error>(rk::validateOwnedRouteSite(changed,base,
+            site.moduleSha256,site.fileSize,site.tableRva,site)));
+    }
+}
+
 TEST_CASE("Native UI publication boundary remains stable after admission",
     "[owned_route_profile]") {
     REQUIRE_FALSE(rk::shouldUseMenuPublication(false,false,true));

@@ -58,6 +58,7 @@ const OwnedRouteSite& enbContextViewportSite() noexcept;
 const OwnedRouteSite& enbContextScissorSite() noexcept;
 const OwnedRouteSite& enbContextPsResourcesSite() noexcept;
 std::span<const OwnedRouteSite> enbContextSamplerSites() noexcept;
+std::span<const OwnedRouteSite> enb505CameraWriteSites() noexcept;
 struct EnbContextSites {
     const OwnedRouteSite* om{},*viewport{},*scissor{},*psResources{};
     std::span<const OwnedRouteSite> samplers{};

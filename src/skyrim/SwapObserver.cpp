@@ -51,7 +51,9 @@ bool validDisabledPatchIds(std::string_view ids) {
             id==reshade680SwapObserverPatchId?16U:
             id==win11DxgiFactoryCreateSite().id?32U:
             id==streamline2141FactoryCreateSite().id?64U:
-            id==steamFactoryInlineProfile().id?128U:0U;
+            id==steamFactoryInlineProfile().id?128U:
+            id==enb505CameraWriteSites()[0].id?256U:
+            id==enb505CameraWriteSites()[1].id?512U:0U;
         if(!bit||(seen&bit))return false;
         seen|=bit;
         if(comma==ids.npos)return true;

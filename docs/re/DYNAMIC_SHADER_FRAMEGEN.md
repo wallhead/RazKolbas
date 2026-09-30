@@ -89,3 +89,21 @@ The upstream README at this HEAD still advertises DLSS SR and an active
 RazKolbas investigation, the current source and removal commit take
 precedence over those descriptive claims. NR/FG runtime success reported by
 the upstream project is not a RazKolbas runtime result.
+
+## Camera-reference recheck, 2026-09-30
+
+The user's renewed reference points to the same live `main` SHA,
+`879ab2c13404e02f352fa10515abd0fc25996d4f`, verified with `git ls-remote` and
+the current repository page. Both preserved clones remain unchanged.
+The current `FrameGen.cpp` lines 693-739 capture the selected AE per-frame
+buffer's Map pointer and copy before original Unmap; lines 830 onward discuss
+multiple camera/impostor writers. Those project-specific measurements and
+heuristics are not accepted as observations of this modlist.
+
+RazKolbas 0.1.134 independently fingerprints the exact Skyrim/ENB producer,
+records completed write revisions and bounded caller pairs, and compares its
+existing menu/pre-Present phases. Ghidra, Capstone, production native-hook
+tests and remaining game limits are recorded in
+`FG_CAMERA_WRITE_OBSERVATION_2026-09-30.md`. The RE30 camera/token audit remains
+applicable: a valid decoded sample is not automatically a current frame token
+or a resource-retirement fence. No upstream source or binary is packaged.

@@ -1,0 +1,23 @@
+{
+  "id": "enb0505.context.camera-unmap-observe-v1",
+  "status": "EXPERIMENTAL_DIAGNOSTIC_GAME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "Copy 720 owned camera bytes while their mapped lifetime is valid, then forward the complete ENB Unmap including its shadow-copy work",
+  "target": {
+    "module": "d3d11.dll (ENB)",
+    "version": "0, 5, 0, 5",
+    "architecture": "x64",
+    "sha256": "35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3",
+    "file_size": 4553216,
+    "image_size": "0xa92000"
+  },
+  "location": {"context_table_rva": "0x18fa08", "slot": 15, "method_rva": "0x6b500", "write_rva": "0x18fa80"},
+  "original": {"pointer": "ASLR loaded ENB base + 0x6b500, exact aligned 8-byte value", "method_prologue": "48895c2408488974241048897c241855"},
+  "replacement": "PointerPatch compare-and-swap to pinned unmapProxy in FgCameraWriteHooks.cpp; original ENB Unmap preserved exactly once",
+  "abi": "ID3D11DeviceContext::Unmap, void STDMETHODCALLTYPE(context, resource, UINT subresource). Win64 ABI and original arguments preserved; incoming LastError restored before ENB. Copy before original call only, no mapped-pointer access afterward; no instruction relocation",
+  "activation": "Paired with enb0505.context.camera-map-observe-v1 at verified renderer creation; both complete contracts validated before Map CAS and then Unmap CAS; diagnostic default false/restart scoped",
+  "lifetime": "Pinned callback/ENB modules and forwarding state until process exit. Matching context/resource/subresource/thread required; failed or overlapping Map and buffer/context generation change invalidate evidence",
+  "recovery": "Unknown owners are rejected without overwrite. Pair startup failure restores only acquired slots still owned; later owners survive. Irrecoverable rollback terminates. Disable at next startup with either ID, ProbeFgCameraWrites false, SafeMode or experimental hooks false",
+  "evidence": ["docs/re/FG_CAMERA_WRITE_OBSERVATION_2026-09-30.md", "tests/unit/FgCameraWriteCaptureTests.cpp", "tests/unit/OwnedRouteProfileTests.cpp", "harness/FgCameraWriteProbe.cpp", "Ghidra and Capstone confirm ENB forwarding and Skyrim 720-byte producer"],
+  "game_runtime": "NOT RUN"
+}

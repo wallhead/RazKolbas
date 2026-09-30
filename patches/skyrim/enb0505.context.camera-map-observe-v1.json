@@ -1,0 +1,23 @@
+{
+  "id": "enb0505.context.camera-map-observe-v1",
+  "status": "EXPERIMENTAL_DIAGNOSTIC_GAME_NOT_RUN",
+  "shipping_enabled": false,
+  "purpose": "Retain the successful selected camera Map pointer until matching pre-Unmap observation; no rendering-data modification or FG submission",
+  "target": {
+    "module": "d3d11.dll (ENB)",
+    "version": "0, 5, 0, 5",
+    "architecture": "x64",
+    "sha256": "35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3",
+    "file_size": 4553216,
+    "image_size": "0xa92000"
+  },
+  "location": {"context_table_rva": "0x18fa08", "slot": 14, "method_rva": "0x6b370", "write_rva": "0x18fa78"},
+  "original": {"pointer": "ASLR loaded ENB base + 0x6b370, exact aligned 8-byte value", "method_prologue": "48895c241048896c2418488974242057"},
+  "replacement": "PointerPatch compare-and-swap to the pinned mapProxy callback in FgCameraWriteHooks.cpp; exact downstream function retained",
+  "abi": "ID3D11DeviceContext::Map, HRESULT STDMETHODCALLTYPE(context, resource, UINT subresource, D3D11_MAP kind, UINT flags, D3D11_MAPPED_SUBRESOURCE* output). Win64 ABI, original args/HRESULT/post-call LastError preserved; no instructions overwritten or relocated",
+  "activation": "Verified Skyrim renderer creation, with General.SafeMode false, versioned and experimental hooks enabled, ProbeFgCameraWrites true. Validate both Map and Unmap module/table/prologue/owner contracts before either write. Either disabled ID declines both",
+  "lifetime": "Process-lifetime pinned callback/ENB modules, forwarding state and exact immediate context. Selected buffer retained until generation changes. Every other context/resource forwards once; native Map completes before observation",
+  "recovery": "Preparation mismatch writes nothing. Second-slot CAS failure restores Map only if still owned; unrelated subsequent owner preserved. Unrecoverable rollback terminates. No live unpatch/unload; next launch disables the pair via diagnostic false, either ID, SafeMode or experimental hooks false",
+  "evidence": ["docs/re/FG_CAMERA_WRITE_OBSERVATION_2026-09-30.md", "tests/unit/FgCameraWriteCaptureTests.cpp", "tests/unit/OwnedRouteProfileTests.cpp", "harness/FgCameraWriteProbe.cpp", "exact ENB production installer: 240 fresh writes, altered-owner rejection and GPU readback, exit 0"],
+  "game_runtime": "NOT RUN"
+}

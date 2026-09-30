@@ -1,5 +1,76 @@
 # Implementation checkpoint
 
+## Source 0.1.134 camera-write diagnostic (2026-09-30)
+
+After the user-confirmed 0.1.133 presentation pass, the next bounded FG input
+prerequisite observes fresh camera writes before ENB Unmap. Default-off,
+restart-scoped `Diagnostics.ProbeFgCameraWrites` validates both exact ENB slots,
+captures the selected 720-byte camera buffer while mapped, and tracks writer
+revisions plus menu-to-Present stability and decoded camera history. It does
+not enable FG, assign Streamline tokens or change native UI rendering.
+
+Ghidra and complete Capstone windows independently confirm the game producer
+and ENB Map/Unmap forwarding. The production exact-ENB hardware probe passed
+240 fresh identical writes, generation replacement, foreign-buffer forwarding,
+GPU readback and altered-owner/selective-disable negatives. Release CTest
+passed **62/62**, Debug **58/58**. Details and actual evidence limits:
+`docs/re/FG_CAMERA_WRITE_OBSERVATION_2026-09-30.md`.
+
+**0.1.134 game writer/freshness/phase evidence and image/UI regression: NOT RUN.
+FG-On generated Skyrim frames: NOT RUN.** Next required game step remains
+user-started, FG Off. The user authorized closing Skyrim; normal window closure
+succeeded, and the agent confirmed no Skyrim process remained.
+
+Independent review's descriptor/generation findings were reproduced in failing
+tests and repaired; final review found no remaining blockers. Camera tests
+passed 83 assertions in 10 cases in both configurations. The two hook IDs have
+machine-readable records under `patches/skyrim/`.
+
+Installed **0.1.134** while Skyrim was closed; all **14** manifest payloads
+matched. DLL SHA-256:
+`e9c7fc54436a9f1c23c0a11ae5650badbbc630941a1d9304b9ca194d1d847e54`.
+The preserved INI bytes are the new file's unchanged prefix, with only
+ProbeFgCameraWrites=true appended; SR/NR/FG and hotkeys are unchanged.
+INI SHA-256: `96171bfd3e316e469745c23518525dad781d2b6ef52c8bc614747051f32075be`.
+Complete staging is `artifacts/local/stage-v54-fg-camera-writes-0134`; verified
+old DLL/INI/manifest backup is `artifacts/local/backup-v54-before-0134`.
+No 0.1.134 Skyrim run or game FG-On is claimed.
+
+## 0.1.133 Skyrim FG-Off presentation regression passed (2026-09-30)
+
+The user started Skyrim (PID 25160), loaded a save and confirmed that the
+world image, native UI and ENB effects look normal without a black screen.
+The user also confirmed that the Steam overlay is visible. Overlay input
+behavior has not been separately tested.
+
+The current run starts at **11:56:21** with the 0.1.133 build marker.
+At 11:56:52 it accepted the exact pinned Steam/native factory chain and
+returned the private Streamline lower/D3D11 facade through ReShade, explicitly
+keeping frame generation disabled. The actual renderer reports NVIDIA RTX
+4080 SUPER (`10de:2702`), LUID `00000000:000106a6`, output 2560x1440.
+The preserved log reaches **45,000 real outer Presents, zero failures**, all
+observed results `S_OK`. DLSS SR first evaluated at frame 41892; native HUD
+routing activated at 41923, and frame 42600 reports 709 DLSS submissions,
+zero fallbacks in flight. Native HUD viewport adjustments/restores have
+zero conflicts.
+
+The final pre-close snapshot reached **94,200 outer Presents, zero failures**.
+It is preserved as `artifacts/local/live-0133/RazKolbas-0133-final-before-close.log`,
+SHA-256 `8b867de9ae753c103d85945d49350855f13d05fb0a96de7ea636930554346430`.
+
+Runtime evidence: `artifacts/local/live-0133/RazKolbas-0133-run.log` (ignored),
+SHA-256 `17fdc60cfaabd5334f8c2a567c5acc9785e74da475d8a6c740f17c3d140936a0`.
+All 14 installed payloads and the preserved INI were freshly verified before
+this launch. At this observation, source and installed DLL were `aefb7d1` /
+0.1.133; no rebuild, settings change or DLL replacement preceded the successful
+run. The agent did not start Skyrim.
+
+**FG-Off game presentation and user-confirmed image/UI/ENB: PASS for this
+run. Steam overlay visibility: PASS (user report). Overlay input: NOT RUN.
+FG-On generated Skyrim frames: NOT RUN.** Continue the existing FG camera,
+guide/UI, token/marker and input-retirement integration before enabling game
+FG; the standalone synthetic FG result is not a substitute for that work.
+
 ## Source 0.1.133 ENB source ownership and presentation repair (2026-09-30)
 
 The user-started 0.1.132 run bound the private facade successfully but showed

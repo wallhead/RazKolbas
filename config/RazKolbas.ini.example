@@ -141,6 +141,9 @@ ProbeDirectUiPlane = false
 ; Can be paired with ProbeDirectUiPlane for one correlated world/UI frame.
 ; Restart required; may stall diagnostic frames; does not enable frame generation.
 ProbeFgCameraBuffer = false
+; Observe exact ENB camera Map/Unmap writes before native Unmap; restart required.
+; Diagnostic evidence only; does not enable FG or bind Streamline frame tokens.
+ProbeFgCameraWrites = false
 ; Restart-only, exact V5.4 ReShade/ENB private Streamline D3D12 lower
 ; and D3D11 game facade trial. DLSS-G is explicitly Off; native fallback
 ; remains active if identity, adapter or swap creation preflight fails.

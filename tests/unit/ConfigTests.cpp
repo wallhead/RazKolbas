@@ -95,6 +95,25 @@ TEST_CASE("FG camera buffer probe is opt-in and restart-scoped", "[config]") {
     REQUIRE(enabled.get<bool>("Diagnostics.ProbeFgCameraBuffer"));
     REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
 }
+
+TEST_CASE("FG camera write observation is opt-in and restart-scoped", "[config]") {
+    const auto defaults=rk::defaultSettings();
+    const auto parsed=rk::parseIni("[Diagnostics]\nProbeFgCameraWrites=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto enabled=std::get<rk::Settings>(parsed);
+    REQUIRE(enabled.values.contains("Diagnostics.ProbeFgCameraWrites"));
+    REQUIRE(enabled.get<bool>("Diagnostics.ProbeFgCameraWrites"));
+    REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeFgCameraWrites"));
+    REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+}
+
+TEST_CASE("Camera Map and Unmap observation have independent recovery IDs", "[config]") {
+    const auto parsed=rk::parseIni("[Patching]\nDisabledPatchIds=enb0505.context.camera-map-observe-v1,enb0505.context.camera-unmap-observe-v1\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& settings=std::get<rk::Settings>(parsed);
+    REQUIRE(settings.get<rk::Text>("Patching.DisabledPatchIds").value==
+        "enb0505.context.camera-map-observe-v1,enb0505.context.camera-unmap-observe-v1");
+}
 TEST_CASE("Private FG swap trial parses a repeated diagnostics section without enabling FG", "[config]") {
     const auto defaults=rk::defaultSettings();
     REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeFgPrivateSwapOff"));

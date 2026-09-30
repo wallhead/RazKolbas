@@ -14,6 +14,7 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
         "Diagnostics.CaptureHotkey", "Diagnostics.CaptureFirstDlssFrame",
         "Diagnostics.ProbeDirectUiPlane",
         "Diagnostics.ProbeFgCameraBuffer",
+        "Diagnostics.ProbeFgCameraWrites",
         "Diagnostics.ProbeFgPrivateSwapOff",
         "Diagnostics.SpatialBaselineOnly",
         "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches",

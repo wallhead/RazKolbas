@@ -119,3 +119,21 @@ Next gate: one user-started Skyrim launch/save load with the installed 0.1.133
 FG-Off trial. Inspect actual Presents and verify the image, native UI and ENB
 appearance. Steam overlay is optional for this gate; both offline factory
 paths passed. No supplied reference or vendor DLL was modified or added to Git.
+
+## Subsequent 0.1.133 Skyrim result
+
+The user-started run beginning at 11:56:21 on 2026-09-30 (PID 25160)
+accepted the pinned Steam/native chain and bound the private facade through
+ReShade at 11:56:52, with FG disabled. The saved latest-session log reaches
+45,000 real outer Presents with zero failed calls and `S_OK` observations.
+DLSS SR evaluated at frame 41892; the native HUD route activated at 41923.
+Frame 42600 reports 709 DLSS submissions and no in-flight fallbacks; native
+HUD viewport adjustment/restoration records zero conflicts.
+
+The user confirmed normal world image, native UI and ENB appearance, no
+black screen, and visible Steam overlay. This passes the FG-Off presentation
+regression for this run. Steam overlay input and FG-On generated Skyrim
+frames remain NOT RUN. Raw evidence is ignored
+`artifacts/local/live-0133/RazKolbas-0133-run.log`, SHA-256
+`17fdc60cfaabd5334f8c2a567c5acc9785e74da475d8a6c740f17c3d140936a0`.
+No binary or configuration was changed for this observation.

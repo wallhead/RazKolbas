@@ -12,6 +12,8 @@
 #include "rk/MenuDisplay.hpp"
 #include "rk/DeferredUiFlush.hpp"
 #include "rk/OwnedRouteProfile.hpp"
+#include "rk/FgCameraWriteHooks.hpp"
+#include "rk/FgGameCameraBuffer.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
@@ -150,6 +152,15 @@ struct WorldState {
     bool captureFirstDlssFrame{};
     bool probeDirectUiPlane{},directUiPlaneAttempted{};
     bool probeFgCameraBuffer{},fgCameraProbeFinished{};
+    bool probeFgCameraWrites{},fgPriorPresentFresh{};
+    std::uintptr_t fgCameraGameBase{};
+    std::string fgCameraDisabledIds;
+    std::optional<FgCameraWrite> fgBeforeUiWrite,fgPriorPresentWrite;
+    std::optional<FgGameCameraSample> fgPriorPresentCamera;
+    std::uint64_t fgBeforeUiFrame{},fgPriorPresentFrame{};
+    std::uint64_t fgLastWriteRevision{};
+    std::uint64_t fgWriteFrames{},fgFreshWrites{},fgStableWrites{},fgMissingWrites{},fgValidCameras{},fgConsecutiveCameras{};
+    unsigned fgLoggedWriters{};
     std::uint64_t fgCameraFirstFrame{};
     std::array<std::optional<ProbeBuffer>,3> fgCameraSamples;
     std::array<std::optional<ProbeBuffer>,2> fgPrePresentCameraSamples;
@@ -1836,11 +1847,67 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     beginNativeHudMovieViewportWindow(state,frame);
 #endif
 }
+void observeGameCameraWrites(WorldState* state,std::uint64_t frame,bool beforeUi) noexcept {
+#ifdef RK_WITH_NGX
+    if(!state->probeFgCameraWrites)return;
+    try {
+        const auto observation=snapshotFgCameraWrites();
+        if(beforeUi) {
+            state->fgBeforeUiFrame=frame;
+            state->fgBeforeUiWrite=observation.latest;return;
+        }
+        for(unsigned i=state->fgLoggedWriters;i<observation.writerCount;++i) {
+            const auto& writer=observation.writers[i];
+            const auto relative=[&](std::uint64_t caller) {
+                return caller>=state->fgCameraGameBase&&
+                    caller-state->fgCameraGameBase<skyrim1170CreationProfile().imageSize?
+                    caller-state->fgCameraGameBase:0;
+            };
+            spdlog::info("FG camera writer {}: Map caller=0x{:x} gameRva=0x{:x}; Unmap caller=0x{:x} gameRva=0x{:x}",
+                i,writer.mapCaller,relative(writer.mapCaller),writer.unmapCaller,relative(writer.unmapCaller));
+        }
+        state->fgLoggedWriters=observation.writerCount;
+        if(frame==state->fgPriorPresentFrame)return;
+        ++state->fgWriteFrames;
+        const auto& current=observation.latest;
+        const bool fresh=current&&current->revision>state->fgLastWriteRevision;
+        if(current)state->fgLastWriteRevision=current->revision;
+        const bool stable=current&&state->fgBeforeUiWrite&&
+            frame==state->fgBeforeUiFrame&&sameFgCameraWrite(*current,*state->fgBeforeUiWrite);
+        state->fgFreshWrites+=fresh;state->fgStableWrites+=stable;
+        state->fgMissingWrites+=!current;
+        std::optional<FgGameCameraSample> decoded;
+        if(current) {
+            auto camera=decodeFgGameCameraBuffer(current->bytes);
+            if(const auto* sample=std::get_if<FgGameCameraSample>(&camera))decoded=*sample;
+        }
+        const bool consecutive=fresh&&state->fgPriorPresentFresh&&decoded&&
+            state->fgPriorPresentCamera&&current&&state->fgPriorPresentWrite&&
+            canCompareFgCameraWriteHistory(*state->fgPriorPresentWrite,*current)&&
+            state->fgPriorPresentFrame+1==frame&&
+            fgGameCameraConsecutive(*state->fgPriorPresentCamera,*decoded);
+        state->fgValidCameras+=decoded.has_value();state->fgConsecutiveCameras+=consecutive;
+        if(state->fgWriteFrames<=12||frame%600==0)
+            spdlog::info("FG camera writes frame {}: buffer=0x{:x} generation={} revision={} completed={} rejected={} writers={} overflow={} fresh={} menuStable={} decoded={} consecutive={}; observedFrames={} freshFrames={} stableFrames={} missingFrames={} validCameras={} consecutiveCameras={}; diagnostic only, no SL token or FG submission",
+                frame,current?current->buffer:0,current?current->generation:0,
+                current?current->revision:0,observation.completed,observation.rejected,
+                observation.writerCount,observation.writerOverflow,fresh,stable,decoded.has_value(),consecutive,
+                state->fgWriteFrames,state->fgFreshWrites,state->fgStableWrites,state->fgMissingWrites,
+                state->fgValidCameras,state->fgConsecutiveCameras);
+        state->fgPriorPresentFrame=frame;state->fgPriorPresentWrite=current;
+        state->fgPriorPresentFresh=fresh;
+        state->fgPriorPresentCamera=decoded;
+    }catch(...) {}
+#else
+    (void)state;(void)frame;(void)beforeUi;
+#endif
+}
 void menuDisplayProxy(void* first,std::uint32_t second,std::uint32_t third,
     std::uint32_t fourth) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state)std::terminate();
     state->menuForwarder.dispatch(first,second,third,fourth);
+    observeGameCameraWrites(state,state->forwarded.load(std::memory_order_relaxed),true);
     logInventoryBinding(state,state->forwarded.load(std::memory_order_relaxed),
         "after-menu-prep-before-PostDisplay");
 }
@@ -2968,6 +3035,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     }
     probeGameFgCameraPrePresent(state,
         state->forwarded.load(std::memory_order_relaxed));
+    observeGameCameraWrites(state,state->forwarded.load(std::memory_order_relaxed),false);
 #endif
     const bool usualProbe=state->presentTargetProbeDue.exchange(false,std::memory_order_acq_rel);
     const auto ownedRemaining=state->ownedPrePresentProbes.load(std::memory_order_acquire);
@@ -3219,6 +3287,18 @@ void bindWorldDrawRenderer(ID3D11Device* device,ID3D11DeviceContext* context,
     state->createdContext.store(reinterpret_cast<std::uintptr_t>(context),std::memory_order_relaxed);
     state->createdSwap.store(reinterpret_cast<std::uintptr_t>(swap),std::memory_order_relaxed);
     state->createdDevice.store(reinterpret_cast<std::uintptr_t>(device),std::memory_order_release);
+#ifdef RK_WITH_NGX
+    if(state->probeFgCameraWrites) {
+        try {
+            const auto installed=installFgCameraWriteHooks(context,state->fgCameraGameBase,
+                skyrim1170CreationProfile().gameSha256,state->fgCameraDisabledIds);
+            if(const auto* error=std::get_if<Error>(&installed))
+                spdlog::warn("FG camera write observer rejected: {}",error->message);
+            else spdlog::info("FG camera write observer armed={}; exact ENB Map/Unmap, 720-byte pre-Unmap CPU copy; FG unchanged",
+                std::get<bool>(installed));
+        }catch(...) {}
+    }
+#endif
 }
 Result<Extent> planWorldOwnedScene(Extent display) noexcept {
 #ifdef RK_WITH_NGX
@@ -3436,6 +3516,9 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Diagnostics.ProbeDirectUiPlane");
     pending->probeFgCameraBuffer=
         settings.get<bool>("Diagnostics.ProbeFgCameraBuffer");
+    pending->probeFgCameraWrites=settings.get<bool>("Diagnostics.ProbeFgCameraWrites");
+    pending->fgCameraGameBase=base;
+    pending->fgCameraDisabledIds=settings.get<Text>("Patching.DisabledPatchIds").value;
     if(pending->ownedSpatialBaseline)
         spdlog::info("Owned reduced route configured for spatial baseline; NGX submissions disabled");
 #endif
