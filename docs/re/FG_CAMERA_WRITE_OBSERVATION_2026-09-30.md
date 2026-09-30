@@ -1,5 +1,11 @@
 # Camera write observation before ENB Unmap, 2026-09-30
 
+This report describes the prepared checkpoint. The later game run admitted the
+observer and produced fresh/stable world-camera evidence, but the user reported
+a sustained 22 FPS regression. Current runtime results and the installed
+camera-Off comparison are in `FG_CAMERA_GAME_FRESHNESS_AND_FPS_2026-09-30.md`.
+The NOT RUN statements below apply to the original preparation time.
+
 ## Purpose and runtime boundary
 
 The user confirmed the 0.1.133 Skyrim world, native UI and ENB effects look

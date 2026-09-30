@@ -6,12 +6,31 @@
 #include <Windows.h>
 #include <wrl/client.h>
 #include <cstring>
+#include <cwchar>
 #include <iostream>
+#include <algorithm>
+#include <array>
+#include <chrono>
 
 using Microsoft::WRL::ComPtr;
 namespace {
 void foreignOwner() {}
-int run(const wchar_t* enbPath) {
+double measurePairs(ID3D11DeviceContext* context,ID3D11Buffer* buffer) {
+    constexpr unsigned count=20000;
+    std::array<double,5> trials{};
+    for(auto& trial:trials) {
+        const auto start=std::chrono::steady_clock::now();
+        for(unsigned i=0;i<count;++i) {
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if(FAILED(context->Map(buffer,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)))return -1;
+            std::memset(mapped.pData,0x5a,720);context->Unmap(buffer,0);
+        }
+        trial=std::chrono::duration<double,std::micro>(
+            std::chrono::steady_clock::now()-start).count()/count;
+    }
+    std::sort(trials.begin(),trials.end());return trials[2];
+}
+int run(const wchar_t* enbPath,bool benchmark) {
     const auto sites=rk::enb505CameraWriteSites();
     const auto hash=rk::sha256File(enbPath);
     if(!std::holds_alternative<std::string>(hash)||
@@ -63,16 +82,18 @@ int run(const wchar_t* enbPath) {
         if(reinterpret_cast<std::uintptr_t>(table[other.slot])!=base+other.methodRva)return 13;
         if(std::holds_alternative<rk::Error>(foreign.restore()))return 14;
     }
-    const auto installed=install({});
-    if(const auto* error=std::get_if<rk::Error>(&installed)) {
-        std::cerr<<error->message<<'\n';return 15;
-    }
-    if(!std::get<bool>(installed))return 16;
     D3D11_BUFFER_DESC desc{};desc.ByteWidth=720;desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
     desc.Usage=D3D11_USAGE_DYNAMIC;desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
     ComPtr<ID3D11Buffer> buffer,foreignBuffer;
     if(FAILED(device->CreateBuffer(&desc,nullptr,&buffer))||
        FAILED(device->CreateBuffer(&desc,nullptr,&foreignBuffer)))return 17;
+    const double baseline=benchmark?measurePairs(context.Get(),foreignBuffer.Get()):0;
+    if(baseline<0)return 31;
+    const auto installed=install({});
+    if(const auto* error=std::get_if<rk::Error>(&installed)) {
+        std::cerr<<error->message<<'\n';return 15;
+    }
+    if(!std::get<bool>(installed))return 16;
     *bufferCell=buffer.Get();
     for(unsigned frame=1;frame<=240;++frame) {
         if(frame==121) {
@@ -104,6 +125,17 @@ int run(const wchar_t* enbPath) {
     const bool same=std::memcmp(readback.pData,final.latest->bytes.data(),720)==0;
     context->Unmap(staging.Get(),0);if(!same||final.rejected)return 28;
     *bufferCell=nullptr;if(rk::snapshotFgCameraWrites().latest)return 29;
+    if(benchmark) {
+        *bufferCell=foreignBuffer.Get();
+        const double selected=measurePairs(context.Get(),foreignBuffer.Get());
+        const double foreign=measurePairs(context.Get(),buffer.Get());
+        if(selected<0||foreign<0)return 31;
+        std::cout<<"CPU median us per Map/write720/Unmap pair (5 x 20000): native="<<baseline
+            <<" observedSelected="<<selected<<" observedForeign="<<foreign
+            <<" selectedDelta="<<(selected-baseline)<<" foreignDelta="<<(foreign-baseline)
+            <<"; microbenchmark, not game FPS\n";
+        *bufferCell=nullptr;rk::snapshotFgCameraWrites();
+    }
     std::cout<<"Exact ENB slots: disabled/foreign-owner rejection passed; 240 fresh identical writes, buffer replacement, foreign resource forwarding and GPU readback passed; writers="
         <<final.writerCount<<" rejected="<<final.rejected<<"; synthetic camera fixture, no Skyrim or FG-On\n";
     // Callback lease retains one context and pinned modules until exit. Its
@@ -113,6 +145,7 @@ int run(const wchar_t* enbPath) {
 }
 int wmain(int argc,wchar_t** argv) {
     std::cout.setf(std::ios::unitbuf);
-    if(argc!=2)return 1;
-    try {return run(argv[1]);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 30;}
+    const bool benchmark=argc==3&&std::wcscmp(argv[2],L"benchmark")==0;
+    if(argc!=2&&!benchmark)return 1;
+    try {return run(argv[1],benchmark);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 30;}
 }

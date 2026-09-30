@@ -1,5 +1,44 @@
 # Implementation checkpoint
 
+## 0.1.134 live camera evidence and sustained FPS regression (2026-09-30)
+
+The user loaded a save and confirmed a good image, but reported a continuous
+drop from 60 to **22 FPS**. The latest run admitted the exact ENB observer and
+the statically identified Skyrim writer. At frame 74400, its camera was fresh,
+stable between the menu boundary and Present, decoded and consecutive; one
+writer pair, zero rejected writes and zero failed outer Presents. This is
+live camera diagnostic evidence, not a game FG-On result or a performance pass.
+
+The final logged 2400 outer Presents took 110 seconds, approximately **21.8/s**,
+consistent with the report. The earlier 0.1.133 run's final 2400 took 32 seconds;
+the logs do not establish an identical save/view comparison. The exact-ENB CPU
+microbenchmark measures about **1.1 microseconds added per Map/write/Unmap pair**,
+including unrelated buffers. It does not establish the full game's slowdown.
+
+After preserving logs and closing Skyrim normally under prior authorization,
+changed only `ProbeFgCameraWrites` to **false** for an A/B run. All **14** installed
+payload hashes match; the **0.1.134 DLL is unchanged**, SHA-256
+`e9c7fc54436a9f1c23c0a11ae5650badbbc630941a1d9304b9ca194d1d847e54`.
+Current INI SHA-256:
+`e1de3933bfb8a71b75676e53684314c0826388a3214d35a5c4a3ac58795e68c3`.
+The original user INI remains its unchanged byte prefix. SR/NR/FG, hotkeys and
+the private FG-Off presentation trial are preserved. The prior camera-On
+INI/manifest are backed up at `artifacts/local/backup-v54-0134-before-camera-off`.
+
+The user has now started the camera-Off run (PID 25504; session marker 13:54:06).
+Its saved latest-session log contains no camera observer/writer/sample lines,
+and reports zero failed outer Presents through frame 30000. Frames 27000–30000
+took 59 seconds, approximately **50.8 real Presents/s**. This is improved
+throughput in the current sample; identical view and steady user FPS have not
+yet been confirmed. The performance cause and full recovery remain unresolved.
+
+**Camera-Off run: observed; steady FPS/view confirmation pending. Game FG-On:
+NOT RUN.** The user requested limiting this work to the camera-Off comparison
+and pushing the current source/evidence for further ChatGPT review. No further
+production change is included. Runtime evidence, measurement
+limits and install receipt: `docs/re/FG_CAMERA_GAME_FRESHNESS_AND_FPS_2026-09-30.md`.
+The older prepared/NOT RUN entries below describe their original checkpoints.
+
 ## Source 0.1.134 camera-write diagnostic (2026-09-30)
 
 After the user-confirmed 0.1.133 presentation pass, the next bounded FG input
