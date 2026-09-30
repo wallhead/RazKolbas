@@ -488,3 +488,54 @@ manifest SHA-256 is
 This restores legible reduced-resolution loading artwork from the 0.1.136
 trial; the exact 0.1.140 INI combination has **not** had a new game run.
 Full-resolution quality repair and game FG-On remain OPEN/NOT RUN.
+
+### 0.1.140 reduced-loading comparison, same DLL
+
+With Skyrim closed, the existing `ProbeLoadingPicture` one-shot capture was
+enabled in the installed 0.1.140 INI. A byte comparison confirmed that this
+was the only settings change: FG stayed Off, `ProbeLoadingReducedRoute` stayed
+true, and the failed native restore/movie-viewport trials stayed Off. The DLL
+remained `478757b526ed27986c2fbcf7014847168c86c96bc31463f18b878cea694545b7`.
+The prior verified DLL, INI and manifest were copied to ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0140-reduced-loading-capture`.
+The capture-run INI SHA-256 is
+`cd76da5f4c8bc3c9b8dd10f764b4a66fa02bd5b859b761c63f1214f38319f3bc`;
+the manifest SHA-256 is
+`9ac40de35d5912f6b4eabea0a4b6a01e25f311f5d27a3dd8583d9bc7d731bccf`.
+All **14/14** installed payload hashes verified before the run.
+
+The user started Skyrim through MO2, loaded the save and fast-travelled. Their
+visual report was **“Both done; bright but pixelated.”** The log confirms the
+reduced Loading Menu route was active at frame 7557, with one-shot save-load
+frame 7586 and after-world frame 8979. Both capture manifests are complete;
+their SHA-256 values are
+`1e9c40fa40de9b62abe594894ad8a8686f3626864ba5734f54315f399d3368a2`
+and `9f419ebc45ef7ddea41f6b46cf1e3f2fc9c34509fd1a7917d53694564900f29e`.
+In both frames, the 2560x1440 native target was byte-identical before the
+menu calls and after Scaleform EndFrame, while the 1485x835 reduced scene
+already held legible artwork before the calls. Only the pre-Present spatial
+publication changed native pixels. The save-load native mean RGB moved from
+**26/43/68** to **47/52/78**; fast travel moved from **44/39/30** to
+**49/47/40**. Images differ between runs, so these are route-local values, not
+cross-run colour ratios.
+
+The paired native-route 0.1.140 capture instead had the same bright artwork
+in native and reduced targets before `PostDisplay`, then the actual Fader
+callback removed the native background and the Loading Menu left a very dim
+new picture. The reduced scene did not change. This localizes the brightness
+failure to publishing the already-produced reduced loading artwork before the
+menu stack, then allowing the native Fader/Loading sequence to replace it.
+The full-resolution repair needs an earlier artwork producer or an independent
+native-size artwork source; changing only the late movie viewport or restoring
+an old native frame cannot create native detail for the new picture.
+
+Skyrim ignored a normal window-close request; the user closed it through the
+in-game menu. With the game absent, the capture-run INI and manifest were
+replaced with the exact verified pre-capture copies. All **14/14** installed
+payload hashes verify. Installed INI SHA-256 is
+`75f5325db98a7bf73a28222bb71ae7fefbc25427e670e424bed6f2348885d3fc`;
+manifest SHA-256 is
+`701edfb2ca99bd43178d456a8a8457e1b07b12d00f82dfdca08eb139b69d4ac7`.
+FG remains Off and the bright reduced route remains On.
+**Exact 0.1.140 bright workaround game visual test: RUN; full-resolution
+repair: OPEN; Skyrim FG-On: NOT RUN.**

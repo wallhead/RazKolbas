@@ -5657,7 +5657,16 @@ the changed viewport, but the user's save-load and fast-travel pictures stayed
 dark; the native captures remained near black. The installed 0.1.140 INI now
 selects the previously user-tested bright reduced loading route and switches
 the failed restore/viewport probes Off. This workaround remains lower
-resolution; its exact 0.1.140 setting combination has not had a new game run.
+resolution. A later user-started 0.1.140 run loaded the same save and
+fast-travelled with that route active; the user reported both loading pictures
+bright but pixelated. Both one-shot capture manifests are complete. The
+reduced 1485x835 scene held legible artwork before menu drawing, the native
+target did not change through Scaleform EndFrame, and the spatial pre-Present
+pass published the artwork at 2560x1440. The one-shot capture key was switched
+back Off after Skyrim closed; FG remains Off and the bright route remains On.
+The next full-resolution investigation must locate the upstream artwork
+producer or a native-size source, rather than adjusting the later Loading
+Menu movie.
 Release **64/64** and Debug **59/59** CTest groups passed; all 14 installed
 payload hashes verified. **0.1.138, 0.1.139, and 0.1.140 native visual
 trials: FAILED; full-resolution loading repair: OPEN; game FG-On: NOT RUN.**
