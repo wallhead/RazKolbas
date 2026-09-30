@@ -21,6 +21,8 @@ public:
     Result<std::unique_ptr<FgD3D11AuxSwapSource>> prepare(
         UINT width,UINT height,DXGI_FORMAT format) const;
     ID3D11Texture2D* buffer() const noexcept {return buffer_.Get();}
+    // create() verifies the native swap's device and owns its GetBuffer result.
+    ID3D11Device* verifiedDevice() const noexcept {return nativeDevice_.Get();}
 private:
     FgD3D11AuxSwapSource(FactoryCreateFn nativeCreate,
         IDXGIFactory* nativeFactory,ID3D11Device* nativeDevice,

@@ -59,16 +59,20 @@ FgPrivateSwapRoute::~FgPrivateSwapRoute() noexcept {retire();}
 void FgPrivateSwapRoute::retire() noexcept {
     lower_.Reset();queue_.Reset();upgradedFactory_.Reset();parentFactory_.Reset();
     upgradedD12_.Reset();verifiedNative_.Reset();d12_.Reset();
-    if(runtime_) {
+    if(runtime_&&runtime_.use_count()==1) {
         const auto result=runtime_->shutdown();
         if(std::holds_alternative<Error>(result)) {
             // Keep the DLL and its search directory pinned after a failed
             // shutdown; a Streamline callback may still be reachable.
-            runtime_.release();
+            // Its destructor deliberately pins an initialized runtime.
+            runtime_.reset();
             return;
         }
         runtime_.reset();
     }
+    // A live or quarantined bridge still owns provider proxies. It retains
+    // the runtime; shutdown must not invalidate callbacks under those owners.
+    runtime_.reset();
 }
 Result<std::unique_ptr<FgPrivateSwapRoute>> FgPrivateSwapRoute::prepare(
     IDXGIAdapter* selected,const DXGI_SWAP_CHAIN_DESC& gameDesc,
@@ -198,7 +202,7 @@ Result<ComPtr<IDXGISwapChain4>> FgPrivateSwapRoute::createFacade(
         auto result=FgD3D11SwapFacade::create(nativeD11,context.Get(),
             upgradedD12_.Get(),queue_.Get(),lower_.Get(),
             verifiedNative_.Get(),std::move(std::get<
-                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)));
+                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)),runtime_);
         if(std::holds_alternative<ComPtr<IDXGISwapChain4>>(result))
             issued_.store(true,std::memory_order_release);
         return result;

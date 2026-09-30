@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgSharedInputs.hpp"
+#include "rk/PointerPatch.hpp"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -10,6 +11,19 @@
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
+
+namespace {
+using GetDeviceFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceChild*,ID3D11Device**);
+GetDeviceFn originalGetDevice{};
+ID3D11DeviceChild* aliasedResource{};
+ID3D11Device* reportedAlias{};
+void STDMETHODCALLTYPE aliasGetDevice(ID3D11DeviceChild* resource,ID3D11Device** device) {
+    if(resource==aliasedResource) {
+        *device=reportedAlias;
+        reportedAlias->AddRef();
+    } else originalGetDevice(resource,device);
+}
+}
 
 TEST_CASE("FG shared colour reaches a same-adapter D3D12 lease", "[fg_interop]") {
     ComPtr<IDXGIFactory4> factory;
@@ -57,12 +71,42 @@ TEST_CASE("FG shared colour reaches a same-adapter D3D12 lease", "[fg_interop]")
     REQUIRE(SUCCEEDED(d11->CreateTexture2D(&wrongDesc,nullptr,&wrongSource)));
     REQUIRE(std::holds_alternative<rk::Error>(
         bridge->copy(context.Get(),wrongSource.Get(),surface)));
-    const auto copied=bridge->copy(context.Get(),source.Get(),surface);
+    auto sourceResult=bridge->captureSource(source.Get());
+    REQUIRE(std::holds_alternative<rk::FgSourceLease>(sourceResult));
+    auto sourceLease=std::move(std::get<rk::FgSourceLease>(sourceResult));
+    auto secondSurfaceResult=secondBridge->makeSurface(desc);
+    REQUIRE(std::holds_alternative<rk::FgSharedSurface>(secondSurfaceResult));
+    auto secondSurface=std::move(std::get<rk::FgSharedSurface>(secondSurfaceResult));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        secondBridge->copy(context.Get(),sourceLease,secondSurface)));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        bridge->copy(context.Get(),rk::FgSourceLease{},surface)));
+    ComPtr<ID3D11Device> foreignDevice;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,
+        nullptr,0,nullptr,0,D3D11_SDK_VERSION,&foreignDevice,nullptr,nullptr)));
+    ComPtr<ID3D11DeviceContext> foreignContext;
+    foreignDevice->GetImmediateContext(&foreignContext);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        bridge->copy(foreignContext.Get(),sourceLease,surface)));
+    auto** sourceTable=*reinterpret_cast<void***>(source.Get());
+    originalGetDevice=reinterpret_cast<GetDeviceFn>(sourceTable[3]);
+    aliasedResource=source.Get();reportedAlias=foreignDevice.Get();
+    rk::PointerPatch aliasPatch;
+    REQUIRE(std::holds_alternative<bool>(aliasPatch.apply(sourceTable+3,
+        reinterpret_cast<void*>(originalGetDevice),reinterpret_cast<void*>(&aliasGetDevice))));
+    // Simulate the later wrapper's changed GetDevice report. Raw resources
+    // still reject; the lease retains the exact resource validated earlier.
+    REQUIRE(std::holds_alternative<rk::Error>(
+        bridge->copy(context.Get(),source.Get(),surface)));
+    REQUIRE(std::holds_alternative<rk::Error>(bridge->captureSource(source.Get())));
+    const auto copied=bridge->copy(context.Get(),sourceLease,surface);
     REQUIRE(std::holds_alternative<rk::FgCopyTicket>(copied));
     const auto ticket=std::get<rk::FgCopyTicket>(copied);
     REQUIRE(ticket.producer!=0);
     REQUIRE(ticket.copy!=0);
     REQUIRE(bridge->waitCopy(ticket.copy));
+    REQUIRE(std::holds_alternative<bool>(aliasPatch.restore()));
+    aliasedResource=nullptr;reportedAlias=nullptr;
     REQUIRE_FALSE(bridge->copyComplete(ticket.copy+2));
 
     const auto textureDesc=surface.d12()->GetDesc();

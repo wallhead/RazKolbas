@@ -1,4 +1,5 @@
 #include "rk/FgSharedInputs.hpp"
+#include "rk/FgD3D11AuxSwapSource.hpp"
 #include <dxgi1_2.h>
 #include <Windows.h>
 #include <atomic>
@@ -99,7 +100,39 @@ Result<FgSharedSurface> FgSharedInputs::makeSurface(
     surface.ownerId_=id_;
     return surface;
 }
+Result<FgSourceLease> FgSharedInputs::captureSource(ID3D11Texture2D* source) const {
+    Microsoft::WRL::ComPtr<ID3D11Device> device;
+    if(source)source->GetDevice(&device);
+    if(!sameDevice(device.Get(),d11_.Get()))
+        return Error{ErrorCode::Conflict,"FG source device identity differs"};
+    FgSourceLease lease;
+    lease.source_=source;
+    lease.ownerId_=id_;
+    return lease;
+}
+Result<FgSourceLease> FgSharedInputs::captureSource(
+    const FgD3D11AuxSwapSource& source) const {
+    if(!source.buffer()||!sameDevice(source.verifiedDevice(),d11_.Get()))
+        return Error{ErrorCode::Conflict,"FG auxiliary source device identity differs"};
+    FgSourceLease lease;
+    lease.source_=source.buffer();
+    lease.ownerId_=id_;
+    return lease;
+}
 Result<FgCopyTicket> FgSharedInputs::copy(ID3D11DeviceContext* context,
+    ID3D11Texture2D* source,const FgSharedSurface& target) {
+    auto captured=captureSource(source);
+    if(!std::holds_alternative<FgSourceLease>(captured))
+        return std::get<Error>(std::move(captured));
+    return copy(context,std::get<FgSourceLease>(captured),target);
+}
+Result<FgCopyTicket> FgSharedInputs::copy(ID3D11DeviceContext* context,
+    const FgSourceLease& source,const FgSharedSurface& target) {
+    if(!source.source_||source.ownerId_!=id_)
+        return Error{ErrorCode::Conflict,"FG source lease is empty or belongs to another interop"};
+    return copyImpl(context,source.source_.Get(),target);
+}
+Result<FgCopyTicket> FgSharedInputs::copyImpl(ID3D11DeviceContext* context,
     ID3D11Texture2D* source,const FgSharedSurface& target) {
     if(!context||!source||!target.d11_||!target.d12_||target.ownerId_!=id_)
         return Error{ErrorCode::InvalidInput,"FG copy is missing a resource or context"};
@@ -110,13 +143,13 @@ Result<FgCopyTicket> FgSharedInputs::copy(ID3D11DeviceContext* context,
         return Error{ErrorCode::InvalidInput,"FG source and shared surface descriptors differ"};
     Microsoft::WRL::ComPtr<ID3D11DeviceContext4> context4;
     Microsoft::WRL::ComPtr<ID3D11Device> contextDevice;
-    Microsoft::WRL::ComPtr<ID3D11Device> sourceDevice;
     context->GetDevice(&contextDevice);
-    source->GetDevice(&sourceDevice);
-    if(!sameDevice(contextDevice.Get(),d11_.Get())||
-       !sameDevice(sourceDevice.Get(),d11_.Get())||
-       FAILED(context->QueryInterface(IID_PPV_ARGS(&context4))))
-        return Error{ErrorCode::Conflict,"FG copy requires the matching D3D11 immediate context"};
+    if(!sameDevice(contextDevice.Get(),d11_.Get()))
+        return Error{ErrorCode::Conflict,"FG copy context device identity differs"};
+    const auto contextResult=context->QueryInterface(IID_PPV_ARGS(&context4));
+    if(FAILED(contextResult))
+        return Error{ErrorCode::Conflict,"FG copy immediate context has no Context4: "+
+            std::to_string(static_cast<std::uint32_t>(contextResult))};
     std::scoped_lock lock(mutex_);
     if(failed_||!healthy()||nextProducerValue_>=UINT64_MAX-1||
        nextCopyValue_>=UINT64_MAX-1)

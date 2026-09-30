@@ -216,6 +216,45 @@ TEST_CASE("FG bridge rejects deferred contexts and non-direct queues",
     REQUIRE(std::holds_alternative<rk::Error>(wrongQueue));
 }
 
+TEST_CASE("FG bridge retains its provider when copy retirement is uncertain",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    auto provider=std::make_shared<unsigned>(7);
+    std::weak_ptr<unsigned> lifetime=provider;
+    SECTION("completed bridge releases its provider") {
+        auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+            gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+            nullptr,nullptr,provider);
+        REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+        auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+        provider.reset();
+        REQUIRE_FALSE(lifetime.expired());
+        bridge.reset();
+        REQUIRE(lifetime.expired());
+    }
+    SECTION("pending copy quarantines the provider with its proxy owners") {
+        auto made=rk::FgD3D11PresentBridge::create(gpu.d11.Get(),
+            gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),gpu.swap.Get(),
+            nullptr,nullptr,provider);
+        REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+        auto bridge=std::move(std::get<std::unique_ptr<rk::FgD3D11PresentBridge>>(made));
+        ComPtr<ID3D12Fence> gate;
+        REQUIRE(SUCCEEDED(gpu.d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+            IID_PPV_ARGS(&gate))));
+        REQUIRE(SUCCEEDED(gpu.queue->Wait(gate.Get(),1)));
+        struct ReleaseGate {
+            ID3D12Fence* fence;
+            ~ReleaseGate() {fence->Signal(1);}
+        } release{gate.Get()};
+        REQUIRE(bridge->copyToCurrent()==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+        REQUIRE(bridge->copyToCurrent()==DXGI_ERROR_INVALID_CALL);
+        REQUIRE(std::string(bridge->firstCopyFailurePhase())=="shared-copy-wait");
+        REQUIRE(bridge->firstCopyFailure()==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+        bridge.reset();provider.reset();
+        REQUIRE_FALSE(lifetime.expired());
+    }
+}
+
 TEST_CASE("FG facade submits cached D3D11 colour before each lower Present",
     "[fg_d3d11_present_bridge]") {
     Devices gpu;

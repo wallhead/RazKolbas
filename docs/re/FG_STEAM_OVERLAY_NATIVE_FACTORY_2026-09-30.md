@@ -109,8 +109,15 @@ Previous 0.1.131 DLL/INI/manifest are backed up under ignored
 `artifacts/local/stage-v54-fg-steam-0132`; the real probe output is ignored
 `artifacts/local/steam-route-0132.txt`.
 
-**0.1.132 Skyrim/ENB facade binding: NOT RUN. Steam overlay appearance/input:
+**At this checkpoint, 0.1.132 Skyrim/ENB facade binding: NOT RUN. Steam overlay appearance/input:
 NOT RUN. FG-On generated frames: NOT RUN.** The next required game run is a
 user-started launch/load with FG Off, checking acceptance, facade substitution,
 real Presents, world/UI/effects and Steam overlay if available. Keep these
 runtime results distinct from standalone compatibility success.
+
+Subsequent game evidence: 0.1.132 accepted this Steam chain and bound the
+facade, but real presentation failed with a black screen. The exact ENB
+source-ownership failure, shader-input correction and 0.1.133 offline tests
+with/without Steam are recorded in
+`FG_ENB_SOURCE_DEVICE_IDENTITY_2026-09-30.md`. Steam acceptance alone was
+not evidence of a working Skyrim presentation path.

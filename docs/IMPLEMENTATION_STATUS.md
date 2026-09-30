@@ -1,5 +1,42 @@
 # Implementation checkpoint
 
+## Source 0.1.133 ENB source ownership and presentation repair (2026-09-30)
+
+The user-started 0.1.132 run bound the private facade successfully but showed
+a black screen. Real outer Presents returned INVALID_CALL. The exact ENB,
+ReShade and Steam chain reproduced this offline: after ENB wraps the device,
+the retained auxiliary buffer's GetDevice reports its wrapper identity,
+causing the raw copy check to reject and poison the bridge.
+
+0.1.133 retains verified source ownership in an immutable interop-bound
+lease; raw resources and unrelated contexts still reject. Resize captures
+and commits the new source generation transactionally. It also preserves
+and verifies the requested shader-input access on the auxiliary buffer.
+Provider lifetime survives poisoned resource quarantine; first copy errors
+remain available even after subsequent generic failures.
+
+Exact ENB/ReShade probes passed **240 real Presents, shader-view creation,
+resize and ordered teardown**, both with the verified Steam hook and with
+the pristine native factory and no Steam overlay preload. Steam is not a
+required dependency. An intentional early probe failure exited with its
+expected code 42 without a teardown crash. Release CTest passed **61/61**,
+Debug **57/57**; independent review found no correctness blockers.
+Evidence and test limits:
+`docs/re/FG_ENB_SOURCE_DEVICE_IDENTITY_2026-09-30.md`.
+
+**0.1.133 Skyrim image/UI/ENB regression: NOT RUN. Steam overlay appearance/input:
+NOT RUN. FG-On generated frames: NOT RUN.** The next necessary game step is
+one user-started launch/save load with FG Off. No game launch was performed
+by the agent; installation preserves the user's existing settings.
+
+Installed in `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas` while Skyrim was
+closed. All **14** package manifest hashes matched. DLL SHA-256:
+`ee75d0005192c88780d14a1906e3cbf7868bc7134847f2c849dca91118235209`.
+The INI is unchanged (Balanced/M, sharpening 0.95, NR Off, FG Off, private
+FG-Off trial enabled). Complete MO2 staging is under ignored
+`artifacts/local/stage-v54-fg-enb-0133`; the preceding DLL/INI/manifest are
+preserved under ignored `artifacts/local/backup-v54-before-0133`.
+
 ## Source 0.1.132 Steam overlay factory compatibility (2026-09-30)
 
 The 0.1.131 game capture identified an existing native E9/FF25 chain before
@@ -25,10 +62,11 @@ Independent review found no significant issues and separately passed factory
 tests (84 assertions/eight cases) and owned-route tests (102 assertions/ten
 cases). Details: `docs/re/FG_STEAM_OVERLAY_NATIVE_FACTORY_2026-09-30.md`.
 
-**0.1.132 Skyrim/ENB binding: NOT RUN. Steam overlay rendering/input: NOT RUN.
-FG-On generated frames: NOT RUN.** The next gate is one user-started launch
-and save load with FG Off to inspect exact Steam acceptance, game facade
-substitution and real Presents; verify image/UI/effects and overlay behavior.
+**Subsequent 0.1.132 Skyrim result: FAIL, black screen after successful private
+facade binding; real Presents returned INVALID_CALL.** Steam overlay
+rendering/input and FG-On generated frames remain NOT RUN. The subsequently
+reproduced ENB source-ownership cause and repair are recorded in the 0.1.133
+entry above.
 The complete MO2 package is staged under ignored
 `artifacts/local/stage-v54-fg-steam-0132`. After confirming Skyrim was closed,
 the final 0.1.132 DLL and manifest were installed in

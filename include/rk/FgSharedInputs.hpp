@@ -8,6 +8,17 @@
 #include <mutex>
 
 namespace rk {
+class FgD3D11AuxSwapSource;
+// A retained, immutable source whose device ownership was verified before a
+// later wrapper can change the resource's GetDevice report.
+class FgSourceLease {
+public:
+    FgSourceLease()=default;
+private:
+    friend class FgSharedInputs;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> source_;
+    std::uint64_t ownerId_{};
+};
 struct FgCopyTicket {
     std::uint64_t producer{},copy{};
 };
@@ -44,8 +55,12 @@ public:
     static Result<std::unique_ptr<FgSharedInputs>> create(ID3D11Device* d11,
         ID3D12Device* d12,ID3D12CommandQueue* queue);
     Result<FgSharedSurface> makeSurface(const D3D11_TEXTURE2D_DESC& desc) const;
+    Result<FgSourceLease> captureSource(ID3D11Texture2D* source) const;
+    Result<FgSourceLease> captureSource(const FgD3D11AuxSwapSource& source) const;
     Result<FgCopyTicket> copy(ID3D11DeviceContext* context,
         ID3D11Texture2D* source,const FgSharedSurface& target);
+    Result<FgCopyTicket> copy(ID3D11DeviceContext* context,
+        const FgSourceLease& source,const FgSharedSurface& target);
     bool producerComplete(std::uint64_t value) const noexcept;
     FgCopyStatus copyStatus(std::uint64_t value) const noexcept;
     bool copyComplete(std::uint64_t value) const noexcept;
@@ -54,6 +69,8 @@ public:
     FgInteropLifetime retainLifetime() const noexcept;
 private:
     FgSharedInputs()=default;
+    Result<FgCopyTicket> copyImpl(ID3D11DeviceContext* context,
+        ID3D11Texture2D* source,const FgSharedSurface& target);
     Microsoft::WRL::ComPtr<ID3D11Device5> d11_;
     Microsoft::WRL::ComPtr<ID3D12Device> d12_;
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;

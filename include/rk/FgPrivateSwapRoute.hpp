@@ -34,7 +34,7 @@ public:
 private:
     FgPrivateSwapRoute()=default;
     void retire() noexcept;
-    std::unique_ptr<FgStreamlineRuntime> runtime_;
+    std::shared_ptr<FgStreamlineRuntime> runtime_;
     Microsoft::WRL::ComPtr<ID3D12Device> d12_;
     Microsoft::WRL::ComPtr<ID3D12Device> upgradedD12_;
     Microsoft::WRL::ComPtr<ID3D12Device> verifiedNative_;

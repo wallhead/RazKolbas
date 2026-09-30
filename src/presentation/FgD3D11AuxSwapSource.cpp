@@ -55,7 +55,8 @@ Result<std::unique_ptr<FgD3D11AuxSwapSource>> FgD3D11AuxSwapSource::create(
     auxiliaryDesc.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
     auxiliaryDesc.BufferCount=1;
     auxiliaryDesc.Flags=0;
-    auxiliaryDesc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    auxiliaryDesc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT|
+        (gameDesc.BufferUsage&DXGI_USAGE_SHADER_INPUT);
     if(FAILED(nativeCreate(nativeFactory,nativeDevice,&auxiliaryDesc,
         &source->swap_))||!source->swap_||
        FAILED(source->swap_->GetBuffer(0,IID_PPV_ARGS(&source->buffer_))))
@@ -80,6 +81,13 @@ Result<std::unique_ptr<FgD3D11AuxSwapSource>> FgD3D11AuxSwapSource::create(
            &srgb,&srgbView)))
         return Error{ErrorCode::Unsupported,
             "Auxiliary D3D11 buffer lacks ordinary or sRGB render-target view"};
+    if(gameDesc.BufferUsage&DXGI_USAGE_SHADER_INPUT) {
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sampled;
+        if(FAILED(nativeDevice->CreateShaderResourceView(source->buffer_.Get(),
+            nullptr,&sampled)))
+            return Error{ErrorCode::Unsupported,
+                "Auxiliary D3D11 buffer lacks the requested shader-input view"};
+    }
     return source;
 }
 Result<std::unique_ptr<FgD3D11AuxSwapSource>>

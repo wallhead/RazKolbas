@@ -4,24 +4,28 @@
 namespace rk {
 FgD3D11SwapFacade::FgD3D11SwapFacade(ID3D11Device* d11,
     IDXGISwapChain4* lower,
-    std::unique_ptr<FgD3D11PresentBridge> bridge) noexcept:
+    std::unique_ptr<FgD3D11PresentBridge> bridge,
+    std::shared_ptr<void> providerLifetime) noexcept:
+    providerLifetime_(std::move(providerLifetime)),
     d11_(d11),lower_(lower),bridge_(std::move(bridge)) {}
 Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> FgD3D11SwapFacade::create(
     ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
     ID3D12CommandQueue* queue,IDXGISwapChain* lower,
     ID3D12Device* verifiedLowerNative,
-    std::unique_ptr<FgD3D11AuxSwapSource> auxiliary) {
+    std::unique_ptr<FgD3D11AuxSwapSource> auxiliary,
+    std::shared_ptr<void> providerLifetime) {
     if(!lower)return Error{ErrorCode::InvalidInput,"FG facade lower swap is null"};
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower4;
     if(FAILED(lower->QueryInterface(IID_PPV_ARGS(&lower4))))
         return Error{ErrorCode::Unsupported,"FG facade requires lower IDXGISwapChain4"};
     auto made=FgD3D11PresentBridge::create(d11,context,d12,queue,lower,
-        verifiedLowerNative,std::move(auxiliary));
+        verifiedLowerNative,std::move(auxiliary),providerLifetime);
     if(!std::holds_alternative<std::unique_ptr<FgD3D11PresentBridge>>(made))
         return std::get<Error>(std::move(made));
     Microsoft::WRL::ComPtr<IDXGISwapChain4> facade;
     facade.Attach(new FgD3D11SwapFacade(d11,lower4.Get(),
-        std::move(std::get<std::unique_ptr<FgD3D11PresentBridge>>(made))));
+        std::move(std::get<std::unique_ptr<FgD3D11PresentBridge>>(made)),
+        std::move(providerLifetime)));
     return facade;
 }
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::QueryInterface(REFIID iid,

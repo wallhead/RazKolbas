@@ -23,16 +23,25 @@ public:
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
-        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr);
+        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr,
+        std::shared_ptr<void> providerLifetime=nullptr);
     UINT currentIndex() const noexcept;
     ID3D11Texture2D* renderBuffer(UINT index) const noexcept;
     HRESULT copyToCurrent() noexcept;
     HRESULT presentPrepared(const FgPresentCall& call) noexcept;
     HRESULT resize(const FgResizeCall& call) noexcept;
     bool prepared() const noexcept { return prepared_; }
+    const char* copyPhase() const noexcept { return copyPhase_; }
+    HRESULT copyResult() const noexcept { return copyResult_; }
+    const std::string& copyDetail() const noexcept { return copyDetail_; }
+    const char* presentPhase() const noexcept { return presentPhase_; }
+    const char* firstCopyFailurePhase() const noexcept { return firstCopyFailurePhase_; }
+    HRESULT firstCopyFailure() const noexcept { return firstCopyFailure_; }
 private:
+    HRESULT copyToCurrentImpl() noexcept;
     FgD3D11PresentBridge(FgLowerSwap lower,
         std::unique_ptr<FgSharedInputs> interop) noexcept;
+    std::shared_ptr<void> providerLifetime_;
     FgLowerSwap lower_;
     std::unique_ptr<FgSharedInputs> interop_;
     Microsoft::WRL::ComPtr<ID3D11Device> d11_;
@@ -41,6 +50,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap3_;
     std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> render_;
+    FgSourceLease sourceLease_;
     std::unique_ptr<FgD3D11AuxSwapSource> auxiliary_;
     std::vector<FgSharedSurface> shared_;
     Microsoft::WRL::ComPtr<ID3D12Resource> inFlightBack_;
@@ -49,5 +59,11 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Fence> inFlightFence_;
     bool prepared_{},poisoned_{};
     UINT preparedIndex_{};
+    const char* copyPhase_{"not-called"};
+    HRESULT copyResult_{S_OK};
+    const char* presentPhase_{"not-called"};
+    std::string copyDetail_;
+    const char* firstCopyFailurePhase_{"none"};
+    HRESULT firstCopyFailure_{S_OK};
 };
 }

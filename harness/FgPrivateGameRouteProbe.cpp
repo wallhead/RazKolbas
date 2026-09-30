@@ -1,4 +1,5 @@
 #include "rk/FgPrivateSwapRoute.hpp"
+#include "rk/FgD3D11SwapFacade.hpp"
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/PatchDescriptor.hpp"
@@ -49,13 +50,24 @@ HRESULT WINAPI replace(IDXGIFactory* factory,IUnknown* device,
     state->route->abandon();
     return state->next(factory,device,desc,output);
 }
-int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
+int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
+    const wchar_t* enbPath,bool failAfterSrv) {
     const auto hash=rk::sha256File(reshadePath);
     if(!std::holds_alternative<std::string>(hash)||
        std::get<std::string>(hash)!=rk::reshade680FactoryCreateSite().moduleSha256)
         return 13;
     Module reshade{LoadLibraryW(reshadePath)};
     if(!reshade.value)return 14;
+    Module enb;
+    if(enbPath) {
+        const auto enbHash=rk::sha256File(enbPath);
+        if(!std::holds_alternative<std::string>(enbHash)||
+           std::get<std::string>(enbHash)!=
+               "35ff1543c8aaa5435a9002dc58d5459c29557ce8e5e5f91b25dfe4645be7bae3")return 35;
+        enb.value=LoadLibraryW(enbPath);
+        if(!enb.value)return 36;
+        std::cout<<"Exact ENB 0.505 preloaded for the outer Present probe\n";
+    }
     ComPtr<IDXGIFactory1> wrapper;
     using CreateFactory=HRESULT(WINAPI*)(REFIID,void**);
     auto* create=reinterpret_cast<CreateFactory>(
@@ -72,20 +84,16 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
            desc.VendorId==0x10de) {adapter=candidate;break;}
     }
     if(!adapter)return 12;
-    ComPtr<ID3D11Device> d11;
-    ComPtr<ID3D11DeviceContext> context;
-    if(FAILED(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,
-        nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,
-        &d11,nullptr,&context)))return 15;
     Window window{CreateWindowExW(0,L"STATIC",L"RazKolbas game FG route",
         WS_POPUP,0,0,160,96,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr)};
     if(!window.value)return 16;
     DXGI_SWAP_CHAIN_DESC game{};
     game.BufferDesc.Width=160;game.BufferDesc.Height=96;
     game.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
-    game.SampleDesc.Count=1;game.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    game.BufferCount=2;game.OutputWindow=window.value;game.Windowed=TRUE;
+    game.SampleDesc.Count=1;game.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT|DXGI_USAGE_SHADER_INPUT;
+    game.BufferCount=3;game.OutputWindow=window.value;game.Windowed=TRUE;
     game.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    game.Flags=DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     auto prepared=rk::FgPrivateSwapRoute::prepare(adapter.Get(),game,
         runtimeDirectory);
     if(const auto* error=std::get_if<rk::Error>(&prepared)) {
@@ -94,6 +102,14 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
     }
     auto route=std::move(std::get<std::unique_ptr<rk::FgPrivateSwapRoute>>(
         prepared));
+    // Reproduce the live chain: a downstream owner enables tearing after
+    // the early private lower was prepared, before native game creation.
+    game.Flags|=DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    ComPtr<ID3D11Device> d11;
+    ComPtr<ID3D11DeviceContext> context;
+    if(!enb.value&&FAILED(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,
+        nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,
+        &d11,nullptr,&context)))return 15;
     const auto& reshadeSite=rk::reshade680FactoryCreateSite();
     auto* wrapperMethod=reinterpret_cast<rk::FactoryCreateFn>(
         (*reinterpret_cast<void***>(wrapper.Get()))[10]);
@@ -172,13 +188,55 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
         patch.restore();active=nullptr;return 30;
     }
     ComPtr<IDXGISwapChain> upper;
-    const auto created=wrapper->CreateSwapChain(d11.Get(),&game,&upper);
+    // Early probe failures need the same ownership order as successful exit.
+    // A returned ENB/ReShade object must be released before slShutdown.
+    struct OrderedExit {
+        ComPtr<IDXGISwapChain>& upper;
+        Callback& callback;
+        ComPtr<IDXGIFactory1>& wrapper;
+        std::unique_ptr<rk::FgPrivateSwapRoute>& route;
+        ComPtr<ID3D11DeviceContext>& context;
+        ComPtr<ID3D11Device>& d11;
+        ComPtr<IDXGIAdapter1>& adapter;
+        rk::PointerPatch& wrapperPatch;
+        rk::PointerPatch& nativePatch;
+        ~OrderedExit() {
+            if(std::holds_alternative<rk::Error>(wrapperPatch.restore())||
+               std::holds_alternative<rk::Error>(nativePatch.restore()))
+                std::terminate();
+            active=nullptr;wrapperNext=nullptr;
+            if(context) {context->ClearState();context->Flush();}
+            upper.Reset();callback.facade.Reset();wrapper.Reset();route.reset();
+            context.Reset();d11.Reset();adapter.Reset();
+        }
+    } orderedExit{upper,callback,wrapper,route,context,d11,adapter,wrapperPatch,patch};
+    HRESULT created{};
+    if(enb.value) {
+        auto* createDevice=reinterpret_cast<PFN_D3D11_CREATE_DEVICE_AND_SWAP_CHAIN>(
+            GetProcAddress(enb.value,"D3D11CreateDeviceAndSwapChain"));
+        if(!createDevice)return 37;
+        created=createDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,
+            &game,&upper,&d11,nullptr,&context);
+        std::cout<<"ENB device/swap creation=0x"<<std::hex<<
+            static_cast<unsigned>(created)<<std::dec<<'\n';
+    } else created=wrapper->CreateSwapChain(d11.Get(),&game,&upper);
     const auto wrapperRestored=wrapperPatch.restore();
     const auto restored=patch.restore();
     active=nullptr;
     if(!std::holds_alternative<bool>(restored)||
        !std::holds_alternative<bool>(wrapperRestored)||FAILED(created)||!upper||
        callback.substitutions!=1||wrapperCalls!=1||!route->issued())return 22;
+    const auto& diagnostics=static_cast<rk::FgD3D11SwapFacade*>(callback.facade.Get())->diagnostics();
+    const auto report=[&] {
+        std::cout<<"Bridge copy="<<diagnostics.copyPhase()<<" hr=0x"<<std::hex<<
+            static_cast<unsigned>(diagnostics.copyResult())<<std::dec<<
+            "; present="<<diagnostics.presentPhase()<<
+            "; detail="<<diagnostics.copyDetail()<<
+            "; first-failure="<<diagnostics.firstCopyFailurePhase()<<"/0x"<<
+            std::hex<<static_cast<unsigned>(diagnostics.firstCopyFailure())<<std::dec<<'\n';
+    };
+    report();
     const auto directTest=callback.facade->Present(0,DXGI_PRESENT_TEST);
     const auto upperTest=upper->Present(0,DXGI_PRESENT_TEST);
     std::cout<<"direct/upper TEST=0x"<<std::hex<<
@@ -188,20 +246,48 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
     ComPtr<ID3D11RenderTargetView> view;
     if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&colour)))||
        FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 23;
+    ComPtr<ID3D11ShaderResourceView> sampleView;
+    D3D11_TEXTURE2D_DESC colourDesc{};
+    colour->GetDesc(&colourDesc);
+    const auto sampled=d11->CreateShaderResourceView(colour.Get(),nullptr,&sampleView);
+    std::cout<<"Game shader-input contract: bind=0x"<<std::hex<<colourDesc.BindFlags<<
+        "; SRV=0x"<<static_cast<unsigned>(sampled)<<std::dec<<'\n';
+    if(FAILED(sampled))return 41;
+    sampleView.Reset();
+    if(failAfterSrv) {
+        std::cout<<"Intentional early failure after SRV; ordered cleanup required\n";
+        return 42;
+    }
     const float red[4]{1.f,0.f,0.f,1.f};
     context->ClearRenderTargetView(view.Get(),red);
-    const auto presented=upper->Present(0,0);
+    DXGI_SWAP_CHAIN_DESC current{};
+    if(FAILED(upper->GetDesc(&current)))return 34;
+    std::cout<<"Game requested/lower flags=0x"<<std::hex<<game.Flags<<"/0x"<<current.Flags<<std::dec<<'\n';
+    const auto presented=upper->Present(0,DXGI_PRESENT_ALLOW_TEARING);
     std::cout<<"Game route first Present=0x"<<std::hex<<
         static_cast<unsigned>(presented)<<std::dec<<'\n';
+    report();
     if(FAILED(presented))return 24;
+    for(unsigned frame=1;frame<120;++frame) {
+        const float next[4]{frame%2?1.f:0.f,frame%3?0.f:1.f,0.f,1.f};
+        context->ClearRenderTargetView(view.Get(),next);
+        if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 38;
+    }
     view.Reset();colour.Reset();context->ClearState();context->Flush();
-    if(FAILED(upper->ResizeBuffers(2,192,108,
-        DXGI_FORMAT_R8G8B8A8_UNORM,0)))return 25;
+    if(FAILED(upper->ResizeBuffers(3,192,108,
+        DXGI_FORMAT_R8G8B8A8_UNORM,current.Flags)))return 25;
     DXGI_SWAP_CHAIN_DESC after{};
     if(FAILED(upper->GetDesc(&after))||after.BufferDesc.Width!=192||
        after.BufferDesc.Height!=108)return 26;
+    if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&colour)))||
+       FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 39;
+    for(unsigned frame=0;frame<120;++frame) {
+        context->ClearRenderTargetView(view.Get(),red);
+        if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 40;
+    }
+    view.Reset();colour.Reset();context->ClearState();context->Flush();
     upper.Reset();context->ClearState();context->Flush();
-    std::cout<<"Game route FG-Off: substitution=1, Present=ok, resize=192x108\n";
+    std::cout<<"Game route FG-Off: substitution=1, Present=240 frames ok, resize=192x108\n";
     callback.facade.Reset();
     std::cout<<"facade released\n";
     wrapper.Reset();
@@ -219,8 +305,10 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
 }
 int wmain(int argc,wchar_t** argv) {
     std::cout.setf(std::ios::unitbuf);
-    if(argc!=3&&argc!=4)return 1;
-    if(argc==4) {
+    if(argc<3||argc>6)return 1;
+    const bool failAfterSrv=argc==6&&std::wcscmp(argv[5],L"fail-after-srv")==0;
+    if(argc==6&&!failAfterSrv)return 1;
+    if(argc>=4&&std::wcscmp(argv[3],L"-")!=0) {
         const auto hash=rk::sha256File(argv[3]);
         const auto& profile=rk::steamFactoryInlineProfile();
         if(!std::holds_alternative<std::string>(hash)||
@@ -230,8 +318,8 @@ int wmain(int argc,wchar_t** argv) {
         // Steam may install callbacks even if a later probe stage rejects.
         if(!LoadLibraryW(argv[3]))return 33;
         std::cout<<"Exact Steam overlay preloaded for the factory-chain probe\n";
-    }
-    try {return run(argv[1],argv[2]);}
+    } else std::cout<<"No Steam overlay preload; pristine native factory required\n";
+    try {return run(argv[1],argv[2],argc>=5?argv[4]:nullptr,failAfterSrv);}
     catch(const std::exception& error) {
         std::cerr<<error.what()<<'\n';return 2;
     }

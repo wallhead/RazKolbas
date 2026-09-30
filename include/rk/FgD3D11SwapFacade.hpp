@@ -8,6 +8,7 @@ namespace rk {
 // remains gated until external-buffer resize and lifetime tests exist.
 class FgD3D11SwapFacade final : public IDXGISwapChain4 {
 public:
+    const FgD3D11PresentBridge& diagnostics() const noexcept { return *bridge_; }
     // Pass verifiedLowerNative only after proving its COM identity through
     // the lower proxy's official native-interface API. An external D3D11
     // source supplies the typed swap-chain buffer and owns resize generations.
@@ -15,7 +16,8 @@ public:
         ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
         ID3D12CommandQueue* queue,IDXGISwapChain* lower,
         ID3D12Device* verifiedLowerNative=nullptr,
-        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr);
+        std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr,
+        std::shared_ptr<void> providerLifetime=nullptr);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;
@@ -71,9 +73,12 @@ public:
         UINT size,void* data) override;
 private:
     FgD3D11SwapFacade(ID3D11Device* d11,IDXGISwapChain4* lower,
-        std::unique_ptr<FgD3D11PresentBridge> bridge) noexcept;
+        std::unique_ptr<FgD3D11PresentBridge> bridge,
+        std::shared_ptr<void> providerLifetime) noexcept;
     ~FgD3D11SwapFacade()=default;
     std::atomic<ULONG> refs_{1};
+    // Release after all facade and bridge proxy references.
+    std::shared_ptr<void> providerLifetime_;
     Microsoft::WRL::ComPtr<ID3D11Device> d11_;
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower_;
     std::unique_ptr<FgD3D11PresentBridge> bridge_;
