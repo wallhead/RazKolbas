@@ -213,3 +213,23 @@ queue with retirement. First verify one update/world/Present cadence and
 thread identity in the exact MO2 stack, then enable one generated frame and
 measure actual presented frames plus game image/UI/ENB quality. The current
 0.1.141 DLL does not yet make those calls in Skyrim.
+
+### Same-swap Present thread migration found in the 0.1.141 run
+
+The user-started 0.1.141 main-menu log contains successful Presents on the
+same swap object `0x16b9620d0b0` with `worldForwarded` equal to the observed
+Present count at every sampled checkpoint. The object is presented by thread
+7816 at calls 1 and 6000, thread 15544 at 6600, thread 7816 again at 9000,
+and thread 15544 at 9600 and later checkpoints. There is no intervening
+plugin initialization in the log. These are sampled observations, not proof
+that every unsampled frame has a one-to-one world/Present relation. They do
+prove that a process-lifetime thread pin would reject this run even if each
+individual frame is single-threaded.
+
+`FgStreamlineFrameSession` now accepts a new owner thread only after its
+previous real-frame Present completed. It still rejects a mid-frame thread
+change and does not issue another SDK call on that rejected phase. A focused
+regression failed before the change at `begin(source(2))`, then passed after
+the change. Final Release and Debug builds passed; full CTest passed
+**64/64** and **59/59** respectively. This is source-only; installed 0.1.141
+remains FG Off and has no game session wiring.

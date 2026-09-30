@@ -18,7 +18,8 @@ class FgStreamlineRuntime;
 Result<FgStreamlineFrameCalls> makeFgStreamlineFrameCalls(
     std::shared_ptr<FgStreamlineRuntime> runtime);
 
-// Single-thread, single-real-frame SL token/marker owner. The game must call
+// Single-owner-thread per real frame SL token/marker owner. The owner may
+// migrate only after a completed real Present. The game must call
 // each method at its verified simulation/render/Present phase; this class
 // cannot establish an engine hook's timing. Generated frames never enter it.
 // The caller configures one Reflex pacing policy and retains the submitted

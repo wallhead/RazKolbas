@@ -122,6 +122,22 @@ TEST_CASE("FG session owns one token and ordered markers, inputs and Present",
     REQUIRE_FALSE(session.failed());
 }
 
+TEST_CASE("FG session permits thread handoff only after a completed real Present",
+    "[fg_streamline_session]") {
+    Fixture f;rk::FgStreamlineFrameSession session(f.calls,sl::ViewportHandle{0u});
+    render(f,session);auto packet=f.packet();
+    REQUIRE(std::holds_alternative<bool>(session.submit(packet)));
+    REQUIRE(std::holds_alternative<HRESULT>(session.present([]{return S_OK;})));
+    f.thread=8;
+    REQUIRE(std::holds_alternative<bool>(session.begin(source(2))));
+    const auto count=f.events.size();
+    f.thread=7;
+    REQUIRE(std::holds_alternative<rk::Error>(session.simulationEnd()));
+    REQUIRE(f.events.size()==count);
+    f.thread=8;
+    REQUIRE(std::holds_alternative<bool>(session.simulationEnd()));
+}
+
 TEST_CASE("FG session rejects missing or invalid identities before any SDK call",
     "[fg_streamline_session]") {
     Fixture f;rk::FgStreamlineFrameSession session(f.calls,sl::ViewportHandle{0u});

@@ -1,5 +1,18 @@
 # Implementation checkpoint
 
+## FG real-frame owner thread handoff (2026-09-30)
+
+The 0.1.141 main-menu log shows one swap object presenting across two threads
+in the same run: thread 7816 at observed Present 6000, 15544 at 6600, then
+7816 at 9000 and 15544 at 9600. Sampled `worldForwarded` counts equal the
+observed Present counts. The source-only `FgStreamlineFrameSession` now allows
+thread handoff after a completed real Present while rejecting mid-frame
+changes. The regression was RED before the change and GREEN afterward.
+Release and Debug builds passed; full CTest passed **64/64** and **59/59**.
+Installed 0.1.141 is unchanged: FG Off, bright reduced-loading route On,
+read-only phase-site snapshot On. Skyrim FG-On remains **NOT RUN**.
+See `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
+
 ## FG main-update candidate snapshot, 0.1.141 (2026-09-30)
 
 The exact Skyrim 1.6.1170 disk `.text` is encrypted and the earlier external

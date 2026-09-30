@@ -75,8 +75,10 @@ Result<bool> FgStreamlineFrameSession::begin(const FgSourceFrame& frame) {
         return Error{ErrorCode::Unavailable,"FG frame session SDK calls are incomplete"};
     try {
         const auto thread=calls_.currentThread();
-        if(!thread||(thread_&&thread!=thread_))return Error{ErrorCode::Conflict,
-            "FG frame session changed its owner thread"};
+        // Present may move to another Skyrim thread between real frames.
+        // `check` still requires every phase of this frame on its new owner.
+        if(!thread)return Error{ErrorCode::Conflict,
+            "FG frame session has no owner thread"};
         thread_=thread;frame_=frame;token_=nullptr;
         // Consume the identity before any SDK side effect. Exceptions and
         // partial marker/token operations cannot be retried on this owner.
