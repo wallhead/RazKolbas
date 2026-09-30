@@ -5740,3 +5740,18 @@ remained byte-for-byte unchanged, and all **14/14** installed payload hashes
 verified. This does not invoke Streamline or enable FG. Exact installation
 hashes are in `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
 **0.1.143 game phase trace: NOT RUN; FG-On: NOT RUN.**
+
+0.1.143 user-started Skyrim trace: 37 emitted phase samples through real
+Present 20,400 all show one renderer entry, one world entry, one completed
+world call and one Present in order on the same thread, with zero cumulative
+phase rejections. Thread ownership migrated between completed frames. The
+same timing occurs during loading, so FG still requires the separate loading
+and resource/camera/UI eligibility gates. Read-only snapshot hash and scope
+are in `docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
+The user reports the same image but roughly six fewer FPS with the 0.1.143
+phase trace On. Coarse log timing cannot establish the matched-view cause.
+With Skyrim closed, an isolated comparison was installed by changing only
+`ProbeFgFrameBoundaries` to false; the DLL and other INI settings are
+unchanged, and all **14/14** installed payload hashes match. The one-key
+byte comparison, backup and hashes are in the session document.
+**Game timing trace: RUN; FG-On: NOT RUN; trace-off FPS comparison: NOT RUN.**

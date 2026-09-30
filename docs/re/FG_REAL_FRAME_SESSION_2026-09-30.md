@@ -338,3 +338,53 @@ INI is `43c6a0b12ecd228b34ffb6baaccbe19221dde0dd0a2f0e9283921e34e4dfa33c`,
 and manifest is
 `578db8691e05b5302ddc08117442b0388cbef229a3eb572f58b80089672e91d4`.
 **0.1.143 game phase trace: NOT RUN; FG-On: NOT RUN.**
+
+### 0.1.143 user-started phase result
+
+The user started Skyrim through MO2 at 21:45:36 local time (PID 11592). The
+new phase fields in the live log confirm that the installed 0.1.143 binary
+ran. A read-only log snapshot under ignored
+`artifacts/local/fg-phase-2026-09-30/runtime-0143/RazKolbas.log` contains
+23,088,092 bytes, SHA-256
+`efeb6f3743d596e5e16759714143be1e3d4b280d27af27a86b6e791eccc297c6`.
+It records checkpoints from real Present 1 through 20,400. All 37 emitted
+phase samples have exactly one renderer entry, one world entry, one completed
+world call and one real Present in order on the same thread. The cumulative
+ready and phase-ready counts both reach 20,400; no-world, multi-world,
+thread-mismatch and phase-rejected counts remain zero. The thread changed
+between frames from 23924 to 24620 but matched within each sampled frame.
+
+The snapshot contains Loading Menu movie observations at frames 1–3 and
+15,238–15,240. Thus timing also passes while loading artwork is drawn; the
+production FG admission must check loading and current world resources in
+addition to this phase order. The startup log still prints the stale literal
+`0.1.140` in `Plugin.cpp`; the installed DLL hash and new phase fields identify
+this run as 0.1.143. No marker, Streamline submission, private lower swap or
+generated frame was activated. **0.1.143 game timing trace: RUN; FG-On: NOT
+RUN.**
+
+### 0.1.143 trace-on FPS report and isolated trace-off comparison
+
+The user reports that the image looks the same as 0.1.142 but FPS is about
+six lower. The 600-frame timestamps in the two saved logs are too coarse and
+span different activity to verify or dismiss a six-FPS change at a matched
+viewpoint. The added renderer/world callbacks and mutex-protected phase ledger
+are a plausible changed cost, not a proven root cause.
+
+After the user closed Skyrim, the installed 0.1.143 INI was copied to an
+ignored trial file and **only** `ProbeFgFrameBoundaries = true` was changed
+to `false`. Reversing that exact text substitution reconstructs the original
+file, including its mixed line endings. The same Release DLL and all pinned
+runtime files remain byte-for-byte unchanged. A fresh package has **14/14**
+valid staged hashes and differs in exactly one payload, `RazKolbas.ini`.
+The prior DLL/INI/manifest were backed up under ignored
+`artifacts/local/fg-phase-2026-09-30/backup-before-0143-trace-off` before
+replacing only INI and manifest. The installed package again verifies
+**14/14** hashes. New INI SHA-256 is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`;
+new manifest SHA-256 is
+`126c013434d860ddc0ea4b6d195f981920f660177fbe90728eda3d65f24af08e`.
+The DLL SHA-256 remains
+`1e943ebca863f23279d10ff0b3ff8fc3e9274b38725eb8151f6143c8f3c6dadd`.
+FG remains Off. **Trace-off same-view FPS comparison: NOT RUN; cause of the
+six-FPS report: UNRESOLVED.**
