@@ -157,6 +157,10 @@ ProbeFgCameraBuffer = false
 ; Observe exact ENB camera Map/Unmap writes before native Unmap; restart required.
 ; Diagnostic evidence only; does not enable FG or bind Streamline frame tokens.
 ProbeFgCameraWrites = false
+; Read-only snapshot of the live 1.6.1170 Main Update CALL candidate and one
+; resolved target, for FG phase reverse engineering. No hook or markers.
+; Requires a restart and the exact verified game executable.
+ProbeFgGamePhaseSite = false
 ; Restart-only, exact V5.4 ReShade/ENB private Streamline D3D12 lower
 ; and D3D11 game facade trial. DLSS-G is explicitly Off; native fallback
 ; remains active if identity, adapter or swap creation preflight fails.

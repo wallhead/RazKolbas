@@ -15,12 +15,12 @@ struct ReshadeFactoryDelegateFacts {
 };
 struct FactoryMethodCodeFacts {
     std::array<std::uint8_t,64> bytes{},targetBytes{};
-    std::uintptr_t allocationBase{},jumpTarget{},indirectSlot{};
+    std::uintptr_t allocationBase{},jumpTarget{},callTarget{},indirectSlot{};
     std::uint32_t protection{},state{},type{};
     bool readable{},targetReadable{};
 };
-// Read-only diagnostic. Recognizes only entry E9, FF25 and MOV RAX/JMP RAX;
-// follows one target and never treats a recognized jump as an approved hook.
+// Read-only diagnostic. Recognizes entry E9, FF25, MOV RAX/JMP RAX and E8;
+// follows one jump or call target and never treats it as an approved hook.
 FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept;
 struct SteamFactoryInlineProfile {
     std::string_view id,moduleHash;

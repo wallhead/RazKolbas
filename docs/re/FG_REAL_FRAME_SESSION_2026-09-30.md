@@ -112,3 +112,73 @@ All 14 installed manifest payloads were freshly checked. The six NVIDIA
 runtime DLLs are in `SKSE/Plugins/RazKolbasRuntime/FG/`; the private loader
 uses them for its verified presentation route. No FSR/XeSS FG runtime or
 completed provider implementation is claimed by this checkpoint.
+
+## 0.1.141 in-process phase-site snapshot
+
+The exact on-disk Skyrim 1.6.1170 image still hashes to
+`c434208894f07f604b852f29b8edc3a58c4de63de783373733e72b2b73f33be9`,
+but the disk bytes at RVA `0x63ead0` are encrypted and cannot disclose the
+live CALL target. The prior external `OpenProcess` snapshot was denied.
+Source 0.1.141 therefore adds restart-scoped, default-Off
+`Diagnostics.ProbeFgGamePhaseSite`. Only after the existing full game-hash
+gate, it reads the live 32-byte prefix at the candidate site and one resolved
+CALL or JMP target using the already bounded, read-only code inspector. It
+reports memory protection, allocation type, module owner, and at most one
+additional JMP target. It does not install a hook, run the target, change a
+byte, submit a Streamline marker, or enable FG. The candidate remains
+unverified as a simulation/render phase until its owner, original ABI and
+runtime timing are established.
+
+The CALL decoder and opt-in configuration tests were written first; the
+initial Release test build failed because `callTarget` did not exist. After
+implementation, focused Release tests passed **91 assertions/9 code-inspector
+cases** and **158 assertions/26 config cases**. Final Release and Debug
+builds succeeded; full CTest passed **64/64** and **59/59** respectively.
+No game phase hook or game FG-On run is claimed.
+
+The 0.1.141 Release DLL and a copy of the user's verified INI with only the
+phase-probe key appended were staged with the existing pinned SR, NR and six
+FG runtime files. Staged and prior installed manifests each verified
+**14/14** payloads; only the DLL and INI payload hashes differ. Skyrim was
+closed before installing the DLL/INI/manifest. The prior three files are
+backed up under ignored
+`artifacts/local/fg-phase-2026-09-30/backup-v54-before-0141-phase-site`.
+Installed DLL SHA-256 is
+`158c938bc64179d18570361f1a150fe00d40f99ca1e77d39848e18fd602c7593`,
+INI SHA-256 is
+`ba89f07bca5d8e0ee70e5069fe10f3be6e0d586addc3b2eb71f8d977c1c09da5`,
+and manifest SHA-256 is
+`dc8d2fbc3b090c9dec7af784b898a44dd39ecc9c946f91b599463c7424fcb86b`.
+All **14/14** installed payloads verify, and MO2 `meta.ini` remains
+`0bea0fb065f4f86a779cca3862fca96a8994e93c13ccd9016275096b9cc925c5`.
+FG stays Off and the bright reduced-loading route stays On. The user started
+Skyrim through MO2 to the main menu at 20:42 Moscow time. The 0.1.141 probe
+ran once in PID 24840. At game RVA `0x63ead0`, the live bytes begin
+`e8cb730000` and the CALL reaches game RVA `0x645ea0`. That target begins
+`ff2500000000` and jumps to `cbp.dll` RVA `0x45f00`. The exact installed CBP
+file hashes to
+`e1976ae08f3158eb9ecdf0df803844a5c4518705a9c7441b87bee0055103b2f1`;
+its on-disk callback prefix matches the in-process bytes. The prior decoded
+capture had a different redirected CALL, so its target was not used.
+
+Capstone 5.0.7 decoded CBP's callback at RVA `0x45f00`: it calls RVA
+`0x466c0`, restores its arguments and tail-jumps through an indirect slot at
+RVA `0x1057a0`. Ghidra 12.1.3, using the matching CBP PDB, names these
+`Render`, `updateActors` and `orender`. Its decompilation shows that
+`updateActors` runs before the original trampoline. Ghidra also found
+`orender` assigned in `DetourXS::Create`, called from `SKSEPlugin_Load`.
+The pointer's live value and original game bytes remain unknown; the disk
+slot is not initialized. Community Shaders' existing `Main_Update` profiling
+hook uses the same Address Library ID 36544 + `0x160` and a
+`void(RE::Main*, float)` thunk, with `FrameMark` after forwarding. This
+supports a per-frame candidate but does not yet prove the Streamline marker
+positions or game-frame cadence in this mod stack.
+
+The user closed Skyrim after the capture and requested that the read-only
+probe remain enabled. Installed 0.1.141 therefore retains
+`ProbeFgGamePhaseSite=true`; each launch logs one startup snapshot. No game
+phase hook or SDK marker is installed. **0.1.141 read-only game probe: RUN;
+Skyrim FG-On: NOT RUN.** Next: prove the main-update call's per-source-frame
+cadence and position relative to the owned world draw/Present, then attach
+simulation markers and the full input/presentation contract at verified
+boundaries.

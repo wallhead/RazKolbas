@@ -14,6 +14,7 @@
 #include "rk/OwnedRouteProfile.hpp"
 #include "rk/FgCameraWriteHooks.hpp"
 #include "rk/FgGameCameraBuffer.hpp"
+#include "rk/FactoryCreateTrace.hpp"
 #include "rk/DiagnosticsMenu.hpp"
 #include "rk/DrsHook.hpp"
 #include "rk/DrsReadiness.hpp"
@@ -3064,6 +3065,53 @@ bool read(std::uintptr_t address,void* destination,std::size_t size) {
     SIZE_T copied{};
     return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),destination,size,&copied)&&copied==size;
 }
+void logFgGamePhaseSite(std::uintptr_t base,std::uint32_t imageSize) noexcept {
+    try {
+        constexpr std::uintptr_t siteRva=0x63ead0;
+        const auto site=base+siteRva;
+        const auto hexPrefix=[](const std::array<std::uint8_t,64>& bytes) {
+            constexpr char digits[]="0123456789abcdef";
+            std::string result;
+            result.reserve(64);
+            for(std::size_t i=0;i<32;++i) {
+                const auto value=bytes[i];
+                result.push_back(digits[value>>4]);
+                result.push_back(digits[value&15]);
+            }
+            return result;
+        };
+        const auto logAddress=[&](std::string_view label,std::uintptr_t address) {
+            const auto facts=inspectFactoryMethodCode(address);
+            HMODULE owner{};
+            constexpr DWORD flags=GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+            const bool owned=address&&GetModuleHandleExW(flags,
+                reinterpret_cast<LPCWSTR>(address),&owner);
+            wchar_t path[32768]{};
+            const auto count=owned?GetModuleFileNameW(owner,path,32768):0;
+            spdlog::info("FG game phase site {}: address=0x{:x} gameRVA={} owner={} allocation=0x{:x} state=0x{:x} type=0x{:x} protection=0x{:x} readable={} bytes32={} callTarget=0x{:x} jumpTarget=0x{:x}; read-only",
+                label,address,address>=base&&address-base<imageSize?
+                    static_cast<std::int64_t>(address-base):-1,
+                count&&count<32768?std::filesystem::path(path).string():"unowned",
+                facts.allocationBase,facts.state,facts.type,facts.protection,
+                facts.readable,facts.readable?hexPrefix(facts.bytes):"unavailable",
+                facts.callTarget,facts.jumpTarget);
+            return facts;
+        };
+        const auto entry=logAddress("main-update-call",site);
+        const auto firstTarget=entry.callTarget?entry.callTarget:entry.jumpTarget;
+        if(!entry.readable||!firstTarget)return;
+        const auto target=logAddress("site-target",firstTarget);
+        if(target.readable&&target.jumpTarget)
+            logAddress("target-jump",target.jumpTarget);
+    } catch(const std::exception& error) {
+        try {spdlog::warn("FG game phase site read-only probe failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {
+        try {spdlog::warn("FG game phase site read-only probe failed");}
+        catch(...) {}
+    }
+}
 }
 std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
@@ -3634,6 +3682,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     const auto& profile=skyrim1170CreationProfile();
     if(!game||verifiedGameHash!=profile.gameSha256)
         return Error{ErrorCode::Unsupported,"World-draw executable identity differs"};
+    if(settings.get<bool>("Diagnostics.ProbeFgGamePhaseSite"))
+        logFgGamePhaseSite(reinterpret_cast<std::uintptr_t>(game),profile.imageSize);
     constexpr std::array<std::uint8_t,5> expected{0xe8,0xd1,0xf7,0xe9,0xff};
     const CallSiteDescriptor descriptor{std::string(worldDrawPatchId),std::string(profile.gameSha256),
         profile.imageSize,0xfa507a,0xe44850,expected};

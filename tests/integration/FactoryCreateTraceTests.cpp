@@ -57,6 +57,29 @@ TEST_CASE("Factory method probe captures code and bounded jump targets without e
     REQUIRE_FALSE(rk::inspectFactoryMethodCode(UINTPTR_MAX-32).readable);
 }
 
+TEST_CASE("Read-only code probe resolves a direct CALL without executing it",
+    "[factory_create_trace]") {
+    std::array<std::uint8_t,256> code{};
+    code.fill(0xcc);
+    const auto base=reinterpret_cast<std::uintptr_t>(code.data());
+    code[0]=0xe8;
+    const std::int32_t forward=128-5;
+    std::memcpy(code.data()+1,&forward,sizeof(forward));
+    auto facts=rk::inspectFactoryMethodCode(base);
+    REQUIRE(facts.readable);
+    REQUIRE(facts.callTarget==base+128);
+    REQUIRE(facts.targetReadable);
+    REQUIRE(facts.targetBytes[0]==0xcc);
+    REQUIRE(facts.jumpTarget==0);
+    code[128]=0xe8;
+    const std::int32_t backward=-128-5;
+    std::memcpy(code.data()+129,&backward,sizeof(backward));
+    facts=rk::inspectFactoryMethodCode(base+128);
+    REQUIRE(facts.callTarget==base);
+    code[0]=0xcc;
+    REQUIRE(rk::inspectFactoryMethodCode(base).callTarget==0);
+}
+
 TEST_CASE("Factory method probe refuses guard pages and records execute-only code",
     "[factory_create_trace]") {
     struct Allocation {

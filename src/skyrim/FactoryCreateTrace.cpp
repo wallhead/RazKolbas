@@ -55,7 +55,10 @@ FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept 
     facts.readable=readCodeBytes(method,facts.bytes.data(),facts.bytes.size());
     if(!facts.readable)return facts;
     std::int32_t displacement{};
-    if(facts.bytes[0]==0xe9) {
+    if(facts.bytes[0]==0xe8) {
+        std::memcpy(&displacement,facts.bytes.data()+1,sizeof(displacement));
+        facts.callTarget=relativeTarget(method,5,displacement);
+    } else if(facts.bytes[0]==0xe9) {
         std::memcpy(&displacement,facts.bytes.data()+1,sizeof(displacement));
         facts.jumpTarget=relativeTarget(method,5,displacement);
     } else if(facts.bytes[0]==0xff&&facts.bytes[1]==0x25) {
@@ -68,8 +71,9 @@ FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept 
               facts.bytes[10]==0xff&&facts.bytes[11]==0xe0) {
         std::memcpy(&facts.jumpTarget,facts.bytes.data()+2,sizeof(facts.jumpTarget));
     }
-    if(facts.jumpTarget)
-        facts.targetReadable=readCodeBytes(facts.jumpTarget,facts.targetBytes.data(),
+    if(facts.jumpTarget||facts.callTarget)
+        facts.targetReadable=readCodeBytes(
+            facts.jumpTarget?facts.jumpTarget:facts.callTarget,facts.targetBytes.data(),
             facts.targetBytes.size());
     return facts;
 }

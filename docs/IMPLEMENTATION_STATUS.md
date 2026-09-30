@@ -1,5 +1,24 @@
 # Implementation checkpoint
 
+## FG main-update candidate snapshot, 0.1.141 (2026-09-30)
+
+The exact Skyrim 1.6.1170 disk `.text` is encrypted and the earlier external
+read of live bytes was denied. Source 0.1.141 adds a default-Off, read-only
+startup snapshot for the Address Library Main Update CALL candidate at
+RVA `0x63ead0`, gated by the existing exact game hash. It logs the live site,
+one CALL/JMP target, memory ownership and one relay jump without installing a
+game hook, submitting a marker or enabling FG. A failing decoder/config test
+preceded implementation. Release CTest passed **64/64** and Debug **59/59**.
+The 0.1.141 DLL and user INI with only this probe appended are installed in
+the V5.4 MO2 mod; all **14/14** payload hashes verified. FG remains Off and
+the bright reduced loading workaround remains On. A user-started main-menu
+launch ran the read-only probe. The live CALL goes from game RVA `0x63ead0`
+to a game relay at `0x645ea0`, then CBP's `Render` callback at RVA `0x45f00`.
+Capstone and Ghidra show that CBP updates actors and tail-jumps its original
+trampoline. The user requested the one-snapshot-per-launch probe stay On.
+Per-frame cadence, exact phase placement and Skyrim FG-On remain **NOT RUN**. See
+`docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md` for exact hashes and test scope.
+
 ## 0.1.136 loading-route trial after pixel capture (2026-09-30)
 
 The user reports a warmer/yellower image with RazKolbas and nearly black
