@@ -254,6 +254,64 @@ FileIdentity identify(HMODULE module) {
     if (file.bad()) throw std::runtime_error("Module file read failed");
     return {sha256(bytes),bytes.size()};
 }
+std::string factoryCodeHex(std::span<const std::uint8_t> bytes) {
+    constexpr char digits[]="0123456789abcdef";
+    std::string result(bytes.size()*2,'0');
+    for(std::size_t i=0;i<bytes.size();++i) {
+        result[i*2]=digits[bytes[i]>>4];result[i*2+1]=digits[bytes[i]&15];
+    }
+    return result;
+}
+void logFactoryMethodCode(std::string_view phase,std::uintptr_t method) noexcept {
+    try {
+        const auto facts=inspectFactoryMethodCode(method);
+        spdlog::info("FG factory code {}: method=0x{:x}; allocation=0x{:x}; protection=0x{:x}; state=0x{:x}; type=0x{:x}; readable={}; live64={}; jumpTarget=0x{:x}; indirectSlot=0x{:x}; targetReadable={}; target64={}; read-only",
+            phase,method,facts.allocationBase,facts.protection,facts.state,facts.type,
+            facts.readable,facts.readable?factoryCodeHex(facts.bytes):"unavailable",
+            facts.jumpTarget,facts.indirectSlot,facts.targetReadable,
+            facts.targetReadable?factoryCodeHex(facts.targetBytes):"unavailable");
+        for(const auto address:{method,facts.jumpTarget}) {
+            if(!address)continue;
+            HMODULE owner{};
+            if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                   reinterpret_cast<LPCWSTR>(address),&owner)) {
+                MEMORY_BASIC_INFORMATION region{};
+                VirtualQuery(reinterpret_cast<const void*>(address),&region,sizeof(region));
+                spdlog::info("FG factory code owner {}: address=0x{:x}; no loaded-module owner; allocation=0x{:x}; protection=0x{:x}; type=0x{:x}",
+                    phase,address,reinterpret_cast<std::uintptr_t>(region.AllocationBase),
+                    region.Protect,region.Type);
+                continue;
+            }
+            struct Reference {HMODULE value;~Reference(){FreeLibrary(value);}} reference{owner};
+            wchar_t path[32768]{};
+            const auto count=GetModuleFileNameW(owner,path,32768);
+            const auto identity=identify(owner);
+            spdlog::info("FG factory code owner {}: address=0x{:x}; path={}; SHA256={}; size={}; RVA=0x{:x}",
+                phase,address,count&&count<32768?std::filesystem::path(path).string():"unavailable",
+                identity.hash,identity.size,address-reinterpret_cast<std::uintptr_t>(owner));
+        }
+    } catch(const std::exception& error) {
+        try {spdlog::warn("FG factory code {} capture unavailable: {}",phase,error.what());}catch(...) {}
+    } catch(...) {}
+}
+#ifdef RK_WITH_STREAMLINE
+void logAdapterFactoryCode(IDXGIAdapter* adapter,std::string_view phase) noexcept {
+    try {
+        Microsoft::WRL::ComPtr<IDXGIFactory> factory;
+        if(!adapter||FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))||!factory)return;
+        auto** table=*reinterpret_cast<void***>(factory.Get());
+        HMODULE owner{};
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+               reinterpret_cast<LPCWSTR>(table),&owner))return;
+        struct Reference {HMODULE value;~Reference(){FreeLibrary(value);}} reference{owner};
+        if(!isReshadeFactoryDelegateSite(factory.Get(),
+            reinterpret_cast<std::uintptr_t>(owner),identify(owner).hash,
+            reinterpret_cast<FactoryCreateFn>(table[10]),reshade680FactoryCreateSite()))return;
+        const auto facts=inspectReshadeFactoryDelegate(factory.Get());
+        logFactoryMethodCode(phase,facts.createMethod);
+    } catch(...) {}
+}
+#endif
 void logFactoryBeforeCreation(IDXGIAdapter* adapter) noexcept {
     if(factoryProvenanceLogged.test_and_set(std::memory_order_acq_rel))return;
     if(!adapter) {
@@ -797,7 +855,13 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
     }
     const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(delegate.vtable-base),site);
-    if(const auto error=std::get_if<Error>(&validated))return *error;
+    if(const auto error=std::get_if<Error>(&validated)) {
+        spdlog::warn("FG native factory validation rejected: nativeOwner={}; snapshot16={}; expected16={}; prior chain preserved",
+            nativeOwner,factoryCodeHex(std::span(mapped).subspan(site.methodRva,16)),
+            factoryCodeHex(site.prologue));
+        logFactoryMethodCode("native-validation-rejected",base+site.methodRva);
+        return *error;
+    }
     if(nativeOwner) {
         if(patchDisabled(state.disabledPatchIds,site.id))return false;
     } else {
@@ -1263,6 +1327,7 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
     std::unique_ptr<FgPrivateSwapRoute> preparedPrivate;
     if(state->privateFgOffProbe&&swapDesc&&
        !state->privateFgAttempted.test_and_set(std::memory_order_acq_rel)) {
+        logAdapterFactoryCode(adapter,"before-private-prepare");
         try {
             HMODULE self{};
             wchar_t path[32768]{};
@@ -1290,6 +1355,7 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
             try {spdlog::warn("FG-Off private swap preparation failed");}
             catch(...) {}
         }
+        logAdapterFactoryCode(adapter,"after-private-prepare");
     }
 #endif
     bool tracedInstalled=false;

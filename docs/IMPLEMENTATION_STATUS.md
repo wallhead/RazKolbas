@@ -1,5 +1,35 @@
 # Implementation checkpoint
 
+## Source 0.1.131 native factory code capture (2026-09-30)
+
+The user-started 0.1.130 V5.4 run prepared the private Streamline lower,
+but rejected the native factory profile at the code-byte check and retired
+the candidate before the game swap replacement. Native fallback, DLSS SR
+and native UI continued; the user confirmed the image/UI looked normal.
+This run **did not bind the FG facade or generate frames**. The code
+mismatch's cause is not established. Read-only external process inspection
+and process termination both returned Windows access denied.
+
+0.1.131 records bounded entry/target bytes, page protection, jump addresses,
+module path/hash/RVA before and after private preparation and on profile
+rejection. These observations neither authorize an unknown hook nor change
+the strict validation/fallback. The standalone game-route probe now checks
+the native prologue as well as its owner/table/method addresses before
+patching; that stricter probe passed with real Presents and resize. Reader
+tests cover forward/backward and indirect jumps, inaccessible/guard pages,
+address overflow and execute-only pages. The next required game run must
+identify the actual mismatch before any compatibility patch is selected.
+Details: `docs/re/FG_PRIVATE_GAME_BINDING_2026-09-30.md`.
+
+**0.1.131 Skyrim result: NOT RUN. FG-On result: NOT RUN.**
+Release CTest passed **61/61** and Debug **57/57**. Independent review found
+no significant code issues and independently passed the two new reader
+cases in both builds. The stricter private route probe again passed with
+the installed runtime. A complete MO2 package preserving the installed
+SR/NR/FG settings is staged under ignored
+`artifacts/local/stage-v54-fg-factory-0131`; installation is pending Skyrim
+exit. The running mod remains 0.1.130 until the DLL can be replaced.
+
 ## Source 0.1.130 private FG-Off game route (2026-09-30)
 
 The opt-in V5.4 creation path now links the private Streamline runtime into
@@ -11,14 +41,15 @@ Release CTest passed 61/61, Debug 57/57. The initial System32-factory
 `E_ABORT` failure and corrected factory selection are recorded in
 `docs/re/FG_PRIVATE_GAME_BINDING_2026-09-30.md`.
 
-**Skyrim runtime result: NOT RUN. FG-On result: NOT RUN.** The installed
-V5.4 package and first game run must verify the actual callback ordering,
-ENB/ReShade output, UI, fallback and first Present. No live FG claim is made.
+**Skyrim runtime result: native fallback observed; private binding rejected.
+FG-On result: NOT RUN.** The first user-started run is recorded above; no
+live FG claim is made.
 The 0.1.130 FG-Off trial package is now installed at
 `D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas` with all 14 manifest files
 hash-verified and the previous DLL/INI/manifest preserved under ignored
 `artifacts/local/backup-v54-before-0130`. The installed private runtime passed
-the exact ReShade-first offline route probe; Skyrim has not been started.
+the exact ReShade-first offline route probe. The user subsequently started
+Skyrim and confirmed normal visuals while the private route fell back.
 
 ## Private ReShade/Streamline FG-Off resize (2026-09-29)
 

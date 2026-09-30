@@ -2,6 +2,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <cstdint>
+#include <array>
 #include <string_view>
 
 namespace rk {
@@ -10,6 +11,15 @@ struct ReshadeFactoryDelegateFacts {
     std::uintptr_t delegate{},vtable{},createMethod{};
     bool methodExecutable{};
 };
+struct FactoryMethodCodeFacts {
+    std::array<std::uint8_t,64> bytes{},targetBytes{};
+    std::uintptr_t allocationBase{},jumpTarget{},indirectSlot{};
+    std::uint32_t protection{},state{},type{};
+    bool readable{},targetReadable{};
+};
+// Read-only diagnostic. Recognizes only entry E9, FF25 and MOV RAX/JMP RAX;
+// follows one target and never treats a recognized jump as an approved hook.
+FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept;
 // Exact ReShade 6.8 factory method reads [this+8] as its downstream
 // IDXGIFactory. Caller must first verify the ReShade build and vtable site.
 // This structural probe does not call any COM method or retain the object.

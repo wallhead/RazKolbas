@@ -5,6 +5,7 @@
 #include "rk/PatchDescriptor.hpp"
 #include <wrl/client.h>
 #include <filesystem>
+#include <cstring>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -18,6 +19,66 @@ void observed(IDXGIFactory* factory,IUnknown*,const DXGI_SWAP_CHAIN_DESC*,
     IDXGISwapChain* swap,HRESULT result,void* value) noexcept {
     auto& state=*static_cast<Observation*>(value);
     ++state.calls;state.factory=factory;state.swap=swap;state.result=result;
+}
+
+TEST_CASE("Factory method probe captures code and bounded jump targets without executing them",
+    "[factory_create_trace]") {
+    std::array<std::uint8_t,256> code{};
+    code.fill(0xcc);
+    const auto base=reinterpret_cast<std::uintptr_t>(code.data());
+    code[0]=0xe9;
+    const std::int32_t forward=128-5;
+    std::memcpy(code.data()+1,&forward,sizeof(forward));
+    auto facts=rk::inspectFactoryMethodCode(base);
+    REQUIRE(facts.readable);
+    REQUIRE(facts.bytes[0]==0xe9);
+    REQUIRE(facts.jumpTarget==base+128);
+    REQUIRE(facts.targetReadable);
+    REQUIRE(facts.targetBytes[0]==0xcc);
+    code[128]=0xe9;
+    const std::int32_t backward=-128-5;
+    std::memcpy(code.data()+129,&backward,sizeof(backward));
+    REQUIRE(rk::inspectFactoryMethodCode(base+128).jumpTarget==base);
+    code[0]=0xff;code[1]=0x25;
+    const std::int32_t pointerOffset=80-6;
+    std::memcpy(code.data()+2,&pointerOffset,sizeof(pointerOffset));
+    const auto target=base+128;
+    std::memcpy(code.data()+80,&target,sizeof(target));
+    facts=rk::inspectFactoryMethodCode(base);
+    REQUIRE(facts.indirectSlot==base+80);
+    REQUIRE(facts.jumpTarget==target);
+    code[0]=0x48;code[1]=0xb8;
+    std::memcpy(code.data()+2,&target,sizeof(target));
+    code[10]=0xff;code[11]=0xe0;
+    REQUIRE(rk::inspectFactoryMethodCode(base).jumpTarget==target);
+    code.fill(0xcc);
+    REQUIRE(rk::inspectFactoryMethodCode(base).jumpTarget==0);
+    REQUIRE_FALSE(rk::inspectFactoryMethodCode(1).readable);
+    REQUIRE_FALSE(rk::inspectFactoryMethodCode(UINTPTR_MAX-32).readable);
+}
+
+TEST_CASE("Factory method probe refuses guard pages and records execute-only code",
+    "[factory_create_trace]") {
+    struct Allocation {
+        void* value{VirtualAlloc(nullptr,4096,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)};
+        ~Allocation(){if(value)VirtualFree(value,0,MEM_RELEASE);}
+    } allocation;
+    REQUIRE(allocation.value!=nullptr);
+    std::memset(allocation.value,0xcc,64);
+    const auto base=reinterpret_cast<std::uintptr_t>(allocation.value);
+    DWORD previous{};
+    REQUIRE(VirtualProtect(allocation.value,4096,PAGE_EXECUTE,&previous));
+    const auto executable=rk::inspectFactoryMethodCode(base);
+    REQUIRE(executable.protection==PAGE_EXECUTE);
+    REQUIRE(executable.readable);
+    REQUIRE(executable.bytes[0]==0xcc);
+    REQUIRE(VirtualProtect(allocation.value,4096,PAGE_READWRITE|PAGE_GUARD,&previous));
+    REQUIRE_FALSE(rk::inspectFactoryMethodCode(base).readable);
+    MEMORY_BASIC_INFORMATION region{};
+    REQUIRE(VirtualQuery(allocation.value,&region,sizeof(region))==sizeof(region));
+    REQUIRE((region.Protect&PAGE_GUARD)!=0);
+    REQUIRE(VirtualProtect(allocation.value,4096,PAGE_NOACCESS,&previous));
+    REQUIRE_FALSE(rk::inspectFactoryMethodCode(base).readable);
 }
 rk::FactoryCreateFn nativeNext{};
 unsigned nativeCalls{};

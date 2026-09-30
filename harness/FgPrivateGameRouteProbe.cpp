@@ -7,6 +7,7 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <iostream>
+#include <cstring>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
@@ -114,6 +115,30 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
        facts.vtable!=reinterpret_cast<std::uintptr_t>(owner)+site.tableRva||
        facts.createMethod!=reinterpret_cast<std::uintptr_t>(owner)+site.methodRva)
         return 20;
+    std::vector<std::uint8_t> nativeImage(site.imageSize);
+    const auto nativeBase=reinterpret_cast<std::uintptr_t>(owner);
+    const auto codeFacts=rk::inspectFactoryMethodCode(facts.createMethod);
+    std::cout<<"Native factory code: protection=0x"<<std::hex<<
+        codeFacts.protection<<"; entry=";
+    for(const auto byte:std::span(codeFacts.bytes).first(16))
+        std::cout<<static_cast<unsigned>(byte)<<' ';
+    std::cout<<std::dec<<'\n';
+    if(!codeFacts.readable)return 31;
+    std::memcpy(nativeImage.data()+site.tableRva+site.slot*sizeof(void*),
+        reinterpret_cast<const void*>(facts.vtable+site.slot*sizeof(void*)),
+        sizeof(void*));
+    std::memcpy(nativeImage.data()+site.methodRva,
+        codeFacts.bytes.data(),site.prologue.size());
+    const auto nativeValidated=rk::validateOwnedRouteSite(nativeImage,nativeBase,
+        std::get<std::string>(nativeHash),std::filesystem::file_size(nativePath),
+        site.tableRva,site);
+    if(const auto* error=std::get_if<rk::Error>(&nativeValidated)) {
+        std::cerr<<"production native validation: "<<error->message<<"; live16=";
+        for(const auto byte:std::span(nativeImage).subspan(site.methodRva,16))
+            std::cerr<<std::hex<<static_cast<unsigned>(byte)<<' ';
+        std::cerr<<std::dec<<'\n';
+        return 31;
+    }
     Callback callback{route.get(),
         reinterpret_cast<rk::FactoryCreateFn>(facts.createMethod),
         reinterpret_cast<IDXGIFactory*>(facts.delegate),0};

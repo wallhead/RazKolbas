@@ -2,8 +2,66 @@
 #include "rk/OwnedRouteProfile.hpp"
 #include <Windows.h>
 #include <limits>
+#include <cstring>
 
 namespace rk {
+namespace {
+bool readCodeBytes(std::uintptr_t address,void* output,SIZE_T size) noexcept {
+    if(!address||address>std::numeric_limits<std::uintptr_t>::max()-size)
+        return false;
+    MEMORY_BASIC_INFORMATION region{};
+    if(!VirtualQuery(reinterpret_cast<const void*>(address),&region,sizeof(region))||
+       region.State!=MEM_COMMIT||(region.Protect&PAGE_GUARD)||
+       (region.Protect&0xff)==PAGE_NOACCESS)return false;
+    const auto regionBase=reinterpret_cast<std::uintptr_t>(region.BaseAddress);
+    if(address<regionBase||address-regionBase>=region.RegionSize||
+       size>region.RegionSize-(address-regionBase))return false;
+    SIZE_T copied{};
+    return ReadProcessMemory(GetCurrentProcess(),
+        reinterpret_cast<const void*>(address),output,size,&copied)&&copied==size;
+}
+std::uintptr_t relativeTarget(std::uintptr_t address,unsigned length,
+    std::int32_t displacement) noexcept {
+    if(address>std::numeric_limits<std::uintptr_t>::max()-length)return 0;
+    const auto end=address+length;
+    if(displacement<0) {
+        const auto distance=static_cast<std::uint64_t>(
+            -static_cast<std::int64_t>(displacement));
+        return distance<=end?end-static_cast<std::uintptr_t>(distance):0;
+    }
+    const auto distance=static_cast<std::uintptr_t>(displacement);
+    return distance<=std::numeric_limits<std::uintptr_t>::max()-end?
+        end+distance:0;
+}
+}
+FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept {
+    FactoryMethodCodeFacts facts{};
+    MEMORY_BASIC_INFORMATION region{};
+    if(VirtualQuery(reinterpret_cast<const void*>(method),&region,sizeof(region))) {
+        facts.allocationBase=reinterpret_cast<std::uintptr_t>(region.AllocationBase);
+        facts.protection=region.Protect;facts.state=region.State;facts.type=region.Type;
+    }
+    facts.readable=readCodeBytes(method,facts.bytes.data(),facts.bytes.size());
+    if(!facts.readable)return facts;
+    std::int32_t displacement{};
+    if(facts.bytes[0]==0xe9) {
+        std::memcpy(&displacement,facts.bytes.data()+1,sizeof(displacement));
+        facts.jumpTarget=relativeTarget(method,5,displacement);
+    } else if(facts.bytes[0]==0xff&&facts.bytes[1]==0x25) {
+        std::memcpy(&displacement,facts.bytes.data()+2,sizeof(displacement));
+        facts.indirectSlot=relativeTarget(method,6,displacement);
+        std::uintptr_t target{};
+        if(readCodeBytes(facts.indirectSlot,&target,sizeof(target)))
+            facts.jumpTarget=target;
+    } else if(facts.bytes[0]==0x48&&facts.bytes[1]==0xb8&&
+              facts.bytes[10]==0xff&&facts.bytes[11]==0xe0) {
+        std::memcpy(&facts.jumpTarget,facts.bytes.data()+2,sizeof(facts.jumpTarget));
+    }
+    if(facts.jumpTarget)
+        facts.targetReadable=readCodeBytes(facts.jumpTarget,facts.targetBytes.data(),
+            facts.targetBytes.size());
+    return facts;
+}
 bool isReshadeFactoryDelegateSite(IDXGIFactory* factory,
     std::uintptr_t moduleBase,std::string_view moduleHash,
     FactoryCreateFn originalMethod,const OwnedRouteSite& site) noexcept {

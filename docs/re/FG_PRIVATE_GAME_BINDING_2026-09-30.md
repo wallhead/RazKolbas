@@ -57,3 +57,63 @@ are observed. The next required run is one user-started Skyrim launch with
 this package, then inspect `RazKolbas.log` for startup factory selection,
 facade substitution, first real Presents and native fallback; visually check
 the world, ENB/ReShade effects, UI and resize.
+
+## First game run: private binding rejected, native fallback preserved
+
+The user started the installed 0.1.130 V5.4 package on 2026-09-30 at
+07:53 local time (PID 6508). At 07:53:52 the log reported the prepared
+2560×1440 private lower and the pending game callback. At 07:53:53,
+`installNativeFactoryTrace` rejected the native site with
+`Owned route method pointer or prologue differs`; the route was disabled
+before replacement and the original ReShade creation succeeded. The
+subsequent structural observation recorded the expected System32 DXGI
+table and method addresses, with `nativeTraceActive=false`. There was no
+facade-substitution message. The code bytes were not included in 0.1.130's
+failure log, so neither a particular detour nor its owner is established.
+
+The saved run excerpt reached source frame 35061. At least 34,800 outer
+Presents had returned `S_OK` with zero observed failures, and same-frame
+DLSS SR/native UI publication was active after world admission. The owner
+answered that the game image and UI looked normal. These are native-fallback
+results, not FG binding or generated-frame evidence. The run log is retained
+under ignored `artifacts/local/live-0130`. A hash-gated, read-only
+`OpenProcess` attempt and the later `Stop-Process` attempt both returned
+Windows access denied; no remote memory modification was attempted.
+
+## 0.1.131: collect the missing bytes without guessing a hook
+
+The standalone probe had verified the native module, table and method
+addresses but omitted the production prologue validation. It now validates
+that prologue before its pointer-slot writes. With the installed private
+runtime and ReShade loaded first it still exited zero: native code protection
+was `PAGE_EXECUTE_READ` (`0x20`), the expected 16-byte prologue matched,
+one facade substitution occurred, real Present succeeded and resize reached
+192×108. Thus this stricter offline case did **not** reproduce the game
+rejection.
+
+The next build logs 64 entry bytes before and after private preparation,
+and on rejection also logs the snapshot bytes versus the expected prologue.
+It recognizes only entry `E9 rel32`, `FF 25 [RIP+disp32]` and
+`MOV RAX, imm64; JMP RAX`, reads at most one target's 64 bytes, and records
+the loaded-module owner or allocation metadata. No diagnostic code is
+executed, no jump is approved, and existing owner/profile/CAS checks and
+native fallback remain unchanged. Bounded reads refuse guard/noaccess pages
+and crossing a region boundary. Tests first failed because the reader was
+absent, then passed (68 assertions in seven factory-trace cases).
+
+One distinct possibility is a page-protection artifact: the production
+whole-image snapshot currently skips `PAGE_EXECUTE` pages, whereas the
+bounded `ReadProcessMemory` test successfully read an execute-only fixture
+on this system. This is **an unconfirmed hypothesis for the game**, not
+grounds to accept arbitrary changed code. Logging both snapshot and direct
+bytes will distinguish that case from an actual inline detour. Attribution
+or a compatibility patch must wait for the next user-started game evidence.
+
+Final 0.1.131 Release CTest passed 61/61 and Debug 57/57. An independent
+review found no significant code issues and ran the two new reader cases
+in each build (23 assertions each). The review's initial documentation gap
+was addressed by recording the actual 0.1.130 fallback above, separately
+from the next build's NOT RUN status. The final stricter route probe also
+exited zero. The complete package is staged with existing settings preserved;
+the running Skyrim process must exit before installing it. No 0.1.131
+Skyrim result or FG-On result is claimed.
