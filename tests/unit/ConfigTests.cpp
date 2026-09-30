@@ -110,6 +110,18 @@ TEST_CASE("Loading picture capture is explicit and restart-scoped", "[config]") 
       REQUIRE_FALSE(enabled.get<bool>("FrameGeneration.Enabled"));
       REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
   }
+  TEST_CASE("Native loading movie viewport trial is explicit and restart-scoped", "[config]") {
+      const auto defaults=rk::defaultSettings();
+      REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeLoadingNativeMovieViewport"));
+      const auto parsed=rk::parseIni(
+          "[FrameGeneration]\nEnabled=false\n"
+          "[Diagnostics]\nProbeLoadingNativeMovieViewport=true\n");
+      REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+      const auto& enabled=std::get<rk::Settings>(parsed);
+      REQUIRE(enabled.get<bool>("Diagnostics.ProbeLoadingNativeMovieViewport"));
+      REQUIRE_FALSE(enabled.get<bool>("FrameGeneration.Enabled"));
+      REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+  }
 TEST_CASE("Direct UI plane probe is opt-in and restart-scoped", "[config]") {
     const auto defaults=rk::defaultSettings();
     REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeDirectUiPlane"));

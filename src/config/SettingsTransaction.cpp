@@ -15,6 +15,7 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
         "Diagnostics.ProbeLoadingPicture",
         "Diagnostics.ProbeLoadingReducedRoute",
         "Diagnostics.ProbeLoadingNativeRestore",
+        "Diagnostics.ProbeLoadingNativeMovieViewport",
         "Diagnostics.ProbeDirectUiPlane",
         "Diagnostics.ProbeFgCameraBuffer",
         "Diagnostics.ProbeFgCameraWrites",

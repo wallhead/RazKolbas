@@ -114,11 +114,13 @@ struct WorldState {
     bool probeLoadingPicture{};
     bool probeLoadingReducedRoute{};
     bool probeLoadingNativeRestore{};
+    bool probeLoadingNativeMovieViewport{};
     bool loadingRouteSawMainMenu{},loadingReducedRouteLogged{};
     bool loadingRestoreLogged{},loadingRestoreFailureLogged{};
+    bool loadingMovieViewportLogged{};
     std::uint64_t loadingRestoreFrame{},loadingRestoreCapturedFrame{};
     unsigned loadingRestoreOrdinal{};
-    bool loadingRestoreSawHud{};
+    bool loadingRestoreSawHud{},loadingRestoreSawFader{};
     LoadingNativeBackground loadingNativeBackground;
     LoadingPictureProbe loadingPictureProbe;
     struct LoadingPictureSequence {
@@ -788,11 +790,15 @@ void beginNativeHudMovieViewportWindow(WorldState* state,
     if(!state)return;
     if(state->hudViewportFrame==frame)return;
     finishNativeHudMovieViewportWindow(state);
-    if(state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr||
-       !namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)||
+    const bool loadingTrial=state->probeLoadingNativeMovieViewport&&
+        namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)&&
+        !titleMenuOnStack(state);
+    if((state->displayedMode.load(std::memory_order_relaxed)!=DisplayMode::DlssSr&&
+        !loadingTrial)||
+       (!namedMenuOnStack(state,RE::HUDMenu::MENU_NAME)&&!loadingTrial)||
        inventoryMenuOnStack(state)||magicMenuOnStack(state)||
        titleMenuOnStack(state)||
-       namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME))return;
+       (namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)&&!loadingTrial))return;
     auto* domain=activeOwnedSceneDomain();
     if(!domain||domain->phase()!=ScenePhase::NativeUi||
        domain->frame()!=frame||domain->renderThread()!=GetCurrentThreadId())return;
@@ -802,9 +808,12 @@ void beginNativeHudMovieViewportWindow(WorldState* state,
     state->hudViewportFrame=frame;
     const auto render=domain->plan().render;
     const auto display=domain->plan().display;
+    auto* loadingMovieMenu=loadingTrial?
+        menuInstanceOnStack(state,RE::LoadingMenu::MENU_NAME):nullptr;
     for(unsigned ordinal=0;ordinal<ui->menuStack.size()&&ordinal<32;++ordinal) {
         auto* item=ui->menuStack[ordinal].get();
         if(!item||!item->uiMovie)continue;
+        if(loadingTrial&&item!=loadingMovieMenu)continue;
         auto* movie=item->uiMovie.get();
         const auto original=getHudMovieViewport(movie);
         const auto native=nativeHudMovieViewport(original,render,display);
@@ -823,6 +832,12 @@ void beginNativeHudMovieViewportWindow(WorldState* state,
         entry.movie=movie;
         entry.original=original;
         entry.applied=applied;
+        if(loadingTrial&&!state->loadingMovieViewportLogged) {
+            state->loadingMovieViewportLogged=true;
+            try {spdlog::info("Loading Menu native movie viewport trial frame {}: {}x{} -> {}x{}; FG configured Off",
+                frame,original.width,original.height,
+                applied.width,applied.height);}catch(...) {}
+        }
         if(state->hudViewportWindows==0) {
             const auto [identity,name]=menuAtOrdinal(state,ordinal);
             try {spdlog::info("Native HUD movie viewport frame {} ordinal {} menu={} id=0x{:x} {}x{} -> {}x{}",
@@ -1001,6 +1016,7 @@ void restoreLoadingNativeBackgroundAtMenuEntry(WorldState* state,
         state->loadingRestoreCapturedFrame=0;
         state->loadingRestoreOrdinal=0;
         state->loadingRestoreSawHud=false;
+        state->loadingRestoreSawFader=false;
     }
     const auto ordinal=state->loadingRestoreOrdinal++;
     if(ordinal>=16)return;
@@ -1038,15 +1054,18 @@ void restoreLoadingNativeBackgroundAtMenuEntry(WorldState* state,
         }
     }
     if(name==RE::HUDMenu::MENU_NAME)state->loadingRestoreSawHud=true;
-    if(name==RE::FaderMenu::MENU_NAME&&state->loadingRestoreSawHud&&
+    if(name==RE::FaderMenu::MENU_NAME)state->loadingRestoreSawFader=true;
+    if(name==RE::MistMenu::MENU_NAME&&state->loadingRestoreSawHud&&
+       state->loadingRestoreSawFader&&
        state->loadingRestoreCapturedFrame==frame) {
         const auto hr=state->loadingNativeBackground.restore(immediate,texture,
             frame,domain->plan().generation);
         state->loadingRestoreCapturedFrame=0;
         if(SUCCEEDED(hr)) {
+            captureLoadingPictureSnapshot(state,frame,"after-native-restore",false);
             if(!state->loadingRestoreLogged) {
                 state->loadingRestoreLogged=true;
-                spdlog::info("Loading native-background trial restored published background after HUD Menu at frame {}; Fader and later menus remain native",
+                spdlog::info("Loading native-background trial restored published background after HUD and Fader menu callbacks at frame {}; Mist and later menus remain native",
                     frame);
             }
         } else if(!state->loadingRestoreFailureLogged) {
@@ -2046,13 +2065,6 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
           logInventoryBinding(state,frame,"before-menu-prep");
         }
     }
-    if(state) {
-        try {captureMenuUiEntry(state,frame);}
-        catch(const std::exception& error) {
-            try {spdlog::warn("Owned UI menu-sequence entry capture failed: {}",
-                error.what());}catch(...) {}
-        } catch(...) {}
-    }
     if(armLoadingUiTrace(state,frame))
         logLoadingUiBoundary(state,frame,"before-first-PostDisplay");
     try {armLoadingPictureCapture(state,frame);}
@@ -2060,6 +2072,13 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
         try {spdlog::warn("Loading picture capture arming failed: {}",error.what());}
         catch(...) {}
     } catch(...) {}
+    if(state) {
+        try {captureMenuUiEntry(state,frame);}
+        catch(const std::exception& error) {
+            try {spdlog::warn("Owned UI menu-sequence entry capture failed: {}",
+                error.what());}catch(...) {}
+        } catch(...) {}
+    }
     try {restoreLoadingNativeBackgroundAtMenuEntry(state,frame);}
     catch(const std::exception& error) {
         try {spdlog::warn("Loading native-background trial failed safely: {}",
@@ -3756,6 +3775,9 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         !settings.get<bool>("FrameGeneration.Enabled");
     pending->probeLoadingNativeRestore=
         settings.get<bool>("Diagnostics.ProbeLoadingNativeRestore")&&
+        !settings.get<bool>("FrameGeneration.Enabled");
+    pending->probeLoadingNativeMovieViewport=
+        settings.get<bool>("Diagnostics.ProbeLoadingNativeMovieViewport")&&
         !settings.get<bool>("FrameGeneration.Enabled");
     pending->probeDirectUiPlane=
         settings.get<bool>("Diagnostics.ProbeDirectUiPlane");

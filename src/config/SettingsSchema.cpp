@@ -75,6 +75,7 @@ const std::vector<Field>& settingsSchema() {
         {"Diagnostics.ProbeLoadingPicture", false, 0, 2, {}},
         {"Diagnostics.ProbeLoadingReducedRoute", false, 0, 2, {}},
         {"Diagnostics.ProbeLoadingNativeRestore", false, 0, 2, {}},
+        {"Diagnostics.ProbeLoadingNativeMovieViewport", false, 0, 2, {}},
         {"Diagnostics.ProbeDirectUiPlane", false, 0, 2, {}},
         {"Diagnostics.ProbeFgCameraBuffer", false, 0, 2, {}},
         {"Diagnostics.ProbeFgCameraWrites", false, 0, 2, {}},

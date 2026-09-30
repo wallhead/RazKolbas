@@ -139,9 +139,12 @@ ProbeLoadingPicture = false
 ; publish spatially at Present. Loading UI is scaled with the picture.
 ; Restart required; leave Off after diagnosis unless validated in game.
 ProbeLoadingReducedRoute = false
-; FG-off trial: retain the native loading picture across HUD Menu's observed
-; full-target wipe, then allow later loading-menu draws. Restart required.
+; FG-off trial: retain the native loading picture across the destructive
+; loading-menu interval, then allow later menu draws. Restart required.
 ProbeLoadingNativeRestore = false
+; FG-off trial: give only Loading Menu's Scaleform movie a display-size
+; viewport while the owned native UI target is active. Restart required.
+ProbeLoadingNativeMovieViewport = false
 ; One-frame experimental transparent UI route and raw alpha/composite capture.
 ; Requires a game restart. Frame generation remains off during this probe.
 ProbeDirectUiPlane = false

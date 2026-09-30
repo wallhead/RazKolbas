@@ -302,8 +302,9 @@ are complete with SHA-256 `f17362b17cef0136a26a8ab26b9281e7e46ceb0d83551f36613ce
 complete; the fast-travel one hashes to
 `a1299559389676c52366b0f5592d64ff3ad1532ffbbf2f2f9d6b6664935a202f`.
 
-Both native sequences have the same five menu calls in order: SkyParkour,
-TrueHUD, HUD Menu, Fader Menu, Mist Menu. The readback before HUD Menu remains
+Both native sequences logged five retained menu-boundary readbacks labelled
+SkyParkour, TrueHUD, HUD Menu, Fader Menu, Mist Menu. The readback labelled
+before HUD Menu remains
 bright (mean RGB **50/48/63** on save load, **56/58/50** on fast travel). The
 next readback, before Fader Menu, is essentially black (**0.01/0.01/0.01** and
 **0.02/0.02/0.02**). Respectively **3,686,297** and **3,629,862** RGB pixels
@@ -312,10 +313,13 @@ small amounts of picture/text onto the black native target; final mean RGB is
 **5.8/5.1/4.8** and **3.3/4.0/3.6**. EndFrame and pre-Present are unchanged.
 The reduced picture remains byte-for-byte unchanged across this interval.
 
-This identifies the destructive native-target transition as HUD Menu
-`PostDisplay` or work immediately within that call interval. A whole-target
-clear is plausible from the almost entirely black result, but the current
-captures do not distinguish an explicit D3D11 clear from a full-screen draw.
+At this stage the ordinal labels suggested a HUD Menu transition. The later
+0.1.139 capture and the Ghidra/Capstone call-site check below correct that
+attribution: the first hook callback arms the sequence, so the retained labels
+lag the actual menu calls by one. The native target is wiped across the Fader
+Menu call interval. A whole-target clear is plausible from the almost
+entirely black result, but these captures do not distinguish an explicit
+D3D11 clear from a full-screen draw.
 The next isolated hypothesis is to preserve the already-published native
 background across this interval, then let the later loading-menu calls draw.
 That still requires a game visual test for brightness, full-resolution
@@ -352,3 +356,135 @@ and manifest is
 The game was closed at install time and MO2 `meta.ini` was preserved. The
 user has been asked to load the same save and fast-travel once. **0.1.138
 game visual test: NOT RUN; permanent repair: OPEN; game FG-On: NOT RUN.**
+
+The 0.1.138 game test was then run. The log reported a successful restore on
+the Loading Menu at frame 6790. The selected save-load frame 6817 still fell
+from mean RGB **100/106/117** before the menu calls to **0.03/0.03/0.03**
+between the recorded HUD and Fader menu boundaries, and finished at
+**4.76/4.52/4.74**. Fast-travel frame 8582 fell from **60/62/55** to
+**0.02/0.02/0.02** and finished at **3.89/4.74/5.76**. The user reported the
+loading pictures were still dark. The two complete per-menu manifests hash to
+`7edf37f5687b9e52a7c600f5dea35e14f9e3dd5a3ff81f2bfab225ffd82277e9`
+and `bb9e8c28a0e1355f2cd193c1c55489262799cee532a98cd57f5272038cf55444`.
+The paired picture-capture manifests hash to
+`40e8dfb4a8d2b55ebb02dcef38632de9714c56c8a7b63b8e8a6ce14f0d41575a`
+and `1083cc2dd04b8c2686c3efc4ea0aad2f3d462c5d09e160dd19fa998532878fe4`.
+This demonstrates that copying at the ordinal-labelled Fader entry did not preserve the final
+image. There was no readback immediately after that copy, so the captures do
+not distinguish a bad source/copy from a later menu redraw. **0.1.138 game
+test: RUN; brightness repair: FAILED.**
+
+### 0.1.139 later restore timing and immediate readback
+
+Source 0.1.139 moves the guarded copy from the ordinal-labelled Fader entry
+to the ordinal-labelled Mist entry. On the two selected
+loading frames it also reads back `after-native-restore-native.raw` immediately
+after the copy, before the Mist callback. This tests whether the saved
+full-resolution image was actually placed on the native target and whether a
+later menu draw darkens it again. Release CTest passed **64/64** and Debug
+**59/59**. Stage and prior install each verified **14/14** payload hashes.
+Skyrim was closed before installation. Only the DLL changed; the FG-off user
+INI and MO2 metadata were preserved. The 0.1.138 DLL/INI/manifest backup is
+under ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0139-native-background-late-restore`.
+The installed 0.1.139 DLL SHA-256 is
+`d1ac30e0049f000f9b246da19bf773c26f93f95d9104ad9cfef5e3ecf666f464`
+and manifest SHA-256 is
+`ce07730575cec174c877b036372370c54a64e8460c701c1f908bc12cbdbb9fb7`.
+All **14/14** installed payloads match. The user has been asked to repeat
+save load and fast travel. **0.1.139 game visual test: NOT RUN; permanent
+repair: OPEN; game FG-On: NOT RUN.**
+
+The 0.1.139 game test was run, and the user again reported dark loading
+pictures. In the save-load capture, the native target before menu drawing
+held a bright dragon image (mean RGB **88/83/80**). The immediate
+`after-native-restore` readback reproduced those exact pixels and alpha 255;
+the copy itself worked. By pre-Present the native target instead showed a
+different loading picture, a mage, at mean RGB **5.82/6.47/6.08**. The
+reduced target remained unchanged. The second selected fast-travel frame
+started black and finished with another dark picture. The complete per-menu
+manifest hashes are
+`3c3eda8efb406843a2918fd3b81bb6a7e8ac8f7da5f813f86f67939ab6b2cc0e`
+and `f6d0d51c8a37a8a84b8886b9d85d84881b44f86cb2092c1c12bec8ac42082643`;
+the companion picture manifests hash to
+`09abd773728af22d780a985c66a74769b12114be4cc74f652653d60ad50d0f12`
+and `43feb4fc1343a3a9707cd6e806bb3c72d41b66a482b388b52f88c762c8452c52`.
+Restoring the earlier frame is not a valid repair: it shows the previous
+artwork instead of the newly selected picture and can erase loading UI.
+
+Ghidra's decoded Skyrim 1.6.1170 function shows the hook at RVA `FA51CB`
+calls the menu preparation routine before the virtual `IMenu::PostDisplay` at
+`FA51D6`, then advances the stack pointer. Capstone 5.0.7 independently
+decoded `call E441C0`, `mov rcx,[rbx]`, `mov rax,[rcx]`,
+`call qword ptr [rax+0x30]` at those sites. The first hook callback arms the
+one-shot capture, while the ordinal logger starts on the next callback. In
+the observed six-menu stack, SkyParkour, TrueHUD, HUD Menu, Fader Menu, Mist
+Menu, Loading Menu, the previous labels were therefore one menu behind the
+active `PostDisplay` call. The bright-to-black transition is across the
+actual **Fader Menu** call; the new dim artwork appears by the end of the
+actual **Loading Menu** call. This corrects the earlier HUD attribution.
+
+### 0.1.140 native Loading Menu movie viewport trial
+
+The Loading Menu movie reported a 1485x835 buffer and viewport while the
+owned native target, RTV, DSV, and viewport were 2560x1440. Source 0.1.140
+adds default-off `ProbeLoadingNativeMovieViewport`, gated by FG Off and the
+active Loading Menu. It temporarily gives only that movie a 2560x1440
+viewport during native drawing and restores the original at the existing
+frame boundary. The old native-background restore is switched Off in the
+trial INI. The loading sequence now arms before the per-menu entry snapshot,
+so its recorded ordinal labels align with the actual callbacks in this
+observed stack. This test asks whether the movie's reduced viewport caused
+the dim native artwork; it is not a proven fix. The config test was red for
+the absent key before implementation, then passed. Release CTest passed
+**64/64** and Debug **59/59**. **0.1.140 game visual test: NOT RUN;
+permanent repair: OPEN; game FG-On: NOT RUN.**
+
+The 0.1.140 staged package and prior installed package each verified
+**14/14** manifest hashes. Skyrim was closed before installation. Only DLL,
+INI, and manifest changed; the previous DLL/INI/manifest are backed up under
+ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0140-native-movie-viewport`.
+The INI changes `ProbeLoadingNativeRestore` from true to false, adds
+`ProbeLoadingNativeMovieViewport=true`, and preserves the other user values.
+The installed 14 payloads verify against the manifest. SHA-256: DLL
+`478757b526ed27986c2fbcf7014847168c86c96bc31463f18b878cea694545b7`,
+INI `419e731bdd6c8420e70af6002697c4b733065847688c9d417f66b1e448707799`,
+manifest `ad19232732ac5a4af38032adb9daea16a77a50650e6d74676630b0f49295609b`.
+The MO2 `meta.ini` hash remains
+`0bea0fb065f4f86a779cca3862fca96a8994e93c13ccd9016275096b9cc925c5`.
+The user has been asked for a save-load visual check before fast travel.
+
+The 0.1.140 game run completed a save load and fast travel. The log confirms
+the Loading Menu movie viewport changed from **1485x835** to **2560x1440**.
+The user reported the artwork was still dark. With the corrected six-call
+sequence, the save-load native target stayed bright through the callback
+labelled Fader Menu (mean RGB **77.55/67.39/67.64**), became essentially
+black before Mist Menu (**0.02/0.01/0.01**), and finished at
+**3.82/4.76/6.45**. Fast travel followed the same pattern, finishing at
+**3.45/3.68/4.41**. The reduced picture stayed unchanged across native menu
+drawing. The two per-menu manifests hash to
+`bec2511d14eed71189a4b156a7591eb29214520cf155964af465f00a370f862f`
+and `03502f8dc76f1b6cea5894682ddacd65c1006d72a69553867e923e84e3676b95`;
+the paired picture manifests hash to
+`981d71b171f8a1ef79c9b16f2b4533f584518190c6ac879a87b8738176dba6fa`
+and `5054ce12bffb7f637d705dba379308dcbc1619a0128aec34978a5b94b6408981`.
+The viewport mismatch is real but does not explain the measured darkness.
+**0.1.140 game visual test: RUN; brightness repair: FAILED.**
+
+With Skyrim closed, the installed 0.1.140 DLL was retained and its INI
+changed to the previously user-tested bright loading workaround:
+`ProbeLoadingReducedRoute=true`, `ProbeLoadingPicture=false`,
+`ProbeLoadingNativeRestore=false`, and
+`ProbeLoadingNativeMovieViewport=false`. FG remains Off; all other user
+values are preserved. Only INI and manifest changed. The previous versions
+are backed up under ignored
+`artifacts/local/visual-regression-2026-09-30/backup-v54-before-0140-bright-loading-workaround`.
+Both staged and prior packages verified **14/14** payload hashes, and all
+**14/14** installed payloads verify. Installed INI SHA-256 is
+`75f5325db98a7bf73a28222bb71ae7fefbc25427e670e424bed6f2348885d3fc`;
+manifest SHA-256 is
+`701edfb2ca99bd43178d456a8a8457e1b07b12d00f82dfdca08eb139b69d4ac7`.
+This restores legible reduced-resolution loading artwork from the 0.1.136
+trial; the exact 0.1.140 INI combination has **not** had a new game run.
+Full-resolution quality repair and game FG-On remain OPEN/NOT RUN.

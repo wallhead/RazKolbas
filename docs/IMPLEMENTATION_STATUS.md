@@ -5634,7 +5634,7 @@ the assistant did not start it. Status is
 The next action is a user-started save-load test of visual parity, ENB/ReShade
 ordering and native-size UI after the log reports native UI route activation.
 
-## Current 0.1.138 loading-route checkpoint (2026-09-30)
+## Current 0.1.140 loading-route checkpoint (2026-09-30)
 
 The 0.1.135 game captures established that the native target changes from
 bright artwork to nearly black during Loading Menu drawing, before Scaleform
@@ -5644,14 +5644,22 @@ visible again, but the user reported it was pixelated at the reduced render
 resolution. This is a diagnostic result, not a final-quality repair. TRP's
 spatial loading route is a design reference; no TRP code was copied.
 
-0.1.137 per-menu captures found the native picture nearly black between the
-recorded HUD Menu and Fader Menu call boundaries on both save load and fast
-travel. 0.1.138 is installed as a default-off FG-off hypothesis test: save
-the earlier full-resolution native background and restore it after the
-darkening interval before later menu draws. The WARP restore test passes;
+The 0.1.138 and 0.1.139 FG-off background-restoration trials both failed the
+game visual test: loading pictures remained dark. The immediate 0.1.139
+readback proves that the copy briefly restored the previous bright artwork;
+the Loading Menu then drew a different picture at very low brightness. The
+Ghidra/Capstone call-site check also corrected a one-callback offset in the
+earlier per-menu labels: the actual Fader call wipes the old target, and the
+Loading Menu draws the new dim artwork. The Loading Menu movie still reports
+a 1485x835 viewport while drawing to the 2560x1440 native target. Source
+0.1.140 tested a display-size viewport for only that movie. The log confirmed
+the changed viewport, but the user's save-load and fast-travel pictures stayed
+dark; the native captures remained near black. The installed 0.1.140 INI now
+selects the previously user-tested bright reduced loading route and switches
+the failed restore/viewport probes Off. This workaround remains lower
+resolution; its exact 0.1.140 setting combination has not had a new game run.
 Release **64/64** and Debug **59/59** CTest groups passed; all 14 installed
-payload hashes match the new manifest. The user has been asked for one save
-load and one fast-travel load. **0.1.137 game capture: RUN; 0.1.138 game
-visual test: NOT RUN; permanent loading repair: OPEN; game FG-On: NOT RUN.**
+payload hashes verified. **0.1.138, 0.1.139, and 0.1.140 native visual
+trials: FAILED; full-resolution loading repair: OPEN; game FG-On: NOT RUN.**
 Full capture and installation evidence is in
 `docs/re/FG_OFF_VISUAL_REGRESSION_2026-09-30.md`.
