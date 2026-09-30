@@ -117,3 +117,13 @@ from the next build's NOT RUN status. The final stricter route probe also
 exited zero. The complete package is staged with existing settings preserved;
 the running Skyrim process must exit before installing it. No 0.1.131
 Skyrim result or FG-On result is claimed.
+
+The user subsequently closed Skyrim. On 2026-09-30, the 0.1.131 DLL and
+manifest were installed into the existing V5.4 MO2 mod; all 14 installed
+manifest hashes matched. DLL SHA-256:
+`97e4f1180028866113b924b577a1f8084da2d83f0280300bedcc511563c0600d`.
+The INI was unchanged from the staging snapshot and was preserved. The old
+DLL/INI/manifest are backed up under ignored
+`artifacts/local/backup-v54-before-0131`. Skyrim was not running during
+installation and was not started by the agent. Runtime evidence for this
+build is still NOT RUN.

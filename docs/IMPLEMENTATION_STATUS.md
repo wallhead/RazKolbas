@@ -27,8 +27,18 @@ no significant code issues and independently passed the two new reader
 cases in both builds. The stricter private route probe again passed with
 the installed runtime. A complete MO2 package preserving the installed
 SR/NR/FG settings is staged under ignored
-`artifacts/local/stage-v54-fg-factory-0131`; installation is pending Skyrim
-exit. The running mod remains 0.1.130 until the DLL can be replaced.
+`artifacts/local/stage-v54-fg-factory-0131` and is now installed as recorded
+below.
+
+After the user closed Skyrim, 0.1.131 was installed in
+`D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas` on 2026-09-30. All 14
+manifest files passed hash verification. The installed DLL SHA-256 is
+`97e4f1180028866113b924b577a1f8084da2d83f0280300bedcc511563c0600d`.
+The previous DLL/INI/manifest are preserved under ignored
+`artifacts/local/backup-v54-before-0131`. Existing settings were preserved:
+FG Off, private FG-Off capture enabled. The next action is one user-started
+launch to collect the before/after/rejection code evidence; this installed
+build's Skyrim and FG-On results remain NOT RUN.
 
 ## Source 0.1.130 private FG-Off game route (2026-09-30)
 
