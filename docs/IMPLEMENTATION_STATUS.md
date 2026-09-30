@@ -5815,3 +5815,12 @@ effect hypothesis for the yellow image and FPS cost, not a measured Skyrim
 cause. TRP's explicit source ReShade stage and isolated native output device
 are the reference for a single-owner correction. See the RE note for probe
 outputs and limits. **Game FG-On: NOT RUN; private route: restored Off.**
+
+Branch review 37 was checked against `bafbc28`: all 12 archive member hashes
+match, the two included phase-ledger Git blobs match, and upstream ReShade
+6.8 source confirms that both D3D11 and D3D12 swap Presents independently
+enter `present_effect_runtime`. This supports a dual-effect hypothesis but
+does not prove both techniques ran over one Skyrim frame. The next bounded
+offline diagnostic is per-runtime technique and stage-colour attribution with
+isolated effects configurations. The archive was not added to Git; no game
+change was made. See `docs/re/FG_BRANCH_REVIEW_37_2026-09-30.md`.
