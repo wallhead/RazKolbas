@@ -32,6 +32,12 @@ took 59 seconds, approximately **50.8 real Presents/s**. This is improved
 throughput in the current sample; identical view and steady user FPS have not
 yet been confirmed. The performance cause and full recovery remain unresolved.
 
+Later in the same camera-Off run, frames 43200–46800 (14:05:58–14:07:24)
+took 86 seconds: **41.9 real Presents/s**, with individual 600-Present intervals
+at 40–42.9/s. No camera observer lines or failed Presents appeared; the INI
+still matches the camera-Off hash above. Thus the earlier 50.8/s sample is not
+a claim of sustained recovery to 60 FPS. User same-view confirmation is pending.
+
 **Camera-Off run: observed; steady FPS/view confirmation pending. Game FG-On:
 NOT RUN.** The user requested limiting this work to the camera-Off comparison
 and pushing the current source/evidence for further ChatGPT review. No further

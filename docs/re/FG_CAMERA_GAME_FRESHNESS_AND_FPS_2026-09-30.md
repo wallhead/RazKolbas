@@ -158,3 +158,23 @@ Full performance recovery and root cause: unresolved. Game FG-On: NOT RUN.**
 The user requested only this camera-Off comparison and a source/evidence push
 for ChatGPT review. No production optimization or additional game experiment
 is part of this checkpoint.
+
+## Later check of the same camera-Off run
+
+On the user's request to check the run again, the agent preserved a new
+latest-session snapshot. PID 25504 remained active; the session marker remained
+13:54:06. The installed INI still has `ProbeFgCameraWrites = false` and hash
+`e1de3933bfb8a71b75676e53684314c0826388a3214d35a5c4a3ac58795e68c3`.
+The full latest session still contains zero observer-arming, writer or camera
+sample lines. No settings, DLLs or game state were changed for this check.
+
+Frames **43200–46800**, 14:05:58–14:07:24, took **86 seconds**: 3600 real outer
+Presents, approximately **41.9/s**. The six 600-Present intervals were 14, 14,
+14, 15, 15 and 14 seconds, or approximately 40–42.9/s. At frame 46800, Present
+was S_OK, failed=0, worldForwarded=46800. These later observations supersede
+any interpretation of the earlier 50.8/s sample as steady recovery to 60 FPS.
+The user's steady FPS and an identical view/location comparison remain pending;
+the underlying performance cause remains unresolved.
+
+Ignored snapshot: `artifacts/local/live-0134-fps/RazKolbas-0134-camera-off-latest.log`,
+SHA-256 `0f3a1c271f3405ba6abcc9ee5451fdafa393f97dca4d5c01a09c9932e5147247`.
