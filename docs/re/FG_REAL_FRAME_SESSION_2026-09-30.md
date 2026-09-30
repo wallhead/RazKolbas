@@ -178,10 +178,9 @@ The user closed Skyrim after the capture and requested that the read-only
 probe remain enabled. Installed 0.1.141 therefore retains
 `ProbeFgGamePhaseSite=true`; each launch logs one startup snapshot. No game
 phase hook or SDK marker is installed. **0.1.141 read-only game probe: RUN;
-Skyrim FG-On: NOT RUN.** Next: prove the main-update call's per-source-frame
-cadence and position relative to the owned world draw/Present, then attach
-simulation markers and the full input/presentation contract at verified
-boundaries.
+Skyrim FG-On: NOT RUN.** The Main Update call remains a useful independent
+cadence check; the world/Present boundaries below supply the direct route
+for the next integration step.
 
 ## Reference phase comparison after the live probe
 
