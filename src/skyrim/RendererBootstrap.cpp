@@ -853,17 +853,36 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
         const auto original=base+site.methodRva;
         std::memcpy(mapped.data()+slotOffset,&original,sizeof(original));
     }
-    const auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+    auto validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
         static_cast<std::uint32_t>(delegate.vtable-base),site);
+    bool steamInline=false;
+    if(nativeOwner&&std::holds_alternative<Error>(validated)) {
+        const auto compatible=inspectAndPinSteamFactoryInline(delegate.createMethod);
+        if(std::holds_alternative<bool>(compatible)&&std::get<bool>(compatible)) {
+            // Normalize only this local validation snapshot, after proving
+            // Steam's exact relay/callback/original-trampoline chain. The
+            // live native entry and saved next keep Steam's hook untouched.
+            std::copy_n(site.prologue.begin(),5,mapped.begin()+site.methodRva);
+            validated=validateOwnedRouteSite(mapped,base,id.hash,id.size,
+                static_cast<std::uint32_t>(delegate.vtable-base),site);
+            steamInline=std::holds_alternative<bool>(validated);
+        } else if(const auto* error=std::get_if<Error>(&compatible)) {
+            spdlog::info("FG native Steam compatibility rejected: {}",error->message);
+        }
+    }
     if(const auto error=std::get_if<Error>(&validated)) {
         spdlog::warn("FG native factory validation rejected: nativeOwner={}; snapshot16={}; expected16={}; prior chain preserved",
             nativeOwner,factoryCodeHex(std::span(mapped).subspan(site.methodRva,16)),
             factoryCodeHex(site.prologue));
         logFactoryMethodCode("native-validation-rejected",base+site.methodRva);
+        const auto code=inspectFactoryMethodCode(base+site.methodRva);
+        if(code.jumpTarget)logFactoryMethodCode("native-relay-rejected",code.jumpTarget);
         return *error;
     }
     if(nativeOwner) {
         if(patchDisabled(state.disabledPatchIds,site.id))return false;
+        if(steamInline&&patchDisabled(state.disabledPatchIds,
+               steamFactoryInlineProfile().id))return false;
     } else {
         if(patchDisabled(state.disabledPatchIds,foreign.id))return false;
         wchar_t methodPath[32768]{};
@@ -906,8 +925,12 @@ Result<bool> installNativeFactoryTrace(FactoryTraceLease& state,
         reinterpret_cast<void*>(delegate.createMethod),
         reinterpret_cast<void*>(&nativeFactoryCreateProxy));
     if(const auto error=std::get_if<Error>(&applied))return *error;
+    if(steamInline)
+        spdlog::info("FG native Steam inline chain accepted: profile={}; SHA256={}; Steam owner pinned, relay and original trampoline verified; native code unchanged",
+            steamFactoryInlineProfile().id,steamFactoryInlineProfile().moduleHash);
     spdlog::info("Installed {}: tableSHA256={}; tableRVA=0x{:x}; slot={}; priorMethodRVA=0x{:x}; native lower creation guarded",
-        nativeOwner?site.id:foreign.id,id.hash,site.tableRva,site.slot,
+        steamInline?steamFactoryInlineProfile().id:nativeOwner?site.id:foreign.id,
+        id.hash,site.tableRva,site.slot,
         nativeOwner?site.methodRva:foreign.methodRva);
     return true;
 }

@@ -1,4 +1,6 @@
 #include "rk/SwapObserver.hpp"
+#include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -46,7 +48,10 @@ bool validDisabledPatchIds(std::string_view ids) {
         const auto comma=ids.find(',');const auto id=trimId(ids.substr(0,comma));
         const unsigned bit=id==rendererObserverPatchId?1U:id==swapObserverPatchId?2U:
             id==enbSwapObserverPatchId?4U:id==enb505SwapObserverPatchId?8U:
-            id==reshade680SwapObserverPatchId?16U:0U;
+            id==reshade680SwapObserverPatchId?16U:
+            id==win11DxgiFactoryCreateSite().id?32U:
+            id==streamline2141FactoryCreateSite().id?64U:
+            id==steamFactoryInlineProfile().id?128U:0U;
         if(!bit||(seen&bit))return false;
         seen|=bit;
         if(comma==ids.npos)return true;

@@ -129,9 +129,21 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
         sizeof(void*));
     std::memcpy(nativeImage.data()+site.methodRva,
         codeFacts.bytes.data(),site.prologue.size());
-    const auto nativeValidated=rk::validateOwnedRouteSite(nativeImage,nativeBase,
+    auto nativeValidated=rk::validateOwnedRouteSite(nativeImage,nativeBase,
         std::get<std::string>(nativeHash),std::filesystem::file_size(nativePath),
         site.tableRva,site);
+    if(std::holds_alternative<rk::Error>(nativeValidated)) {
+        const auto compatible=rk::inspectAndPinSteamFactoryInline(facts.createMethod);
+        if(std::holds_alternative<bool>(compatible)&&std::get<bool>(compatible)) {
+            std::copy_n(site.prologue.begin(),5,nativeImage.begin()+site.methodRva);
+            nativeValidated=rk::validateOwnedRouteSite(nativeImage,nativeBase,
+                std::get<std::string>(nativeHash),std::filesystem::file_size(nativePath),
+                site.tableRva,site);
+            std::cout<<"Exact Steam native factory chain accepted; inline hook preserved\n";
+        } else if(const auto* error=std::get_if<rk::Error>(&compatible)) {
+            std::cerr<<"Steam compatibility: "<<error->message<<'\n';
+        }
+    }
     if(const auto* error=std::get_if<rk::Error>(&nativeValidated)) {
         std::cerr<<"production native validation: "<<error->message<<"; live16=";
         for(const auto byte:std::span(nativeImage).subspan(site.methodRva,16))
@@ -207,7 +219,18 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath) {
 }
 int wmain(int argc,wchar_t** argv) {
     std::cout.setf(std::ios::unitbuf);
-    if(argc!=3)return 1;
+    if(argc!=3&&argc!=4)return 1;
+    if(argc==4) {
+        const auto hash=rk::sha256File(argv[3]);
+        const auto& profile=rk::steamFactoryInlineProfile();
+        if(!std::holds_alternative<std::string>(hash)||
+           std::get<std::string>(hash)!=profile.moduleHash||
+           std::filesystem::file_size(argv[3])!=profile.fileSize)return 32;
+        // Keep this explicit research preload resident until process exit.
+        // Steam may install callbacks even if a later probe stage rejects.
+        if(!LoadLibraryW(argv[3]))return 33;
+        std::cout<<"Exact Steam overlay preloaded for the factory-chain probe\n";
+    }
     try {return run(argv[1],argv[2]);}
     catch(const std::exception& error) {
         std::cerr<<error.what()<<'\n';return 2;

@@ -80,6 +80,50 @@ TEST_CASE("Factory method probe refuses guard pages and records execute-only cod
     REQUIRE(VirtualProtect(allocation.value,4096,PAGE_NOACCESS,&previous));
     REQUIRE_FALSE(rk::inspectFactoryMethodCode(base).readable);
 }
+TEST_CASE("Exact Steam factory inline chain preserves the native ABI and rejects altered links",
+    "[factory_create_trace]") {
+    const auto& profile=rk::steamFactoryInlineProfile();
+    rk::SteamFactoryInlineFacts facts{};
+    facts.nativeMethod=0x180067c90;
+    facts.relay=0x18010000a;
+    facts.overlayBase=0x200000000;
+    facts.callback=facts.overlayBase+profile.callbackRva;
+    facts.originalTrampoline=facts.relay-10;
+    facts.overlayHash=std::string(profile.moduleHash);
+    facts.overlayFileSize=profile.fileSize;facts.overlayImageSize=profile.imageSize;
+    facts.entry=rk::win11DxgiFactoryCreateSite().prologue;
+    facts.entry[0]=0xe9;
+    auto displacement=static_cast<std::int32_t>(facts.relay-(facts.nativeMethod+5));
+    std::memcpy(facts.entry.data()+1,&displacement,4);
+    facts.relayCode={0xff,0x25,0,0,0,0};
+    std::memcpy(facts.relayCode.data()+6,&facts.callback,8);
+    std::copy_n(rk::win11DxgiFactoryCreateSite().prologue.begin(),5,
+        facts.trampolineCode.begin());
+    facts.trampolineCode[5]=0xe9;
+    displacement=static_cast<std::int32_t>(facts.nativeMethod+5-
+        (facts.originalTrampoline+10));
+    std::memcpy(facts.trampolineCode.data()+6,&displacement,4);
+    facts.callbackCode=profile.callbackCode;
+    REQUIRE(std::get<bool>(rk::validateSteamFactoryInline(facts)));
+    const auto rejects=[](const auto& value) {
+        return std::holds_alternative<rk::Error>(rk::validateSteamFactoryInline(value));
+    };
+    auto bad=facts;bad.overlayHash[0]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.overlayFileSize++;REQUIRE(rejects(bad));
+    bad=facts;bad.overlayImageSize++;REQUIRE(rejects(bad));
+    bad=facts;bad.callback++;REQUIRE(rejects(bad));
+    bad=facts;bad.entry[5]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.entry[1]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.relayCode[2]=1;REQUIRE(rejects(bad));
+    bad=facts;bad.relayCode[6]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.originalTrampoline++;REQUIRE(rejects(bad));
+    bad=facts;bad.trampolineCode[0]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.trampolineCode[6]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.callbackCode[0x58]^=1;REQUIRE(rejects(bad));
+    bad=facts;bad.overlayBase=UINTPTR_MAX-100;REQUIRE(rejects(bad));
+    bad=facts;bad.nativeMethod=UINTPTR_MAX-3;REQUIRE(rejects(bad));
+    bad=facts;bad.relay=9;REQUIRE(rejects(bad));
+}
 rk::FactoryCreateFn nativeNext{};
 unsigned nativeCalls{};
 HRESULT WINAPI nativeProxy(IDXGIFactory* factory,IUnknown* device,

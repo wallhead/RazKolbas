@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <array>
 #include <string_view>
+#include <string>
+#include "rk/Result.hpp"
 
 namespace rk {
 struct OwnedRouteSite;
@@ -20,6 +22,27 @@ struct FactoryMethodCodeFacts {
 // Read-only diagnostic. Recognizes only entry E9, FF25 and MOV RAX/JMP RAX;
 // follows one target and never treats a recognized jump as an approved hook.
 FactoryMethodCodeFacts inspectFactoryMethodCode(std::uintptr_t method) noexcept;
+struct SteamFactoryInlineProfile {
+    std::string_view id,moduleHash;
+    std::size_t fileSize{};
+    std::uint32_t imageSize{},callbackRva{},originalPointerRva{};
+    std::array<std::uint8_t,129> callbackCode{};
+};
+struct SteamFactoryInlineFacts {
+    std::uintptr_t nativeMethod{},relay{},callback{},overlayBase{},originalTrampoline{};
+    std::string overlayHash;
+    std::size_t overlayFileSize{},overlayImageSize{};
+    std::array<std::uint8_t,16> entry{};
+    std::array<std::uint8_t,14> relayCode{};
+    std::array<std::uint8_t,10> trampolineCode{};
+    std::array<std::uint8_t,129> callbackCode{};
+};
+const SteamFactoryInlineProfile& steamFactoryInlineProfile() noexcept;
+Result<bool> validateSteamFactoryInline(const SteamFactoryInlineFacts& facts);
+// Validates the exact native E9 -> private FF25 relay -> pinned Steam
+// callback and original trampoline. Pins Steam only after full validation.
+// Does not patch the native entry, relay, trampoline or Steam data/code.
+Result<bool> inspectAndPinSteamFactoryInline(std::uintptr_t nativeMethod);
 // Exact ReShade 6.8 factory method reads [this+8] as its downstream
 // IDXGIFactory. Caller must first verify the ReShade build and vtable site.
 // This structural probe does not call any COM method or retain the object.

@@ -2,6 +2,8 @@
 #include "rk/Settings.hpp"
 #include "rk/RendererHook.hpp"
 #include "rk/SwapObserver.hpp"
+#include "rk/FactoryCreateTrace.hpp"
+#include "rk/OwnedRouteProfile.hpp"
 #include <limits>
 #include <fstream>
 #include <Windows.h>
@@ -28,6 +30,21 @@ TEST_CASE("Supplied INI parses through the same schema as defaults", "[config]")
     const auto parsed = rk::parseIni(text);
     REQUIRE(std::holds_alternative<rk::Settings>(parsed));
     REQUIRE(std::get<rk::Settings>(parsed).values == rk::defaultSettings().values);
+}
+
+TEST_CASE("FG factory compatibility IDs parse as selective startup disables", "[config]") {
+    const auto steam=std::string(rk::steamFactoryInlineProfile().id);
+    const auto native=std::string(rk::win11DxgiFactoryCreateSite().id);
+    const auto streamline=std::string(rk::streamline2141FactoryCreateSite().id);
+    const auto ids=steam+", "+native+", "+streamline;
+    const auto parsed=rk::parseIni("[Patching]\nDisabledPatchIds="+ids+"\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& disabled=std::get<rk::Settings>(parsed).get<rk::Text>("Patching.DisabledPatchIds").value;
+    REQUIRE(rk::patchDisabled(disabled,steam));
+    REQUIRE(rk::patchDisabled(disabled,native));
+    REQUIRE(rk::patchDisabled(disabled,streamline));
+    REQUIRE_FALSE(rk::validDisabledPatchIds(ids+","+steam));
+    REQUIRE_FALSE(rk::validDisabledPatchIds(steam+".unknown"));
 }
 
 TEST_CASE("Schema defaults preserve user intent and unknown INI data", "[config]") {

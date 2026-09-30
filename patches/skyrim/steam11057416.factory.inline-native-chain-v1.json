@@ -1,0 +1,55 @@
+{
+  "id": "steam11057416.factory.inline-native-chain-v1",
+  "purpose": "Preserve the verified Steam overlay inline CreateSwapChain hook when admitting the private FG-Off lower beneath ReShade, instead of rejecting an unchanged compatible chain or disabling Steam overlay.",
+  "target": {
+    "module": "GameOverlayRenderer64.dll",
+    "sha256": "fe4440b1027e96052b376ee04290d91df95a76b0d97d808cd92c993f0dec47b9",
+    "file_size": 1679512,
+    "image_size": 1900544,
+    "file_version": "11.05.74.16",
+    "architecture": "x86-64",
+    "native_module": "System32/dxgi.dll",
+    "native_sha256": "25678116473558a56524b5b391f66f5c81febe8b2c463422f35807f77f3207c1",
+    "native_file_size": 1018016,
+    "native_image_size": 1011712
+  },
+  "location": {
+    "native_factory_vtable_rva": "0xa1428",
+    "native_create_swap_chain_slot": 10,
+    "native_create_swap_chain_rva": "0x67c90",
+    "steam_callback_rva": "0x9c250",
+    "steam_original_pointer_rva": "0x180340",
+    "steam_callback_hex": "40535556574883ec28488bf9498bf1488d0d3acb0900498bd8488beae8ef700100488d0d58370e00e82329fdff488d0d9c370e00e8b766fdff488d0df0370e00e8db7cfeff488b05a4400e004c8bce4c8bc3488bd5488bcfffd08bd885c078184885f6741348833e00740d488bd5488bcee83afcffff8bc34883c4285f5e5d5bc3"
+  },
+  "original": {
+    "native_prologue_hex": "405553565741564157488dac2468ffff",
+    "supported_inline_chain": "Native E9 rel32 resolves a committed executable MEM_PRIVATE relay with exact FF2500000000 plus the Steam callback address. The remaining eleven native bytes match. Steam's original pointer equals relay minus ten; those ten bytes contain copied 4055535657 plus E9 rel32 back to native entry plus five. Callback is executable MEM_IMAGE belonging to the pinned exact Steam image, and all 129 callback bytes match. Relay and trampoline share their allocation. Every mutable byte and link is re-read after pinning the Steam module.",
+    "validation": "All existing System32 owner/path/hash/size/image/table/slot checks still apply. Only the first five bytes of the local validation snapshot are normalized after the complete Steam proof. The live native entry, relay, original trampoline, Steam code and Steam data are never changed."
+  },
+  "replacement": {
+    "builder": "installNativeFactoryTrace / PointerPatch::apply",
+    "representation": "The existing atomic slot-10 compare/exchange points to RazKolbas's process-lifetime nativeFactoryCreateProxy. Saved next remains the native DXGI entry with Steam's inline hook intact; no new inline hook or proxy DLL is installed."
+  },
+  "abi": {
+    "calling_convention": "Windows x64 IDXGIFactory::CreateSwapChain",
+    "arguments": "IDXGIFactory*, IUnknown* device, DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**",
+    "steam_callback": "Preserves all four arguments, invokes the original trampoline once, postprocesses a successful non-null result, and returns the original HRESULT. The copied five bytes end on whole instruction boundaries.",
+    "razkolbas_callback": "Passes non-selected calls through the exact native entry. The selected opt-in game creation may prepare its D3D11 facade through that same saved entry; Steam receives native auxiliary creation and remains the existing inline owner."
+  },
+  "lifetime": {
+    "activation": "Only within the verified ReShade 6.8 startup factory callback, after private FG-Off preparation and before the selected game creation.",
+    "ownership": "Pin Steam callback module, System32 DXGI and RazKolbas; retain the existing process-lifetime factory lease. Steam owns its relay/trampoline allocation. RazKolbas retains the stable native entry, not a borrowed relay/trampoline callback pointer.",
+    "removal": "No hot removal of the RazKolbas slot while callbacks may execute; process exit ends the lease."
+  },
+  "recovery": {
+    "disable": "Add steam11057416.factory.inline-native-chain-v1 or win11-dxgi.factory.create-native-lower-v1 to Patching.DisabledPatchIds and restart Skyrim.",
+    "failure_scope": "Changed Steam/native identity, unknown hook, altered relay/callback/trampoline, unreadable bytes, pin failure or CAS conflict rejects the candidate and preserves the existing native/ReShade chain. No partial instruction patch exists to restore."
+  },
+  "evidence": [
+    "docs/re/FG_STEAM_OVERLAY_NATIVE_FACTORY_2026-09-30.md",
+    "0.1.131 game capture: native entry E9 and private FF25 relay existed before Streamline preparation and were unchanged afterward; PAGE_EXECUTE_READ and matching direct/snapshot bytes rule out an execute-only snapshot artifact.",
+    "Exact unmodified Steam DLL loaded into an isolated process reproduced callback RVA 0x9c250 and original-pointer RVA 0x180340 with the relay-minus-ten trampoline relationship.",
+    "Private game-route probe with exact Steam preloaded and exact ReShade 6.8 accepted the complete proof, substituted once, performed real FG-Off Present, resized to 192x108 and completed ordered teardown."
+  ],
+  "runtime_limits": "Skyrim/ENB binding, visible Steam overlay/input, and FG-On generated frames require runtime verification; standalone FG-Off success does not establish these. Steam DLL is not packaged."
+}

@@ -1,5 +1,53 @@
 # Implementation checkpoint
 
+## Source 0.1.132 Steam overlay factory compatibility (2026-09-30)
+
+The 0.1.131 game capture identified an existing native E9/FF25 chain before
+private Streamline preparation; it was unchanged afterward. PAGE_EXECUTE_READ
+and matching direct/snapshot bytes ruled out the execute-only snapshot
+hypothesis. Exact Steam overlay disassembly and an isolated unmodified-DLL
+reproduction identified its callback RVA 0x9c250 and original-pointer slot
+0x180340. The external game module snapshot was not obtained before exit;
+the new in-process validator must prove the loaded Steam owner before use.
+
+0.1.132 validates the full pinned Steam/native identity and callback/relay/
+trampoline chain, pins the Steam owner, then re-reads mutable links. Only
+the local validation snapshot is normalized. The live native entry and
+Steam hook are preserved; the existing factory callback saves that native
+entry rather than a borrowed Steam trampoline address. Steam overlay is
+not disabled or packaged. Unknown/changed owners still reject with native
+fallback. Descriptor: `steam11057416.factory.inline-native-chain-v1`.
+
+Both standalone game-route cases, with exact Steam preloaded and without
+Steam, exited zero: one substitution, real FG-Off Present, resize to
+192x108 and ordered teardown. Release CTest passed **61/61**, Debug **57/57**.
+Independent review found no significant issues and separately passed factory
+tests (84 assertions/eight cases) and owned-route tests (102 assertions/ten
+cases). Details: `docs/re/FG_STEAM_OVERLAY_NATIVE_FACTORY_2026-09-30.md`.
+
+**0.1.132 Skyrim/ENB binding: NOT RUN. Steam overlay rendering/input: NOT RUN.
+FG-On generated frames: NOT RUN.** The next gate is one user-started launch
+and save load with FG Off to inspect exact Steam acceptance, game facade
+substitution and real Presents; verify image/UI/effects and overlay behavior.
+The complete MO2 package is staged under ignored
+`artifacts/local/stage-v54-fg-steam-0132`. After confirming Skyrim was closed,
+the final 0.1.132 DLL and manifest were installed in
+`D:/TESV54BETA/BETA_TRUEAE_V54/mods/RazKolbas`; all **14** manifest hashes
+matched. Installed DLL SHA-256:
+`c483578f52648aea8ad9ee564fcfd49d7573e2220bddf462279b613de50f50b8`.
+The previous 0.1.131 DLL/INI/manifest are preserved under ignored
+`artifacts/local/backup-v54-before-0132`. The installed INI is unchanged:
+SR Balanced/M, sharpening 0.95, NR Off and FG Off, with the private FG-Off
+trial enabled. The staged runtime also passed the Steam-preloaded route probe.
+
+Final recovery-control verification found that the parser's existing allowlist
+omitted the native/Streamline factory IDs and the new Steam ID. Their distinct
+disable bits are now accepted; duplicates and unknown IDs remain rejected.
+The new regression failed at parsing before the fix, then passed six assertions.
+Both full CTest presets passed again after this change. Independent review
+also passed all configuration cases (128 assertions/19 cases) without findings.
+The final DLL includes this correction; Skyrim was not launched by the agent.
+
 ## Source 0.1.131 native factory code capture (2026-09-30)
 
 The user-started 0.1.130 V5.4 run prepared the private Streamline lower,
@@ -7,7 +55,7 @@ but rejected the native factory profile at the code-byte check and retired
 the candidate before the game swap replacement. Native fallback, DLSS SR
 and native UI continued; the user confirmed the image/UI looked normal.
 This run **did not bind the FG facade or generate frames**. The code
-mismatch's cause is not established. Read-only external process inspection
+mismatch's cause was not established at that checkpoint. Read-only external process inspection
 and process termination both returned Windows access denied.
 
 0.1.131 records bounded entry/target bytes, page protection, jump addresses,
@@ -21,7 +69,9 @@ address overflow and execute-only pages. The next required game run must
 identify the actual mismatch before any compatibility patch is selected.
 Details: `docs/re/FG_PRIVATE_GAME_BINDING_2026-09-30.md`.
 
-**0.1.131 Skyrim result: NOT RUN. FG-On result: NOT RUN.**
+**0.1.131 Skyrim result: capture collected; private binding rejected;
+native fallback preserved. FG-On result: NOT RUN.** See the 0.1.132 entry
+above for the subsequently identified existing Steam factory hook.
 Release CTest passed **61/61** and Debug **57/57**. Independent review found
 no significant code issues and independently passed the two new reader
 cases in both builds. The stricter private route probe again passed with
@@ -37,8 +87,8 @@ manifest files passed hash verification. The installed DLL SHA-256 is
 The previous DLL/INI/manifest are preserved under ignored
 `artifacts/local/backup-v54-before-0131`. Existing settings were preserved:
 FG Off, private FG-Off capture enabled. The next action is one user-started
-launch to collect the before/after/rejection code evidence; this installed
-build's Skyrim and FG-On results remain NOT RUN.
+launch to collect the before/after/rejection code evidence. That run is now
+recorded above; it did not bind the FG facade or generate frames.
 
 ## Source 0.1.130 private FG-Off game route (2026-09-30)
 

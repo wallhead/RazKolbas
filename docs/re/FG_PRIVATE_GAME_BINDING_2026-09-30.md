@@ -125,5 +125,19 @@ manifest hashes matched. DLL SHA-256:
 The INI was unchanged from the staging snapshot and was preserved. The old
 DLL/INI/manifest are backed up under ignored
 `artifacts/local/backup-v54-before-0131`. Skyrim was not running during
-installation and was not started by the agent. Runtime evidence for this
-build is still NOT RUN.
+installation and was not started by the agent. At that checkpoint runtime
+evidence for this build was still NOT RUN.
+
+## Subsequent 0.1.131 capture and 0.1.132 compatibility
+
+The user-started capture found a native E9/FF25 chain already present before
+private preparation, unchanged afterward, with PAGE_EXECUTE_READ protection
+and matching direct/snapshot bytes. The execute-only hypothesis is ruled out
+for this run. Steam overlay disassembly and an isolated exact-DLL reproduction
+identified the corresponding callback and original trampoline contract.
+The route again rejected before substitution and retained native presentation.
+0.1.132 now verifies and preserves that exact chain without disabling Steam.
+Both Steam-preloaded and no-Steam standalone routes passed real FG-Off Present,
+resize and teardown. Full evidence, owner-attribution limits and next runtime
+gate are recorded in
+[Steam overlay native factory forwarding](FG_STEAM_OVERLAY_NATIVE_FACTORY_2026-09-30.md).
