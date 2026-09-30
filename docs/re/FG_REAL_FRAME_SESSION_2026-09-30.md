@@ -182,3 +182,35 @@ Skyrim FG-On: NOT RUN.** Next: prove the main-update call's per-source-frame
 cadence and position relative to the owned world draw/Present, then attach
 simulation markers and the full input/presentation contract at verified
 boundaries.
+
+## Reference phase comparison after the live probe
+
+The user reconfirmed that Theo's Render Pipeline (TRP) is a reference for
+this work. Its source at commit
+`423869f06ebef17f7cee51d7f1ce753b2cc8ac4e` starts the next source
+frame after the previous real Present, calls Reflex sleep and
+`SimulationStart`, submits `SimulationEnd`, `RenderSubmitStart`, constants
+and guides in its native world interval, then calls `RenderSubmitEnd` before
+the next Present. See its `SourceDLSSGSession::BeginFrame`, `Prepare` and
+`BeforePresent`. This provides a practical phase placement model using
+boundaries RazKolbas already owns: native world draw and the D3D11 facade's
+real Present. It does not license copying its code or claiming its runtime
+results for RazKolbas. TRP uses Streamline 2.11.1 public headers and legacy
+`slSetTag`; RazKolbas's pinned 2.14.1 path uses frame-based tags, so only the
+phase and ownership model transfers.
+
+The DynamicShaderFrameGen reference at
+`daaba8aadb2dbc8c5e52b028f12475c3450b6866` acquires a per-frame token
+but places its `SimulationEnd` and `RenderSubmitStart` calls in its Present
+path. TRP's world-interval placement is the better match for RazKolbas's
+existing `FgStreamlineFrameSession` contract. A proposed additional detour
+of the Skyrim Main Update call was therefore abandoned before installation;
+no game code was changed by that exploration.
+
+The remaining implementation is to connect one real source-frame session to
+the owned post-Present/native-world/pre-Present boundaries and hand the
+same-frame motion, depth, UI and HUD-less resources to the private D3D12
+queue with retirement. First verify one update/world/Present cadence and
+thread identity in the exact MO2 stack, then enable one generated frame and
+measure actual presented frames plus game image/UI/ENB quality. The current
+0.1.141 DLL does not yet make those calls in Skyrim.
