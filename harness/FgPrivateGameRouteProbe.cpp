@@ -8,7 +8,9 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <iostream>
+#include <array>
 #include <cstring>
+#include <optional>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
@@ -25,6 +27,41 @@ struct Callback {
 Callback* active{};
 rk::FactoryCreateFn wrapperNext{};
 unsigned wrapperCalls{};
+bool sameIdentity(IUnknown* first,IUnknown* second) noexcept {
+    ComPtr<IUnknown> a,b;
+    return first&&second&&SUCCEEDED(first->QueryInterface(IID_PPV_ARGS(&a)))&&
+        SUCCEEDED(second->QueryInterface(IID_PPV_ARGS(&b)))&&a.Get()==b.Get();
+}
+std::optional<std::array<unsigned char,4>> firstPixel(
+    ID3D11Device* device,ID3D11DeviceContext* context,
+    ID3D11Texture2D* source) {
+    if(!device||!context||!source)return std::nullopt;
+    D3D11_TEXTURE2D_DESC desc{};
+    source->GetDesc(&desc);
+    if(!desc.Width||!desc.Height||desc.SampleDesc.Count!=1||
+       desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM)return std::nullopt;
+    desc.Usage=D3D11_USAGE_STAGING;
+    desc.BindFlags=0;
+    desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    desc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> staging;
+    if(FAILED(device->CreateTexture2D(&desc,nullptr,&staging)))return std::nullopt;
+    context->CopyResource(staging.Get(),source);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if(FAILED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)))
+        return std::nullopt;
+    const auto* data=static_cast<const unsigned char*>(mapped.pData);
+    std::array<unsigned char,4> pixel{data[0],data[1],data[2],data[3]};
+    context->Unmap(staging.Get(),0);
+    return pixel;
+}
+void reportPixel(const char* stage,
+    const std::optional<std::array<unsigned char,4>>& pixel) {
+    std::cout<<stage<<" pixel=";
+    if(!pixel)std::cout<<"unavailable";
+    else for(const auto channel:*pixel)std::cout<<static_cast<unsigned>(channel)<<',';
+    std::cout<<'\n';
+}
 HRESULT WINAPI wrapFactory(IDXGIFactory* factory,IUnknown* device,
     DXGI_SWAP_CHAIN_DESC* desc,IDXGISwapChain** output) noexcept {
     ++wrapperCalls;
@@ -246,9 +283,21 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     ComPtr<ID3D11RenderTargetView> view;
     if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&colour)))||
        FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 23;
+    ComPtr<ID3D11Texture2D> innerColour;
+    if(FAILED(callback.facade->GetBuffer(0,IID_PPV_ARGS(&innerColour))))return 43;
+    D3D11_TEXTURE2D_DESC innerColourDesc{};
+    innerColour->GetDesc(&innerColourDesc);
     ComPtr<ID3D11ShaderResourceView> sampleView;
     D3D11_TEXTURE2D_DESC colourDesc{};
     colour->GetDesc(&colourDesc);
+    std::cout<<"Colour handoff upper/inner sameIdentity="<<
+        sameIdentity(colour.Get(),innerColour.Get())<<
+        "; upper format="<<static_cast<unsigned>(colourDesc.Format)<<
+        " bind=0x"<<std::hex<<colourDesc.BindFlags<<
+        " misc=0x"<<colourDesc.MiscFlags<<
+        "; inner format="<<std::dec<<static_cast<unsigned>(innerColourDesc.Format)<<
+        " bind=0x"<<std::hex<<innerColourDesc.BindFlags<<
+        " misc=0x"<<innerColourDesc.MiscFlags<<std::dec<<'\n';
     const auto sampled=d11->CreateShaderResourceView(colour.Get(),nullptr,&sampleView);
     std::cout<<"Game shader-input contract: bind=0x"<<std::hex<<colourDesc.BindFlags<<
         "; SRV=0x"<<static_cast<unsigned>(sampled)<<std::dec<<'\n';
@@ -260,6 +309,8 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     }
     const float red[4]{1.f,0.f,0.f,1.f};
     context->ClearRenderTargetView(view.Get(),red);
+    reportPixel("Colour upper before Present",firstPixel(d11.Get(),context.Get(),colour.Get()));
+    reportPixel("Colour inner before Present",firstPixel(d11.Get(),context.Get(),innerColour.Get()));
     DXGI_SWAP_CHAIN_DESC current{};
     if(FAILED(upper->GetDesc(&current)))return 34;
     std::cout<<"Game requested/lower flags=0x"<<std::hex<<game.Flags<<"/0x"<<current.Flags<<std::dec<<'\n';
@@ -268,6 +319,9 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
         static_cast<unsigned>(presented)<<std::dec<<'\n';
     report();
     if(FAILED(presented))return 24;
+    reportPixel("Colour upper after Present",firstPixel(d11.Get(),context.Get(),colour.Get()));
+    reportPixel("Colour inner after Present",firstPixel(d11.Get(),context.Get(),innerColour.Get()));
+    innerColour.Reset();
     for(unsigned frame=1;frame<120;++frame) {
         const float next[4]{frame%2?1.f:0.f,frame%3?0.f:1.f,0.f,1.f};
         context->ClearRenderTargetView(view.Get(),next);

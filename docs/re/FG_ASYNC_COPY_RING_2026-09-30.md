@@ -76,3 +76,45 @@ user-started run supplies evidence. The next action is one MO2 launch, save
 load and same-view FPS/colour inspection with FG Off; restore the Off package
 if presentation regresses, then diagnose the resulting live log and colour
 boundary offline.
+
+## User-started 0.1.144 game trial and rollback
+
+The user started Skyrim through MO2 at 22:25:42 with FG Off and the private
+route On. The live log identified 0.1.144, accepted the private Streamline
+lower and returned the D3D11 facade to ReShade. Outer Presents remained
+`S_OK` with zero recorded failures through checkpoint 21,600; DLSS world
+submissions resumed after loading. The closed-session log snapshot has
+23,303,912 bytes and SHA-256
+`f19738dd63ac6382a1eb2b72192f2220d12faba313285d459c164b29fa9ee090`
+at ignored `artifacts/local/fg-phase-2026-09-30/runtime-0144-private-on/RazKolbas.log`.
+
+At the requested same view, the user reported the world colours **yellow
+again** and steady FPS **50 versus 60**. The user did not report a fast-travel
+artwork result; no loading-artwork claim is made for this trial. The coarse
+600-frame log checkpoints after world loading are consistent with roughly
+50 submitted real frames per second, but do not measure scanout or isolate a
+GPU/CPU cost. Successful Presents and the offline pixel tests therefore do
+not establish visual equivalence. The async copy change did **not** fix the
+private-route colour or FPS regressions. Actual game FG-On was not attempted.
+
+After the user closed Skyrim and the process was absent, the verified
+private-route Off 0.1.144 package was restored by replacing only the trial
+INI and manifest. The failed trial INI/manifest remain in ignored
+`artifacts/local/fg-phase-2026-09-30/backup-failed-0144-private-on`. The
+Release DLL remains 0.1.144, SHA-256
+`79b3d03236fc427857d91a40713f37555c04b1f794ba2c7befa53d235dec9427`.
+The restored INI SHA-256 is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`;
+manifest SHA-256 is
+`d83332a3a8f6b8d052854af8b99041e6e60ebffded708d2bc7b73675ff5dee78`.
+All **14/14** installed payload hashes verify; FG and the private route are
+Off, the user's other settings and the brighter reduced-loading route remain.
+
+The next colour investigation should identify the final game-facing colour
+resource and effect boundary in the exact ENB/ReShade chain before changing
+gamma, blend or colour-space behavior. TRP's retained presentation buffers
+are useful architecture evidence, but its separate game-facing texture and
+effect handoff cannot be transplanted without proving ReShade's sRGB RTV
+contract and the Skyrim wrapper order. Prior ENB Present disassembly shows
+real-frame processing before forwarding and is a starting point, not a proof
+of this run's pixel ownership. No speculative tint correction was applied.

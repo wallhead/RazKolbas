@@ -5780,3 +5780,38 @@ loading and FPS: NOT RUN; actual game FG-On: NOT RUN; six-FPS root cause:
 OPEN.** Next is one user-started MO2 save-load test at the same viewpoint, then
 restore the private-route Off package if the prior colour or FPS regression
 persists.
+
+0.1.144 user-started FG-Off private-route result: 0.1.144 and private facade
+binding were confirmed in the live log, with successful outer Presents through
+checkpoint 21,600. At the same view, the user reported the yellow colour
+shift again and steady **50 FPS versus 60**. Fast-travel artwork was not
+reported in this trial. The queued copy therefore did not resolve the
+private-route colour/FPS regression. Once Skyrim was closed, the verified
+0.1.144 private-route Off INI and manifest were restored; the DLL and all
+other settings were retained and **14/14** installed hashes pass. Snapshot,
+rollback hashes and limits are in `docs/re/FG_ASYNC_COPY_RING_2026-09-30.md`.
+**Game private-route regression: REPRODUCED; game FG-On: NOT RUN; colour/FPS
+root cause: OPEN.** Next is an offline ENB/ReShade final-colour boundary
+investigation, followed by one targeted game diagnostic rather than another
+blind private-route enablement.
+
+Exact ENB 0.505 Ghidra/Capstone follow-up confirms real Present invokes ENB
+processing before the nested swap's Present, while TEST bypasses it. Current
+TRP source was compared against RazKolbas: TRP owns a stable game-facing
+colour buffer and explicit effect/UI handoff before copying into rotating
+presentation; RazKolbas still copies a hidden auxiliary swap buffer through
+the automatic ReShade/ENB wrapper chain. The installed ReShade previously
+rejected an ordinary typed texture's sRGB RTV, so direct buffer substitution
+is not an established compatible fix. See
+`docs/re/FG_ENB_TRP_COLOUR_BOUNDARY_2026-09-30.md`. **Final colour resource:
+UNRESOLVED; next is an exact wrapper-boundary probe, not a tint patch.**
+
+The exact ENB/ReShade/Steam private-route probe now shows that the upper
+ReShade and inner facade `GetBuffer(0)` identify the same D3D11 texture; its
+synthetic red pixel remains unchanged across the first Present. More
+significantly, the exact ReShade log shows D3D12 and D3D11 effect runtimes
+both loading the user's three-technique preset. This is a testable duplicate
+effect hypothesis for the yellow image and FPS cost, not a measured Skyrim
+cause. TRP's explicit source ReShade stage and isolated native output device
+are the reference for a single-owner correction. See the RE note for probe
+outputs and limits. **Game FG-On: NOT RUN; private route: restored Off.**

@@ -23,4 +23,4 @@
 
 - [x] Run the pinned standalone private-route/ENB/ReShade/Steam FG-Off and facade-on probes. Record actual output and limits.
 - [x] Stage the unchanged-settings private-route Off candidate and verify all 14 payloads. Then stage and install a one-key, FG-Off private-route On trial after offline checks, with a backup and 14/14 installed verification. The change from the original Off-only plan is necessary to exercise the new path in Skyrim; it may reproduce the earlier colour/FPS issue, so runtime claims remain withheld.
-- [ ] Record game verification as NOT RUN until the user-started trial and commit/push source and documentation without binaries or captures.
+- [x] Record the user-started FG-Off trial separately from offline probes. Yellow colour and 50-versus-60 FPS regressed; the private route was restored Off after Skyrim closed. Game FG-On remains NOT RUN. Source and documentation are committed/pushed without binaries or captures; this result requires the follow-up evidence commit.
