@@ -233,3 +233,45 @@ regression failed before the change at `begin(source(2))`, then passed after
 the change. Final Release and Debug builds passed; full CTest passed
 **64/64** and **59/59** respectively. This is source-only; installed 0.1.141
 remains FG Off and has no game session wiring.
+
+### 0.1.142 real world/Present boundary trace
+
+Source 0.1.142 adds `FgRealFrameBoundaries`, a read-only owner that pairs the
+completed verified world callback with the next real Present attempt on the
+bound game swap. It records source serial, reset epoch, world/Present thread
+and cumulative ready/no-world/multiple-world/thread-mismatch counts. TEST and
+foreign-swap calls do not consume a world event. A resize invalidates a
+pending event; any real Present attempt consumes it even if the lower Present
+later fails, so it cannot be replayed. This is an admission trace only: one
+world callback does not by itself prove correct FG input guides, UI timing or
+Streamline marker placement.
+
+The diagnostic is `Diagnostics.ProbeFgFrameBoundaries`, default Off and
+restart-scoped. The installed trial enables it while preserving the user's
+other INI bytes and leaving `[FrameGeneration] Enabled=false`. Log kind
+values are 0 ready, 1 no new world, 2 multiple worlds, 3 thread mismatch;
+TEST/foreign calls are not logged. Output is limited to the first three real
+Presents, each 600th real Present and the first three occurrences of each
+multi-world or thread-mismatch anomaly. It never invokes a provider or
+changes the world/swap image.
+
+The tracker tests were written first and Release compilation failed for its
+missing header. The config test was written first and failed for the absent
+setting. After implementation, Release and Debug DLL/test builds succeeded;
+full CTest passed **65/65** and **60/60** respectively. These are offline
+results. **0.1.142 Skyrim boundary trace: NOT RUN; Skyrim FG-On: NOT RUN.**
+
+With Skyrim closed, the 0.1.142 package was staged and all **14/14** payload
+hashes verified. The previous installed 14 payloads also matched their
+manifest. Only DLL, INI and manifest were replaced in the MO2 mod, after
+backing them up under ignored
+`artifacts/local/fg-boundary-2026-09-30/backup-before-0142`. Installed DLL
+SHA-256 is `81b06397cac9b4bc9a3da18ea0f20adae67ec83fbcda26456cbfa5a29f9bed81`,
+INI SHA-256 is `43c6a0b12ecd228b34ffb6baaccbe19221dde0dd0a2f0e9283921e34e4dfa33c`,
+and manifest SHA-256 is
+`1729187f9eb8c98c64a2d72732e277b331e1219686ab56fd6db13d26c448a463`.
+The installed **14/14** payload hashes verify; MO2 `meta.ini` remains
+`0bea0fb065f4f86a779cca3862fca96a8994e93c13ccd9016275096b9cc925c5`.
+FG Off, the bright reduced-loading route, and the prior read-only phase-site
+probe remain configured as before. Next, a user-started main-menu and same-save
+world run must establish the actual per-frame boundary counts/thread relation.

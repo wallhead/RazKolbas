@@ -1059,6 +1059,7 @@ void swapObserved(const SwapEvent& event) {
     if(event.call==SwapCall::Resize||event.call==SwapCall::Resize1) {
         if(event.before) {
             state->resizes.fetch_add(1);
+            resetFgFrameBoundary(event.object);
             retireOwnedSceneForResize(event.object);
         }
         spdlog::info("Swap {} {}: object=0x{:x}; requested={}x{}; buffers={}; format={}; flags=0x{:x}; HRESULT=0x{:08x}; thread={}",
@@ -1069,6 +1070,24 @@ void swapObserved(const SwapEvent& event) {
     }
     if(event.before) {
         drainOwnedResizeCleanup();
+        if(const auto boundary=sampleFgFrameBoundary(event.object,
+            GetCurrentThreadId(),(event.flags&DXGI_PRESENT_TEST)!=0);
+           boundary&&boundary->kind!=FgBoundaryKind::Test&&
+           boundary->kind!=FgBoundaryKind::ForeignSwap) {
+            const auto logRegular=boundary->realPresent<=3||
+                boundary->realPresent%600==0;
+            const auto logAnomaly=
+                (boundary->kind==FgBoundaryKind::MultipleWorlds&&
+                    boundary->multipleWorlds<=3)||
+                (boundary->kind==FgBoundaryKind::ThreadMismatch&&
+                    boundary->threadMismatch<=3);
+            if(logRegular||logAnomaly)
+                spdlog::info("FG real boundary #{}: kind={} world={} epoch={} worldThread={} presentThread={} ready={} noWorld={} multiWorld={} threadMismatch={}; read-only, no marker",
+                    boundary->realPresent,static_cast<unsigned>(boundary->kind),
+                    boundary->world,boundary->epoch,boundary->worldThread,
+                    boundary->presentThread,boundary->ready,boundary->noWorld,
+                    boundary->multipleWorlds,boundary->threadMismatch);
+        }
         if(!(event.flags&DXGI_PRESENT_TEST))
             pollDiagnosticsFgHotkey(
                 reinterpret_cast<IDXGISwapChain*>(event.object));

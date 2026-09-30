@@ -39,11 +39,11 @@
 - Consumes: monotonically observed world completion, swap ownership, Present flags and thread IDs.
 - Produces: `FgRealFrameBoundaries::world(uint64_t)`, `present(uint64_t,bool,bool)`, `reset()`, and `FgBoundarySample` with a disposition, source serial, reset epoch and thread IDs.
 
-- [ ] **Step 1: Write failing tests** for one valid world/Present pair; absent world; TEST/foreign bypass; multi-world; thread mismatch and next-frame migration; resize invalidation.
-- [ ] **Step 2: Build `rk_tests` and verify the missing tracker fails compilation.**
-- [ ] **Step 3: Implement the minimal tracker** using one mutex so concurrent callbacks cannot split serial and thread identity.
-- [ ] **Step 4: Run focused `unit.fg_real_boundaries` and verify all cases pass.**
-- [ ] **Step 5: Commit the tracker and tests.**
+- [x] **Step 1: Write failing tests** for one valid world/Present pair; absent world; TEST/foreign bypass; multi-world; thread mismatch and next-frame migration; resize invalidation.
+- [x] **Step 2: Build `rk_tests` and verify the missing tracker fails compilation.**
+- [x] **Step 3: Implement the minimal tracker** using one mutex so concurrent callbacks cannot split serial and thread identity.
+- [x] **Step 4: Run focused `unit.fg_real_boundaries` and verify all cases pass.**
+- [x] **Step 5: Commit the tracker and tests.**
 
 ### Task 2: Opt-in game event wiring
 
@@ -56,8 +56,8 @@
 - Consumes: Task 1 tracker and the already verified world and swap callbacks.
 - Produces: restart-scoped `Diagnostics.ProbeFgFrameBoundaries` and bounded, read-only per-Present classification in the log.
 
-- [ ] **Step 1: Write a failing config test** for default Off and restart-only enablement.
-- [ ] **Step 2: Run the focused config test and verify it fails for the absent key.**
-- [ ] **Step 3: Wire the tracker** after original world forwarding, before real Present, and on matching-swap resize; reject other swap objects and TEST calls.
-- [ ] **Step 4: Build Release and Debug, run focused and full CTest; record runtime as NOT RUN.**
-- [ ] **Step 5: Commit source and status.**
+- [x] **Step 1: Write a failing config test** for default Off and restart-only enablement.
+- [x] **Step 2: Run the focused config test and verify it fails for the absent key.**
+- [x] **Step 3: Wire the tracker** after original world forwarding, before real Present, and on matching-swap resize; reject other swap objects and TEST calls.
+- [x] **Step 4: Build Release and Debug, run focused and full CTest; record runtime as NOT RUN.**
+- [x] **Step 5: Commit source and status.**

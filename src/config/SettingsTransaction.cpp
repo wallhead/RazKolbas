@@ -20,6 +20,7 @@ ChangeCategory classifyChange(const Settings& before, const Settings& after) {
         "Diagnostics.ProbeFgCameraBuffer",
         "Diagnostics.ProbeFgCameraWrites",
         "Diagnostics.ProbeFgGamePhaseSite",
+        "Diagnostics.ProbeFgFrameBoundaries",
         "Diagnostics.ProbeFgPrivateSwapOff",
         "Diagnostics.SpatialBaselineOnly",
         "Patching.EnableVersionedPatches", "Patching.ExperimentalPatches",

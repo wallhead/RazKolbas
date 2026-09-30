@@ -161,6 +161,10 @@ ProbeFgCameraWrites = false
 ; resolved target, for FG phase reverse engineering. No hook or markers.
 ; Requires a restart and the exact verified game executable.
 ProbeFgGamePhaseSite = false
+; Pair the exact world callback with the next real Present on the returned
+; game swap. Read-only timing evidence; no Streamline markers or FG activation.
+; Restart required and disabled by default.
+ProbeFgFrameBoundaries = false
 ; Restart-only, exact V5.4 ReShade/ENB private Streamline D3D12 lower
 ; and D3D11 game facade trial. DLSS-G is explicitly Off; native fallback
 ; remains active if identity, adapter or swap creation preflight fails.

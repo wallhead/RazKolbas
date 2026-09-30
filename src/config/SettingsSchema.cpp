@@ -80,6 +80,7 @@ const std::vector<Field>& settingsSchema() {
         {"Diagnostics.ProbeFgCameraBuffer", false, 0, 2, {}},
         {"Diagnostics.ProbeFgCameraWrites", false, 0, 2, {}},
         {"Diagnostics.ProbeFgGamePhaseSite", false, 0, 2, {}},
+        {"Diagnostics.ProbeFgFrameBoundaries", false, 0, 2, {}},
         {"Diagnostics.ProbeFgPrivateSwapOff", false, 0, 2, {}},
         {"Diagnostics.SpatialBaselineOnly", false, 0, 2, {}},
         {"Patching.EnableVersionedPatches", true, 0, 2, {}},

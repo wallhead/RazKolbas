@@ -141,6 +141,16 @@ TEST_CASE("FG game-phase site probe is opt-in and restart-scoped", "[config]") {
     REQUIRE(enabled.get<bool>("Diagnostics.ProbeFgGamePhaseSite"));
     REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
 }
+TEST_CASE("FG real-frame boundary trace is opt-in and restart-scoped", "[config]") {
+    const auto defaults=rk::defaultSettings();
+    REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeFgFrameBoundaries"));
+    const auto parsed=rk::parseIni(
+        "[Diagnostics]\nProbeFgFrameBoundaries=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& enabled=std::get<rk::Settings>(parsed);
+    REQUIRE(enabled.get<bool>("Diagnostics.ProbeFgFrameBoundaries"));
+    REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+}
 TEST_CASE("FG camera buffer probe is opt-in and restart-scoped", "[config]") {
     const auto defaults=rk::defaultSettings();
     REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeFgCameraBuffer"));

@@ -64,6 +64,8 @@ struct WorldState {
     MenuDisplayForwarder menuForwarder;
     DeferredUiFlushForwarder deferredUiFlushForwarder;
     std::atomic<std::uint64_t> forwarded{0};
+    FgRealFrameBoundaries fgFrameBoundaries;
+    bool probeFgFrameBoundaries{};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
     std::atomic<std::uint64_t> statusDlssFrames{0},statusSkippedFrames{0};
@@ -498,7 +500,10 @@ void copyWorldInputsOnce(WorldState* state,const WorldNumbers& numbers) noexcept
     }
 }
 void afterOriginal(void*,std::uint32_t) noexcept {
-    active.load(std::memory_order_acquire)->forwarded.fetch_add(1,std::memory_order_relaxed);
+    auto* state=active.load(std::memory_order_acquire);
+    state->forwarded.fetch_add(1,std::memory_order_relaxed);
+    if(state->probeFgFrameBoundaries)
+        try {state->fgFrameBoundaries.world(GetCurrentThreadId());}catch(...) {}
 }
 #ifdef RK_WITH_NGX
 void probeOwnedPixels(const char* stage,ID3D11DeviceContext* context,
@@ -3117,6 +3122,20 @@ std::uint64_t worldDrawForwardedCalls() noexcept {
     const auto* state=active.load(std::memory_order_acquire);
     return state?state->forwarded.load(std::memory_order_relaxed):0;
 }
+std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
+    std::uint64_t thread,bool test) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!state->probeFgFrameBoundaries)return std::nullopt;
+    const auto expected=state->createdSwap.load(std::memory_order_acquire);
+    try {return state->fgFrameBoundaries.present(thread,test,
+        swap&&swap==expected);}catch(...) {return std::nullopt;}
+}
+void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
+    auto* state=active.load(std::memory_order_acquire);
+    if(!state||!state->probeFgFrameBoundaries||!swap||
+       swap!=state->createdSwap.load(std::memory_order_acquire))return;
+    try {state->fgFrameBoundaries.reset();}catch(...) {}
+}
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!swap||state->createdSwap.load(std::memory_order_acquire)!=
@@ -3730,6 +3749,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
     if(const auto error=std::get_if<Error>(&flushPlanned))return *error;
     const auto& flushPlan=std::get<CallSitePlan>(flushPlanned);
     auto pending=std::make_unique<WorldState>();
+    pending->probeFgFrameBoundaries=
+        settings.get<bool>("Diagnostics.ProbeFgFrameBoundaries");
     // Address Library AE 1.6.1170 ID 400327. The executable hash gate above
     // makes this UI singleton pointer-cell RVA version-specific.
     pending->uiSingletonCell=base+0x20f6a00;

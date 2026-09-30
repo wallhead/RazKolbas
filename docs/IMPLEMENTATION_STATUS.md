@@ -5704,3 +5704,17 @@ payload hashes verified. **0.1.138, 0.1.139, and 0.1.140 native visual
 trials: FAILED; full-resolution loading repair: OPEN; game FG-On: NOT RUN.**
 Full capture and installation evidence is in
 `docs/re/FG_OFF_VISUAL_REGRESSION_2026-09-30.md`.
+
+0.1.142 FG source-boundary checkpoint: test-first `FgRealFrameBoundaries`
+pairs verified post-world callbacks with the next real Present on the bound
+swap and rejects menu/no-world, TEST, foreign swap, multi-world, same-frame
+thread mismatch and resize-stale candidates. The opt-in, restart-scoped
+`Diagnostics.ProbeFgFrameBoundaries` only logs bounded timing evidence; it
+does not bind a Streamline frame token or enable FG. Release DLL/test build
+and **65/65** CTest groups passed; Debug DLL/test build and **60/60** groups
+passed. With Skyrim closed, 0.1.142 was installed in the V5.4 MO2 mod with
+FG Off and the previous settings retained; all **14/14** installed payload
+hashes match and the prior DLL/INI/manifest are backed up. **Skyrim 0.1.142
+runtime boundary trace: NOT RUN; FG-On: NOT RUN.** Exact hashes and the next
+user-started trace are recorded in
+`docs/re/FG_REAL_FRAME_SESSION_2026-09-30.md`.
