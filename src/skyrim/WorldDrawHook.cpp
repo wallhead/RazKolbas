@@ -21,6 +21,7 @@
 #include "rk/RendererBootstrap.hpp"
 #include "rk/NativeFlipTarget.hpp"
 #include "rk/NativeUiRedirector.hpp"
+#include "rk/LoadingPictureProbe.hpp"
 #include "rk/UiPlaneComposite.hpp"
 #include "rk/HudMovieViewport.hpp"
 #ifdef RK_WITH_NGX
@@ -108,6 +109,15 @@ struct WorldState {
     std::mutex menuUiSequenceMutex;
     std::optional<MenuUiSequence> menuUiSequence;
     bool menuUiSequenceAttempted{};
+    bool probeLoadingPicture{};
+    LoadingPictureProbe loadingPictureProbe;
+    struct LoadingPictureSequence {
+        LoadingPictureSelection selection;
+        std::vector<ProbeImage> images;
+        std::vector<std::string> names;
+    };
+    std::mutex loadingPictureMutex;
+    std::optional<LoadingPictureSequence> loadingPictureSequence;
     struct MenuBoundaryCapture {
         std::uint64_t frame{};
         std::vector<ProbeImage> images;
@@ -898,6 +908,103 @@ void logLoadingUiBoundary(WorldState* state,std::uint64_t frame,
             frame,ordinal,name,identity,view.bufferWidth,view.bufferHeight,
             view.left,view.top,view.width,view.height,view.flags);}catch(...) {}
     }
+}
+void captureLoadingPictureSnapshot(WorldState* state,std::uint64_t frame,
+    std::string_view stage,bool includeScene) {
+    if(!state||!state->probeLoadingPicture)return;
+    std::scoped_lock lock(state->loadingPictureMutex);
+    if(!state->loadingPictureSequence||
+       state->loadingPictureSequence->selection.frame!=frame)return;
+    auto& sequence=*state->loadingPictureSequence;
+    if(std::ranges::find(sequence.names,std::string(stage)+"-native.raw")!=
+       sequence.names.end())return;
+    auto* domain=activeOwnedSceneDomain();
+    const auto device=state->createdDevice.load(std::memory_order_relaxed);
+    const auto context=state->createdContext.load(std::memory_order_relaxed);
+    const auto swap=state->createdSwap.load(std::memory_order_relaxed);
+    if(!domain||!device||!context||!swap)return;
+    auto native=acquireNativeFlipTarget(reinterpret_cast<IDXGISwapChain*>(swap),
+        reinterpret_cast<ID3D11Device*>(device),domain->plan().display);
+    if(const auto error=std::get_if<Error>(&native)) {
+        spdlog::warn("Loading picture frame {} stage {} native target unavailable: {}",
+            frame,stage,error->message);
+        return;
+    }
+    auto* scene=includeScene?activeOwnedSceneTexture():nullptr;
+    const std::array<ID3D11Texture2D*,2> sources{
+        std::get<NativeFlipTarget>(native).texture.Get(),scene};
+    auto captured=readbackCandidates(
+        reinterpret_cast<ID3D11DeviceContext*>(context),
+        std::span<ID3D11Texture2D* const>(sources.data(),scene?2:1),
+        24*1024*1024);
+    if(const auto error=std::get_if<Error>(&captured)) {
+        spdlog::warn("Loading picture frame {} stage {} readback unavailable: {}",
+            frame,stage,error->message);
+        return;
+    }
+    auto& images=std::get<std::vector<ProbeImage>>(captured);
+    sequence.names.emplace_back(std::string(stage)+"-native.raw");
+    sequence.images.emplace_back(std::move(images[0]));
+    if(scene) {
+        sequence.names.emplace_back(std::string(stage)+"-reduced.raw");
+        sequence.images.emplace_back(std::move(images[1]));
+    }
+    spdlog::info("Loading picture frame {} captured stage {} native={} reduced={}",
+        frame,stage,true,scene!=nullptr);
+}
+void armLoadingPictureCapture(WorldState* state,std::uint64_t frame) {
+    if(!state||!state->probeLoadingPicture)return;
+    const bool loading=namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
+    const auto selected=state->loadingPictureProbe.observe(frame,loading,
+        titleMenuOnStack(state),state->srPresenter.submittedFrames()>0);
+    if(!selected)return;
+    {
+        std::scoped_lock lock(state->loadingPictureMutex);
+        state->loadingPictureSequence.emplace(WorldState::LoadingPictureSequence{
+            *selected,{},{}});
+    }
+    spdlog::info("Loading picture capture armed at frame {} phase={}",frame,
+        selected->phase==LoadingPicturePhase::Cold?"cold":"after-world");
+    captureLoadingPictureSnapshot(state,frame,"before-first-PostDisplay",true);
+}
+void completeLoadingPictureCapture(WorldState* state,std::uint64_t frame) {
+    captureLoadingPictureSnapshot(state,frame,"pre-Present",false);
+    std::optional<WorldState::LoadingPictureSequence> sequence;
+    {
+        std::scoped_lock lock(state->loadingPictureMutex);
+        if(!state->loadingPictureSequence)return;
+        sequence=std::move(state->loadingPictureSequence);
+        state->loadingPictureSequence.reset();
+    }
+    if(sequence->selection.frame!=frame||sequence->images.empty()) {
+        spdlog::warn("Loading picture capture frame {} ended without a complete snapshot",frame);
+        return;
+    }
+    PWSTR documents=nullptr;
+    const auto found=SHGetKnownFolderPath(FOLDERID_Documents,
+        KF_FLAG_DEFAULT,nullptr,&documents);
+    struct FreeDocuments { PWSTR value;~FreeDocuments(){CoTaskMemFree(value);} } free{documents};
+    if(FAILED(found)||!documents) {
+        spdlog::warn("Loading picture capture Documents directory unavailable");
+        return;
+    }
+    const auto phase=sequence->selection.phase==LoadingPicturePhase::Cold?
+        "cold":"after-world";
+    const auto directory=std::filesystem::path(documents)/"My Games"/
+        "Skyrim Special Edition"/"SKSE"/"RazKolbasCaptures"/
+        ("loading-picture-"+std::string(phase)+"-"+
+        std::to_string(GetCurrentProcessId())+"-"+
+        std::to_string(frame)+"-"+std::to_string(GetTickCount64()));
+    std::vector<std::string_view> names;
+    names.reserve(sequence->names.size());
+    for(const auto& name:sequence->names)names.emplace_back(name);
+    const auto saved=saveProbeBundle(directory,sequence->images,names,
+        "RazKolbas one-shot loading picture reduced scene and native target before menu draw, after menu draw, after Scaleform EndFrame, and pre-Present; raw pixel bytes with manifest descriptors");
+    if(const auto error=std::get_if<Error>(&saved))
+        spdlog::warn("Loading picture capture save unavailable: {}",error->message);
+    else
+        spdlog::info("Loading picture capture complete frame {} phase={} snapshots={} at {}",
+            frame,phase,sequence->images.size(),directory.string());
 }
 void captureMenuUiSnapshot(WorldState* state,std::uint64_t frame,
     std::string_view label,bool changedOnly=false) {
@@ -1844,6 +1951,11 @@ void beforeMenuDisplay(void*,std::uint32_t,std::uint32_t,std::uint32_t) noexcept
     }
     if(armLoadingUiTrace(state,frame))
         logLoadingUiBoundary(state,frame,"before-first-PostDisplay");
+    try {armLoadingPictureCapture(state,frame);}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Loading picture capture arming failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {}
     beginNativeHudMovieViewportWindow(state,frame);
 #endif
 }
@@ -2180,6 +2292,11 @@ void beforeDeferredUiFlush(void*) noexcept {
         }
     }
     logInventoryBinding(state,frame,"before-EndFrame");
+    try {captureLoadingPictureSnapshot(state,frame,"before-Scaleform-EndFrame",true);}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Loading picture pre-EndFrame capture failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {}
     try {captureMenuUiSnapshot(state,frame,"before-Scaleform-EndFrame.raw");}
     catch(const std::exception& error) {
         try {spdlog::warn("Owned UI pre-EndFrame capture failed: {}",error.what());}
@@ -2193,6 +2310,11 @@ void deferredUiFlushProxy(void* renderer) noexcept {
     state->deferredUiFlushForwarder.dispatch(renderer);
 #ifdef RK_WITH_NGX
     const auto frame=state->forwarded.load(std::memory_order_relaxed);
+    try {captureLoadingPictureSnapshot(state,frame,"after-Scaleform-EndFrame",false);}
+    catch(const std::exception& error) {
+        try {spdlog::warn("Loading picture post-EndFrame capture failed: {}",error.what());}
+        catch(...) {}
+    } catch(...) {}
     try {captureMenuUiSnapshot(state,frame,"after-Scaleform-EndFrame.raw");}
     catch(const std::exception& error) {
         try {spdlog::warn("Owned UI post-EndFrame capture failed: {}",error.what());}
@@ -3042,6 +3164,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
     const bool ownedProbe=ownedRemaining!=0;
     bool ownedSrStageProbe=false;
     bool menuUiSequenceProbe=false;
+    bool loadingPictureProbe=false;
     bool directUiPlaneProbe=false;
     bool menuBoundaryProbe=false;
 #ifdef RK_WITH_NGX
@@ -3062,10 +3185,14 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
         std::scoped_lock lock(state->menuUiSequenceMutex);
         menuUiSequenceProbe=state->menuUiSequence.has_value();
     }
+    {
+        std::scoped_lock lock(state->loadingPictureMutex);
+        loadingPictureProbe=state->loadingPictureSequence.has_value();
+    }
     menuBoundaryProbe=state->menuBoundaryCapture.has_value();
 #endif
     if(!usualProbe&&!ownedProbe&&!ownedSrStageProbe&&!directUiPlaneProbe&&
-       !menuUiSequenceProbe&&!menuBoundaryProbe)return;
+       !menuUiSequenceProbe&&!loadingPictureProbe&&!menuBoundaryProbe)return;
     if(ownedProbe)state->ownedPrePresentProbes.store(ownedRemaining-1,std::memory_order_release);
     try {
         const auto context=state->createdContext.load(std::memory_order_relaxed);
@@ -3229,6 +3356,7 @@ void probePresentationTargets(IDXGISwapChain* swap) noexcept {
             }
         }
         if(menuUiSequenceProbe)completeMenuUiSequence(state,swap);
+        if(loadingPictureProbe)completeLoadingPictureCapture(state,presentFrame);
 #endif
         logTargetBoundary("pre-ENB-Present",reinterpret_cast<ID3D11DeviceContext*>(context),swap,
             state->worldColourIdentity.load(std::memory_order_relaxed));
@@ -3512,6 +3640,8 @@ Result<bool> installWorldDrawPassThrough(HMODULE game,std::string_view verifiedG
         settings.get<bool>("Diagnostics.SpatialBaselineOnly");
     pending->captureFirstDlssFrame=
         settings.get<bool>("Diagnostics.CaptureFirstDlssFrame");
+    pending->probeLoadingPicture=
+        settings.get<bool>("Diagnostics.ProbeLoadingPicture");
     pending->probeDirectUiPlane=
         settings.get<bool>("Diagnostics.ProbeDirectUiPlane");
     pending->probeFgCameraBuffer=

@@ -132,6 +132,9 @@ GraphicsDebugValidation = false
 ; Retired ratio-only experiment. A true value is rejected without changing the renderer.
 ProbeReducedWorld = false
 CaptureFirstDlssFrame = false
+; One cold and one post-world loading frame: bounded reduced/native raw snapshots.
+; Restart required. Can pause each sampled frame; no camera or FG observation.
+ProbeLoadingPicture = false
 ; One-frame experimental transparent UI route and raw alpha/composite capture.
 ; Requires a game restart. Frame generation remains off during this probe.
 ProbeDirectUiPlane = false

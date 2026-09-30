@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(RazKolbas VERSION 0.1.134 LANGUAGES C CXX)
+project(RazKolbas VERSION 0.1.135 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -203,6 +203,7 @@ if(WIN32)
 endif()
 if(BUILD_TESTING)
   add_executable(rk_tests tests/unit/HostTests.cpp tests/unit/ConfigTests.cpp tests/unit/PolicyTests.cpp)
+  add_test(NAME unit.loading_picture COMMAND rk_tests "[loading_picture]")
   if(RK_NGX_SDK_ROOT)
     target_sources(rk_tests PRIVATE tests/integration/SdrPreparedPresenterTests.cpp
       tests/unit/NrStageSettingsTests.cpp

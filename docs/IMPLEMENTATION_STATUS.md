@@ -1,5 +1,51 @@
 # Implementation checkpoint
 
+## 0.1.135 loading-picture probe after native-presentation isolation (2026-09-30)
+
+The user reports a warmer/yellower image with RazKolbas and nearly black
+loading background pictures when loading a save or fast travelling; the
+initial screen before the main menu is good. Their supplied same-save,
+unchanged-ENB/ReShade screenshots show approximately 41 versus 64 FPS.
+This reopens visual compatibility despite earlier successful Presents and
+broad image confirmation. Camera observation and actual FG remain Off.
+
+Ghidra 12.1.3 and complete Capstone 5.0.7 decoding independently confirm that
+Skyrim's framebuffer initializer uses null RTV/SRV descriptors, not an
+explicit sRGB override. Runtime loading samples show a separate native
+target/composite path after world admission; DLSS remains active and a
+reduced scissor is observed. None of these observations yet proves a fix.
+No colour filter or speculative rendering patch was added.
+
+After Skyrim closed, prepared one isolated test by changing **only**
+`ProbeFgPrivateSwapOff=true` to **false**. The installed 0.1.134 DLL,
+DLSS Balanced/M, sharpening and other user settings are preserved. Independent
+byte/effective-field checks passed; all **14** installed file hashes match.
+The actual pre-test INI/DLL/manifest are backed up. Native-comparison INI:
+`902a9e6a297070571062ff8d2df65c442169dace72ab6c90116f2702de2233bd`.
+
+The user-started native-route comparison is now **RUN**. They report good FPS
+and 3D world image but a still-black loading background. The saved 18:30:02
+session has no private FG-off route, shows cold loading spatial publication
+before provider submission, and reaches 8,342 DLSS submissions after world
+admission. This isolates the private route as the world-image/FPS regression
+suspect and leaves the loading picture as a separate native SR/UI regression.
+The qualitative report has no matched numerical FPS measurement. The native
+trial setting remains in the installed configuration. A default-off two-context
+loading-picture capture now selects one post-menu save-load and one post-world
+loading frame. Release build/CTest passed **64/64** and Debug **59/59**. The
+0.1.135 diagnostic is installed, with only DLL and INI changed; all 14 payload
+hashes match its manifest and the user's other settings are preserved. Game
+runtime evidence for that diagnostic is **NOT RUN**. TRP is a reference for
+current work only, per the user's clarification; no donor code was copied.
+
+**Next: run one user-started save-load and fast travel with FG Off, inspect
+the probe's raw picture stages, then
+fix the evidenced loss. Colour/loading repair unverified; game FG-On NOT RUN.**
+The external read-only process inspection was denied once, error 5; no retry
+or new game hook. The in-process FG phase diagnostic is deferred while these
+visual regressions are isolated. Details and source/runtime evidence:
+`docs/re/FG_OFF_VISUAL_REGRESSION_2026-09-30.md`.
+
 ## FG real-frame token/phase owner, source-only (2026-09-30)
 
 The user resumed FG implementation and explicitly chose to keep doing FG while

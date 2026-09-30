@@ -77,6 +77,15 @@ TEST_CASE("First DLSS frame capture is explicit and restart-scoped", "[config]")
     REQUIRE(enabled.get<bool>("Diagnostics.CaptureFirstDlssFrame"));
     REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
 }
+TEST_CASE("Loading picture capture is explicit and restart-scoped", "[config]") {
+    const auto defaults=rk::defaultSettings();
+    REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeLoadingPicture"));
+    const auto parsed=rk::parseIni("[Diagnostics]\nProbeLoadingPicture=true\n");
+    REQUIRE(std::holds_alternative<rk::Settings>(parsed));
+    const auto& enabled=std::get<rk::Settings>(parsed);
+    REQUIRE(enabled.get<bool>("Diagnostics.ProbeLoadingPicture"));
+    REQUIRE(rk::classifyChange(defaults,enabled)==rk::ChangeCategory::RestartRequired);
+}
 TEST_CASE("Direct UI plane probe is opt-in and restart-scoped", "[config]") {
     const auto defaults=rk::defaultSettings();
     REQUIRE_FALSE(defaults.get<bool>("Diagnostics.ProbeDirectUiPlane"));
