@@ -388,3 +388,21 @@ The DLL SHA-256 remains
 `1e943ebca863f23279d10ff0b3ff8fc3e9274b38725eb8151f6143c8f3c6dadd`.
 FG remains Off. **Trace-off same-view FPS comparison: NOT RUN; cause of the
 six-FPS report: UNRESOLVED.**
+
+### Trace-off user comparison
+
+The user restarted Skyrim through MO2 and reports FPS is **still lower** with
+the phase trace Off; they are willing to proceed with FG work while this
+temporary diagnostic result is recorded. The read-only trace-off log snapshot
+is ignored at
+`artifacts/local/fg-phase-2026-09-30/runtime-0143-trace-off/RazKolbas.log`
+(23,193,788 bytes, SHA-256
+`ecc20379cc75740c75d6f8ea78379f0622c3d979b1d4af78861e21de813d9933`).
+The later run reached DLSS world publication and successful outer Presents;
+no new `FG real boundary` lines appeared after this run's startup. Skyrim then
+closed. This rejects the enabled phase ledger as the **sole** explanation for
+the user's perceived FPS gap. It does not isolate the remaining cause because
+the game viewpoint, load progression and overlay readings were not captured
+as matched quantitative measurements. The newly installed observer stubs
+still execute their cheap disabled checks once per frame. No performance fix
+is claimed. **FG-On: NOT RUN; FPS root cause: OPEN.**

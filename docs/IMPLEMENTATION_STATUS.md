@@ -5755,3 +5755,9 @@ With Skyrim closed, an isolated comparison was installed by changing only
 unchanged, and all **14/14** installed payload hashes match. The one-key
 byte comparison, backup and hashes are in the session document.
 **Game timing trace: RUN; FG-On: NOT RUN; trace-off FPS comparison: NOT RUN.**
+
+In the trace-off user comparison, FPS was still reported lower. The enabled
+ledger is therefore not the sole cause; a matched numerical comparison and
+root cause remain open. Trace-off log hash and the still-running disabled
+observer stubs are recorded in the session document. Skyrim is closed again.
+FG implementation continues with the trace setting Off.
