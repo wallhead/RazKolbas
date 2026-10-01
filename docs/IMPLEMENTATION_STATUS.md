@@ -6325,3 +6325,14 @@ Hashes and stage/backup locations are in the report. **0.1.154 Skyrim
 multi-frame input trial: NOT RUN. FG-On/generated Skyrim frames: NOT RUN.**
 Next: check eight in-game copy completions and normal image/UI/FPS, then bind
 the retained inputs to the provider/presentation retirement contract.
+
+The user-started 0.1.154 save load reported fine image and steady FPS. Its
+eight sampled native-UI/converted-guide pairs each queued and completed one
+five-input copy on the same D3D12 session, fence values 1 through 8. The
+session closed cleanly with zero copy rejection, UI-pair rejection, SR
+suspension or sampled failed Present in the captured log. The user did not
+separately assess native UI appearance in this run. Log identity and exact
+scope are in the report. **0.1.154 eight-frame FG-Off copy: RUN/PASS.
+FG-On/generated Skyrim frames: NOT RUN.** Next: join the retained copy
+lease with same-frame camera/provider-input and presentation/allocator
+retirement; then run a controlled FG-On game test.

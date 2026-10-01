@@ -41,3 +41,24 @@ byte-identical. Final staged/installed SHA-256 values are:
 - DLL: `06bb6ce49e8fa2cf75ac4ebe00f3f4091f6698ffb3a1d8ebe242c9810e3fe02a`
 - INI: `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`
 - manifest: `968ba530d17e3a9f547ddf81969e41abc43881b88d9305cf59e570d44439e14b`
+
+## User-started Skyrim result
+
+The user started 0.1.154 through MO2, loaded the same save with FG Off, and
+reported that the image and steady FPS looked fine. The 13:17:07 session
+logged eight native UI/converted-guide pairs at 2560x1440, for source and
+real Present frames 17959 through 17973 at two-frame intervals. Eight
+five-input copies queued with one producer/copy fence pair per frame,
+numbered 1/1 through 8/8; all eight completed. The session closed with
+`attempts=8 copies=8 clean=true`. In the captured session there were zero
+copy-unavailable lines, UI-pair rejections, SR suspensions or sampled nonzero
+Present failures. The user did not separately report a native-UI visual
+comparison in this message; the complete native UI route is a log result.
+
+Ignored live log snapshot:
+`artifacts/local/fg-batched-session-0154-live-snapshot.log`, 25,192,532
+bytes, SHA-256
+`e3ceb7b033702e2470faa4e823e5182dc6a1b31efb644450adc53106e52d1fc2`.
+The snapshot includes earlier appended sessions; counts above are only after
+the latest 0.1.154 bootstrap marker. **Eight-frame FG-Off input copy:
+RUN/PASS. Provider use and generated Skyrim frames: NOT RUN.**
