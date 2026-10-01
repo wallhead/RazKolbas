@@ -84,6 +84,40 @@ TEST_CASE("FG UI planes preserve pre-UI, separate UI and final pixels",
     REQUIRE(result.presentToken==source.presentToken);
 }
 
+TEST_CASE("FG UI planes bind an early capture to the exact later Present",
+    "[fg_ui_planes]") {
+    Warp gpu;
+    rk::FgUiPlanes planes(gpu.device.Get(),7);
+    auto early=frame(41);
+    early.presentToken=0;
+    early.resetEpoch=0;
+    auto final=gpu.colour(),ui=gpu.colour();
+    gpu.clear(final.Get(),{1,0,0,1});
+    REQUIRE(std::holds_alternative<bool>(planes.captureBeforeUi(early,
+        gpu.context.Get(),final.Get())));
+    gpu.clear(final.Get(),{0.5f,0,0.5f,1});
+    gpu.clear(ui.Get(),{0,0,0.5f,0.5f});
+
+    auto bound=frame(41);
+    auto captured=planes.finish(bound,gpu.context.Get(),ui.Get(),
+        final.Get(),{0,0,32,20});
+    REQUIRE(std::holds_alternative<rk::FgUiPlaneFrame>(captured));
+    const auto& packet=std::get<rk::FgUiPlaneFrame>(captured);
+    REQUIRE(packet.source==41);
+    REQUIRE(packet.presentToken==bound.presentToken);
+    REQUIRE(packet.resetEpoch==bound.resetEpoch);
+    REQUIRE(gpu.pixel(packet.hudless.Get())==
+        std::array<std::uint8_t,4>{255,0,0,255});
+    REQUIRE(gpu.pixel(packet.uiColorAlpha.Get())==
+        std::array<std::uint8_t,4>{0,0,128,128});
+
+    REQUIRE(std::holds_alternative<bool>(planes.captureBeforeUi(early,
+        gpu.context.Get(),final.Get())));
+    auto wrong=frame(42);
+    REQUIRE(std::holds_alternative<rk::Error>(planes.finish(wrong,
+        gpu.context.Get(),ui.Get(),final.Get(),{0,0,32,20})));
+}
+
 TEST_CASE("FG UI capture rejects absent, aliased and stale UI planes",
     "[fg_ui_planes]") {
     Warp gpu;

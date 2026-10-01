@@ -6260,3 +6260,23 @@ Snapshot identity and limits are in the source report above.
 **0.1.151 sampled converted-guide path: RUN/PASS. FG-On/generated Skyrim
 frames: NOT RUN.** Next: native transparent UI and continuous retained
 five-input lease before any game FG-On claim.
+
+## Source 0.1.152 paired native UI candidate (2026-10-01)
+
+The one-frame FG-Off candidate now copies HUD-free colour before the UI draw,
+routes UI into a separate native RGBA8 plane, composites it before the real
+Present and binds the three immutable D3D11 textures to that frame's verified
+Present token and epoch. It accepts the UI packet only with a complete native
+UI route, matching swap target/generation, phase-ready world boundary and
+matching converted-guide packet. This extends the earlier 0.1.124 direct UI
+evidence; it does not enable continuous UI or provider submission. The WARP
+late-binding test failed against the old helper, then passed. Release
+build/CTest passed **69/69**; Debug passed **64/64**. Details:
+`docs/re/FG_NATIVE_UI_PAIR_2026-10-01.md`.
+The 0.1.152 stage and previous install verified 14/14. The previous
+DLL/INI/manifest were backed up, only DLL and manifest replaced, and the new
+install verified 14/14 with the INI byte-identical. The user-started Skyrim
+check is pending. **0.1.152 game runtime: NOT RUN. FG-On/generated frames:
+NOT RUN.** Next:
+verify the one-frame candidate in Skyrim, then build continuous native UI and
+the retained D3D11-to-D3D12 five-input lease.

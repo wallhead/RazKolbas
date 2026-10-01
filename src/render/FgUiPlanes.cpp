@@ -30,10 +30,13 @@ bool alphaFormat(DXGI_FORMAT format) noexcept {
 }
 bool frameMatches(const FgUiPlaneFrame& stored,
     const FgSourceFrame& frame) noexcept {
+    const bool earlyUnbound=!stored.presentToken&&!stored.resetEpoch;
     return stored.source==frame.source&&
         stored.generation==frame.generation&&
-        stored.presentToken==frame.presentToken&&
-        stored.resetEpoch==frame.resetEpoch&&
+        frame.presentToken&&frame.resetEpoch&&
+        (earlyUnbound||
+            (stored.presentToken==frame.presentToken&&
+             stored.resetEpoch==frame.resetEpoch))&&
         stored.display.width==frame.display.width&&
         stored.display.height==frame.display.height;
 }
@@ -77,7 +80,7 @@ Result<bool> FgUiPlanes::captureBeforeUi(const FgSourceFrame& frame,
         "Previous FG pre-UI snapshot has not finished"};
     ComPtr<ID3D11Device> contextOwner;
     if(context)context->GetDevice(&contextOwner);
-    if(!frame.source||!frame.presentToken||!frame.resetEpoch||
+    if(!frame.source||bool(frame.presentToken)!=bool(frame.resetEpoch)||
        frame.generation!=generation_||!frame.display.valid()||
        !context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
        !sameObject(device_.Get(),contextOwner.Get())||
@@ -123,6 +126,11 @@ Result<FgUiPlaneFrame> FgUiPlanes::finish(const FgSourceFrame& frame,
        uiRegion.bottom>static_cast<LONG>(frame.display.height))
         return Error{ErrorCode::InvalidInput,
             "FG UI plane is absent, aliased, stale or outside display"};
+    // The real Present token and reset epoch become known only after the UI
+    // route has completed. Bind an untagged pre-UI copy to that exact source.
+    prepared.presentToken=frame.presentToken;
+    prepared.resetEpoch=frame.resetEpoch;
+    prepared.hudlessStamp.resetEpoch=frame.resetEpoch;
     auto uiCopy=snapshot(device_.Get(),context,uiColorAlpha);
     if(const auto* error=std::get_if<Error>(&uiCopy))return *error;
     auto finalCopy=snapshot(device_.Get(),context,finalColor);

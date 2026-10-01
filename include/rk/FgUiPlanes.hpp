@@ -14,8 +14,10 @@ struct FgUiPlaneFrame {
     Microsoft::WRL::ComPtr<ID3D11Texture2D> hudless,uiColorAlpha,finalColor;
 };
 
-// Source-only capture boundary. A separate transparent UI source must be
-// supplied by a verified renderer route; final colour alone cannot recover it.
+// Source-only capture boundary. Pre-UI capture may leave presentToken and
+// resetEpoch both zero; finish binds them after the same source reaches the
+// verified real Present. The caller must prove a complete transparent route.
+// Final colour alone cannot recover the UI plane.
 class FgUiPlanes {
 public:
     FgUiPlanes(ID3D11Device* device,std::uint64_t generation) noexcept;

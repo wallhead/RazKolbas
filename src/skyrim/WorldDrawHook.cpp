@@ -1,6 +1,7 @@
 #include "rk/WorldDrawHook.hpp"
 #include "rk/FgLiveFrameAdmission.hpp"
 #include "rk/FgWorldGuideLatch.hpp"
+#include "rk/FgUiPlanes.hpp"
 #include "rk/FgCameraFramePairer.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
@@ -70,6 +71,8 @@ struct WorldState {
     FgRealFrameBoundaries fgFrameBoundaries;
     FgWorldGuideLatch fgWorldGuides;
     std::optional<FgWorldGuideFrame> fgObservedGuides;
+    std::optional<FgBoundarySample> fgObservedBoundary;
+    std::optional<FgUiPlaneFrame> fgObservedUi;
     FgCameraFramePairer fgCameraPairer;
     std::optional<FgCameraProducerSample> fgCameraProducer;
     struct FgSourceJitter {
@@ -190,6 +193,8 @@ struct WorldState {
     bool ownedSpatialBaseline{};
     bool captureFirstDlssFrame{};
     bool probeDirectUiPlane{},directUiPlaneAttempted{};
+    bool fgUiCaptureAttempted{};
+    std::unique_ptr<FgUiPlanes> fgUiCapture;
     bool probeFgCameraBuffer{},fgCameraProbeFinished{};
     bool probeFgCameraWrites{},fgPriorPresentFresh{};
     std::uintptr_t fgCameraGameBase{};
@@ -1259,6 +1264,7 @@ void completeMenuUiSequence(WorldState* state,IDXGISwapChain* swap) {
 }
 void retireDirectUiPlane(WorldState* state,std::uint64_t frame) noexcept {
     if(auto* ui=ownedUiRedirector())ui->disarmUiPlane(frame);
+    state->fgUiCapture.reset();
     state->directUiPlane.Reset();
     state->directUiPlaneView.Reset();
     state->directUiPlaneFrame=0;
@@ -1289,8 +1295,8 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
         const auto device=state->createdDevice.load(std::memory_order_relaxed);
         if(!frame||!ui||!domain||!context||!swap||!device||
            !state->directUiPlane||!state->directUiNative||
-           !state->directUiBaseline||
-           !state->directUiImageBytes||
+           (!state->fgUiCapture&&
+                (!state->directUiBaseline||!state->directUiImageBytes))||
            frame!=state->forwarded.load(std::memory_order_relaxed)) {
             spdlog::warn("Experimental direct UI frame {} could not match its pre-Present owner",frame);
             retire();return;
@@ -1307,6 +1313,49 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
             identity(state->directUiNative.Get());
         const bool generationSame=state->directUiGeneration==
             domain->plan().generation;
+        if(state->fgUiCapture) {
+            const bool routeComplete=ui->uiPlaneRouteComplete(frame);
+            const auto composed=compositePremultipliedUi(context,
+                state->directUiPlane.Get(),target.view.Get());
+            const auto* boundary=state->fgObservedBoundary&&
+                state->fgObservedBoundary->world==frame&&
+                state->fgObservedBoundary->kind==FgBoundaryKind::Ready&&
+                state->fgObservedBoundary->phaseReady?
+                    &*state->fgObservedBoundary:nullptr;
+            const bool paired=boundary&&state->fgObservedGuides&&
+                state->fgObservedGuides->frame.source==frame&&
+                state->fgObservedGuides->frame.generation==
+                    state->directUiGeneration;
+            if(routeComplete&&nativeTargetSame&&generationSame&&paired&&
+               std::holds_alternative<bool>(composed)) {
+                auto fgFrame=state->fgObservedGuides->frame;
+                fgFrame.presentToken=boundary->realPresent;
+                fgFrame.resetEpoch=boundary->epoch;
+                const auto finished=state->fgUiCapture->finish(fgFrame,
+                    context,state->directUiPlane.Get(),
+                    target.texture.Get(),{0,0,
+                        static_cast<LONG>(fgFrame.display.width),
+                        static_cast<LONG>(fgFrame.display.height)});
+                if(const auto* packet=std::get_if<FgUiPlaneFrame>(&finished)) {
+                    state->fgObservedUi=*packet;
+                    spdlog::info("FG native UI candidate frame {}: generation={} present={} epoch={} route=complete guidePair=true hudless={}x{} ui={}x{} final={}x{}; sampled D3D11 textures only, no FG submission",
+                        frame,packet->generation,packet->presentToken,
+                        packet->resetEpoch,packet->hudlessStamp.extent.width,
+                        packet->hudlessStamp.extent.height,
+                        packet->uiStamp.extent.width,
+                        packet->uiStamp.extent.height,
+                        packet->finalStamp.extent.width,
+                        packet->finalStamp.extent.height);
+                } else if(const auto* error=std::get_if<Error>(&finished))
+                    spdlog::warn("FG native UI candidate frame {} rejected: {}",
+                        frame,error->message);
+            } else {
+                spdlog::warn("FG native UI candidate frame {} rejected: route={} targetSame={} generationSame={} guidePair={} composite={}",
+                    frame,routeComplete,nativeTargetSame,generationSame,paired,
+                    std::holds_alternative<bool>(composed));
+            }
+            retire();return;
+        }
         const std::array<ID3D11Texture2D*,2> sources{
             target.texture.Get(),state->directUiPlane.Get()};
         auto before=readbackCandidates(context,sources,
@@ -1902,6 +1951,61 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         sequence,static_cast<std::uint32_t>(armed));
                 }
             } else spdlog::warn("Experimental direct UI plane rejected at frame {}: native format or geometry differs",
+                sequence);
+        }
+        if(boundary==OwnedPublicationBoundary::MenuDisplay&&
+           outcome.mode()==SdrSrFrameMode::Provider&&
+           state->probeFgFrameBoundaries&&!state->fgUiCaptureAttempted&&
+           !state->directUiPlaneFrame&&
+           !inventoryMenuOnStack(state)&&!magicMenuOnStack(state)&&
+           !titleMenuOnStack(state)&&
+           !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)) {
+            state->fgUiCaptureAttempted=true;
+            D3D11_TEXTURE2D_DESC description{};
+            display->GetDesc(&description);
+            if(description.Format==DXGI_FORMAT_R8G8B8A8_UNORM&&
+               description.SampleDesc.Count==1&&
+               description.MipLevels==1&&description.ArraySize==1&&
+               description.Width==domain->plan().display.width&&
+               description.Height==domain->plan().display.height) {
+                description.BindFlags=D3D11_BIND_RENDER_TARGET|
+                    D3D11_BIND_SHADER_RESOURCE;
+                description.Usage=D3D11_USAGE_DEFAULT;
+                description.CPUAccessFlags=0;description.MiscFlags=0;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> plane;
+                Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
+                const auto created=device->CreateTexture2D(
+                    &description,nullptr,&plane);
+                const auto viewed=SUCCEEDED(created)?
+                    device->CreateRenderTargetView(plane.Get(),nullptr,&view):
+                    created;
+                auto captured=std::make_unique<FgUiPlanes>(device,
+                    domain->plan().generation);
+                FgSourceFrame early{};
+                early.source=sequence;
+                early.generation=domain->plan().generation;
+                early.display=domain->plan().display;
+                const auto preUi=SUCCEEDED(viewed)?
+                    captured->captureBeforeUi(early,context,display):
+                    Result<bool>{Error{ErrorCode::Unavailable,
+                        "FG native UI plane allocation failed"}};
+                const auto armed=std::holds_alternative<bool>(preUi)?
+                    ui->armUiPlaneForFrame(sequence,view.Get()):E_UNEXPECTED;
+                if(SUCCEEDED(armed)) {
+                    state->fgUiCapture=std::move(captured);
+                    state->directUiNative=display;
+                    state->directUiGeneration=domain->plan().generation;
+                    state->directUiPlane=std::move(plane);
+                    state->directUiPlaneView=std::move(view);
+                    state->directUiPlaneFrame=sequence;
+                    spdlog::info("FG native UI candidate armed for one world frame {} at {}x{}; FG remains off",
+                        sequence,description.Width,description.Height);
+                } else if(const auto* error=std::get_if<Error>(&preUi))
+                    spdlog::warn("FG native UI candidate frame {} unavailable: {}",
+                        sequence,error->message);
+                else spdlog::warn("FG native UI candidate frame {} could not arm: HRESULT=0x{:08x}",
+                    sequence,static_cast<std::uint32_t>(armed));
+            } else spdlog::warn("FG native UI candidate frame {} rejected: native format or geometry differs",
                 sequence);
         }
         if(state->probeFgFrameBoundaries&&
@@ -3197,6 +3301,8 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             swap&&swap==expected);
         if(boundary.kind!=FgBoundaryKind::Test&&
            boundary.kind!=FgBoundaryKind::ForeignSwap) {
+            state->fgObservedBoundary=boundary;
+            state->fgObservedUi.reset();
             // This callback runs before the real DXGI Present. The outer world
             // hook's post-dispatch observer runs later and cannot produce a
             // camera sample for this Present without a one-frame mismatch.
@@ -3274,6 +3380,11 @@ void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
         state->fgFrameBoundaries.reset();
         state->fgWorldGuides.clear();
         state->fgObservedGuides.reset();
+        state->fgObservedBoundary.reset();
+        state->fgObservedUi.reset();
+        if(state->directUiPlaneFrame)
+            retireDirectUiPlane(state,state->directUiPlaneFrame);
+        state->fgUiCaptureAttempted=false;
         state->fgCameraPairer.clear();
         state->fgCameraProducer.reset();
         state->fgWorldJitter.reset();
