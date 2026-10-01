@@ -566,6 +566,42 @@ Result<std::vector<ProbeImage>> SdrDlssPresenter::captureEvaluated(
         slot.frame->color(),slot.frame->output()};
     return readbackCandidates(context,textures,24*1024*1024);
 }
+Result<SrPublishedGuidePair> SdrDlssPresenter::publishedGuidePair(
+    SrEvaluationToken token) const {
+    if(token.slot>=preparedSlots_.size()||!token.frameId||!token.generation)
+        return Error{ErrorCode::InvalidInput,
+            "Published SR guide token is invalid"};
+    const auto& slot=preparedSlots_[token.slot];
+    if(!slot.frame||!slot.evaluated||!slot.published||
+       slot.metadata.sourcePhase!=SrSourcePhase::MenuDisplay||
+       slot.metadata.frameId!=token.frameId||
+       slot.metadata.generation!=token.generation||
+       token.frameId!=lastPreparedAttemptFrameId_||
+       token.frameId!=lastSuccessfulPublicationFrameId_||
+       token.generation!=preparedGeneration_||
+       !slot.frame->motion()||!slot.frame->depth())
+        return Error{ErrorCode::Conflict,
+            "Published SR guides are absent, stale or outside the menu boundary"};
+    D3D11_TEXTURE2D_DESC motionDesc{},depthDesc{};
+    slot.frame->motion()->GetDesc(&motionDesc);
+    slot.frame->depth()->GetDesc(&depthDesc);
+    if(motionDesc.Format!=DXGI_FORMAT_R16G16_FLOAT||
+       depthDesc.Format!=DXGI_FORMAT_R32_FLOAT||
+       motionDesc.Width!=slot.frame->width()||
+       motionDesc.Height!=slot.frame->height()||
+       depthDesc.Width!=slot.frame->width()||
+       depthDesc.Height!=slot.frame->height()||
+       motionDesc.SampleDesc.Count!=1||depthDesc.SampleDesc.Count!=1)
+        return Error{ErrorCode::Unsupported,
+            "Published SR motion or depth is not a converted FG guide"};
+    SrPublishedGuidePair pair{};
+    pair.frameId=token.frameId;
+    pair.generation=token.generation;
+    pair.render={slot.frame->width(),slot.frame->height()};
+    pair.motion=slot.frame->motion();
+    pair.depth=slot.frame->depth();
+    return pair;
+}
 Result<bool> SdrDlssPresenter::publishEvaluated(ID3D11DeviceContext* context,
     SrEvaluationToken token,ID3D11Texture2D* destination) {
     if(!context||context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||

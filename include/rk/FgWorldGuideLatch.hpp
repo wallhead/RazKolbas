@@ -22,11 +22,11 @@ Result<bool> attachFgWorldCameraCandidate(FgWorldGuideFrame& packet,
     const FgCameraProducerSample& producer,std::uint64_t jitterSource,
     std::uint64_t jitterGeneration,NgxJitter jitter);
 
-// Retains raw-format world guide candidates across the native UI interval.
+// Retains caller-supplied world guide candidates across the native UI interval.
 // Depth, motion and the pre-UI display are copied so later game draws cannot
-// change their pixels. Depth/motion still require format and convention
-// conversion. This latch must not mark any FG resource stamp ready or claim
-// provider retirement.
+// change their pixels. The caller must establish depth/motion format and
+// convention; this latch does not. It must not mark any FG resource stamp
+// ready or claim provider retirement.
 class FgWorldGuideLatch {
 public:
     Result<bool> capture(std::uint64_t source,std::uint64_t generation,

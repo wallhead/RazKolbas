@@ -1682,6 +1682,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                         sequence,std::get<Error>(sample).message);
             }
         }
+          std::optional<SrEvaluationToken> fgPublishedSrToken;
           const auto presented=presentSdrSrFrame(context,scene,display,
               [&]()->Result<bool> {
                 if(boundary==OwnedPublicationBoundary::PrePresent&&
@@ -1800,6 +1801,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     }
                 }
                 const auto published=state->srPresenter.publishEvaluated(context,*token,display);
+                if(std::holds_alternative<bool>(published)&&
+                   std::get<bool>(published)&&
+                   boundary==OwnedPublicationBoundary::MenuDisplay)
+                    fgPublishedSrToken=*token;
                 if(state->ownedEvaluationLimit&&
                    state->srPresenter.submittedFrames()==state->ownedEvaluationLimit&&
                    std::holds_alternative<bool>(published)&&std::get<bool>(published))
@@ -1907,16 +1912,25 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
            !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)&&
            (state->fgWorldGuideCaptureAttempts<16||sequence%600==0)) {
             ++state->fgWorldGuideCaptureAttempts;
-            const auto captured=state->fgWorldGuides.capture(sequence,
-                domain->plan().generation,domain->plan().render,
-                domain->plan().display,context,
-                reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
-                reinterpret_cast<ID3D11Texture2D*>(numbers.motion),display);
-            if(const auto error=std::get_if<Error>(&captured)) {
-                if(state->fgWorldGuideCaptureAttempts<=3||
-                   state->fgWorldGuideCaptureAttempts==16||sequence%600==0)
-                    spdlog::warn("FG raw world guide frame {} unavailable: {}",
+            if(!fgPublishedSrToken) {
+                spdlog::warn("FG converted world guide frame {} has no published SR token",
+                    sequence);
+            } else {
+                const auto guides=state->srPresenter.publishedGuidePair(
+                    *fgPublishedSrToken);
+                if(const auto error=std::get_if<Error>(&guides))
+                    spdlog::warn("FG converted world guide frame {} unavailable: {}",
                         sequence,error->message);
+                else {
+                    const auto& pair=std::get<SrPublishedGuidePair>(guides);
+                    const auto captured=state->fgWorldGuides.capture(sequence,
+                        domain->plan().generation,domain->plan().render,
+                        domain->plan().display,context,pair.depth.Get(),
+                        pair.motion.Get(),display);
+                    if(const auto captureError=std::get_if<Error>(&captured))
+                        spdlog::warn("FG converted world guide frame {} unavailable: {}",
+                            sequence,captureError->message);
+                }
             }
         }
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
@@ -3234,7 +3248,7 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             if(state->fgObservedGuides||boundary.realPresent<=3||
                boundary.realPresent%600==0||
                prior!=inspected.gaps)
-                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} rawWorldGuides={} cameraProducer={} srJitter={} cameraCandidate={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; raw guides and camera are unadmitted candidates, no token or submission",
+                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} srWorldGuides={} cameraProducer={} srJitter={} cameraCandidate={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; guide snapshots and camera are unadmitted candidates, no token or submission",
                     boundary.realPresent,boundary.world,frame.generation,
                     frame.loading,frame.paused,
                     static_cast<unsigned>(state->displayedMode.load(

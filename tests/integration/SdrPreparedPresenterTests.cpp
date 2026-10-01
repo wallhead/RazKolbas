@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/SdrDlssPresenter.hpp"
 #include "rk/SdrSrPresentation.hpp"
+#include "rk/FgWorldGuideLatch.hpp"
 #include "rk/FrameProbe.hpp"
 #include <array>
 #include <chrono>
@@ -83,7 +84,8 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     REQUIRE(std::get<bool>(presenter.configureModelPreset("K")));
     REQUIRE(std::get<bool>(presenter.configureSharpness(true,0.6f)));
     auto evaluated=presenter.evaluatePrepared(scene.device.Get(),scene.context.Get(),
-        scene.cropped(),{10,3,true},{0.125f,-0.25f});
+        scene.cropped(),{10,3,true,rk::SrSourcePhase::MenuDisplay},
+        {0.125f,-0.25f});
     REQUIRE(std::holds_alternative<rk::Error>(
         presenter.configureQuality(rk::UpscaleQuality::Performance)));
     REQUIRE(std::holds_alternative<rk::Error>(presenter.configureModelPreset("J")));
@@ -91,6 +93,8 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
     REQUIRE(std::holds_alternative<std::optional<rk::SrEvaluationToken>>(evaluated));
     const auto token=std::get<std::optional<rk::SrEvaluationToken>>(evaluated);
     REQUIRE(token.has_value());
+    REQUIRE(std::holds_alternative<rk::Error>(
+        presenter.publishedGuidePair(*token)));
     REQUIRE(evaluations==1);
     const auto stages=presenter.captureEvaluated(scene.context.Get(),*token);
     REQUIRE(std::holds_alternative<std::vector<rk::ProbeImage>>(stages));
@@ -112,6 +116,41 @@ TEST_CASE("Prepared R32 depth reaches offscreen presenter before controlled publ
         scene.display.Get());
     REQUIRE(std::holds_alternative<bool>(published));
     REQUIRE(std::get<bool>(published));
+    const auto guides=presenter.publishedGuidePair(*token);
+    REQUIRE(std::holds_alternative<rk::SrPublishedGuidePair>(guides));
+    const auto& pair=std::get<rk::SrPublishedGuidePair>(guides);
+    REQUIRE(pair.frameId==10);
+    REQUIRE(pair.generation==3);
+    REQUIRE(pair.render.width==4);
+    REQUIRE(pair.render.height==3);
+    D3D11_TEXTURE2D_DESC motionDesc{},depthDesc{};
+    pair.motion->GetDesc(&motionDesc);
+    pair.depth->GetDesc(&depthDesc);
+    REQUIRE(motionDesc.Format==DXGI_FORMAT_R16G16_FLOAT);
+    REQUIRE(depthDesc.Format==DXGI_FORMAT_R32_FLOAT);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        presenter.publishedGuidePair({10,4,token->slot})));
+    rk::FgWorldGuideLatch fgGuides;
+    const auto copied=fgGuides.capture(10,3,{4,3},{8,6},
+        scene.context.Get(),pair.depth.Get(),pair.motion.Get(),
+        scene.display.Get());
+    REQUIRE(std::holds_alternative<bool>(copied));
+    rk::FgBoundarySample boundary{};
+    boundary.kind=rk::FgBoundaryKind::Ready;
+    boundary.phaseReady=true;
+    boundary.world=10;
+    boundary.epoch=1;
+    boundary.realPresent=10;
+    boundary.worldThread=GetCurrentThreadId();
+    boundary.presentThread=boundary.worldThread;
+    const auto fgPacket=fgGuides.take(boundary);
+    REQUIRE(fgPacket.has_value());
+    fgPacket->depth->GetDesc(&depthDesc);
+    fgPacket->motion->GetDesc(&motionDesc);
+    REQUIRE(depthDesc.Format==DXGI_FORMAT_R32_FLOAT);
+    REQUIRE(motionDesc.Format==DXGI_FORMAT_R16G16_FLOAT);
+    REQUIRE(fgPacket->depth.Get()!=pair.depth.Get());
+    REQUIRE(fgPacket->motion.Get()!=pair.motion.Get());
     REQUIRE(std::holds_alternative<rk::Error>(presenter.publishEvaluated(
         scene.context.Get(),{10,4,token->slot},scene.display.Get())));
     const std::array<ID3D11Texture2D*,1> target{scene.display.Get()};

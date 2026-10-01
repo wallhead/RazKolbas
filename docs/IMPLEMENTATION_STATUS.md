@@ -6231,3 +6231,22 @@ ownership is still open. Snapshot path and SHA-256 are in
 `docs/re/FG_WORLD_GUIDE_SNAPSHOT_2026-10-01.md`.
 **FG-On/generated Skyrim frames: NOT RUN.** Next: connect converted guides,
 transparent native UI and an end-to-end retirement lease before FG-On.
+
+## Source 0.1.151 published SR guide pairing (2026-10-01)
+
+The FG world-guide latch now samples the exact R32_FLOAT depth and RG16F
+motion used by a successfully published MenuDisplay DLSS SR frame. A new
+presenter API rejects missing, stale, wrong-phase or wrong-format guide
+pairs; the caller copies accepted guides on the same immediate context
+before a later SR slot can reuse them. HUD-free display is still copied at
+the pre-UI boundary. This is sampled candidate ownership, not continuous
+FG admission or submission. Details and limits:
+`docs/re/FG_CONVERTED_SR_GUIDES_2026-10-01.md`.
+
+The new WARP test failed before the API existed, then passed with exact
+published-token and converted-guide checks. Release build/CTest passed
+**69/69**; Debug passed **64/64**. The Release package is staged at
+`artifacts/local/stage-v54-fg-converted-guides-0151` and its 14/14 payload
+hashes verified. The still-installed 0.1.150 package also verified 14/14;
+the staged INI is byte-identical. Skyrim was running, so no installed file
+was changed. **0.1.151 game runtime and FG-On: NOT RUN.**

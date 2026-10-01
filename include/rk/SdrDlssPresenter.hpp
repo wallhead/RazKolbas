@@ -33,6 +33,14 @@ struct SrEvaluationToken {
     std::uint64_t frameId{},generation{};
     unsigned slot{};
 };
+// A transient view of the exact converted guides used by a published SR
+// frame. The presenter may rewrite its pooled textures on a later frame;
+// callers must copy them on the same immediate context before returning.
+struct SrPublishedGuidePair {
+    std::uint64_t frameId{},generation{};
+    Extent render{};
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> motion,depth;
+};
 struct PreSrRequirements {
     bool requireR32Depth{};
 };
@@ -86,6 +94,8 @@ public:
         SrEvaluationToken token) const;
     Result<bool> publishEvaluated(ID3D11DeviceContext* context,
         SrEvaluationToken token,ID3D11Texture2D* destination);
+    Result<SrPublishedGuidePair> publishedGuidePair(
+        SrEvaluationToken token) const;
     std::size_t retainedPreparedFrames() const noexcept;
     void requestReset() noexcept { resetPending_=true; }
     // Returns false while GPU work still owns a slot. Call again after a
