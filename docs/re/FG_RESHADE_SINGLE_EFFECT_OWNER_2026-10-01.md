@@ -95,3 +95,18 @@ Raw outputs, copied ReShade files and crash evidence are ignored under
 are in [ReShade 6.8 API](https://github.com/crosire/reshade/blob/v6.8.0/include/reshade_api.hpp),
 [events](https://github.com/crosire/reshade/blob/v6.8.0/include/reshade_events.hpp),
 and [runtime API implementation](https://github.com/crosire/reshade/blob/v6.8.0/source/runtime_api.cpp).
+
+## User-started Skyrim trial
+
+The user started Skyrim through the test setup on 2026-10-01 at 08:47:07 and
+reported that the initial image "seems fine". Fresh `skse64.log` records
+RazKolbas 0.1.145 loaded correctly. At 08:48:02 the live plugin log records
+one lower D3D12 ReShade runtime suppressed, the D3D11 preset retained, and
+the FG-Off private lower/facade returned to ReShade. The observed Present
+#149400 at 09:12:51 reports `failed=0`; owned world submissions are active.
+This is a live route/presentation observation, not a matched colour or FPS
+measurement. Same-view steady FPS and fast-travel loading artwork remain
+pending user report. Actual game FG-On remains **NOT RUN**. The ignored log
+snapshot is `artifacts/local/fg-single-owner-2026-10-01/runtime-0145/RazKolbas.log`
+(23,561,443 bytes; SHA-256
+`83b1791771a5e11dffc0636c660410c090d43e4fcf7a374f250c5d000a7bbfa3`).

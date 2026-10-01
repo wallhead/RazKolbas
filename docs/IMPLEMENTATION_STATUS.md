@@ -5864,3 +5864,19 @@ through MO2, load the same save at the same viewpoint, report colour and
 steady FPS, then fast-travel once and report loading-artwork brightness and
 sharpness. Do not infer that the earlier ten-FPS gap is resolved from the
 offline colour correction.
+
+0.1.145 user-started Skyrim trial (2026-10-01): SkyrimSE started at 08:47:07.
+The user reports that the initial image "seems fine". Fresh SKSE logging
+reports `RazKolbas.dll` loaded correctly; the plugin log identifies version
+0.1.145 and at 08:48:02 records that the D3D11 ReShade preset was retained,
+the lower D3D12 runtime was suppressed at one initialization, and the
+FG-Off private Streamline lower/facade was returned to ReShade. Through the
+observed Present #149400 at 09:12:51, the log reports `failed=0` and active
+owned world submissions. This verifies private-route selection and ongoing
+presentation, not colour equivalence, steady FPS, or loading-artwork quality.
+The same-view FPS and fast-travel visual checks are pending user observations;
+actual game FG-On remains **NOT RUN**.
+An ignored live-log snapshot is saved at
+`artifacts/local/fg-single-owner-2026-10-01/runtime-0145/RazKolbas.log`
+(23,561,443 bytes, SHA-256
+`83b1791771a5e11dffc0636c660410c090d43e4fcf7a374f250c5d000a7bbfa3`).
