@@ -39,7 +39,24 @@ DLL/INI/manifest were backed up under
 `artifacts/local/backup-v54-before-0151`. Only the DLL and manifest were
 replaced. The installed 0.1.151 package verified **14/14** and the INI stayed
 byte-identical. **0.1.151 Skyrim runtime and FG-On/generated frames: NOT RUN.**
-The next user-started FG-Off save load must check converted-guide capture at
-the real Present and image/UI/FPS. Continuous input pooling, transparent
-native UI, D3D11-to-D3D12 lease and provider retirement remain required
-before enabling game FG.
+The user started Skyrim through MO2 with FG Off, loaded the same save and
+reported normal world image, UI and steady FPS compared with 0.1.150.
+The 0.1.151 session begins at its 12:09:23 bootstrap marker; the first
+loaded-world `srWorldGuides=true` packet is frame 21,053 at 12:13:44.
+That packet also has `cameraProducer=true`, `srJitter=true` and
+`cameraCandidate=true`; frames 21,600 through 22,800 remain so in the
+captured interval. There are 20 sampled converted-guide/camera-candidate
+packets, no converted-guide warning, no SR suspension and no sampled
+nonzero Present failure. The current source still labels the frame's FG
+resource gaps `0x7f4`: these snapshots are candidates, not admitted provider
+inputs.
+
+Ignored live log snapshot:
+`artifacts/local/fg-converted-guides-0151-live-snapshot.log`, 24,756,832
+bytes, SHA-256
+`cb860312ffb7043fb8e0c39e32382e32c520455ff5a9b0dafe3b04bee8179f15`.
+It includes earlier appended sessions and was copied while Skyrim was
+running. **0.1.151 sampled converted-guide path: RUN/PASS. FG-On/generated
+Skyrim frames: NOT RUN.** Continuous input pooling, transparent native UI,
+D3D11-to-D3D12 lease and provider retirement remain required before
+enabling game FG.

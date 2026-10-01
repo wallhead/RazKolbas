@@ -6251,4 +6251,12 @@ hashes verified. After the user closed Skyrim, the 0.1.150 installed package
 also verified 14/14, then the prior DLL/INI/manifest were backed up under
 `artifacts/local/backup-v54-before-0151`. Only the DLL and manifest were
 replaced. The installed 0.1.151 payload verified 14/14; the INI stayed
-byte-identical. **0.1.151 game runtime and FG-On: NOT RUN.**
+byte-identical. In the user-started FG-Off save load, the user reported normal
+world image, UI and FPS. The 12:13:44 loaded-world sample begins at frame
+21,053 with converted SR guides, same-frame camera candidate and matching
+SR jitter. The captured session contains 20 candidate-true packet lines,
+no converted-guide warning, no SR suspension and no sampled failed Present.
+Snapshot identity and limits are in the source report above.
+**0.1.151 sampled converted-guide path: RUN/PASS. FG-On/generated Skyrim
+frames: NOT RUN.** Next: native transparent UI and continuous retained
+five-input lease before any game FG-On claim.
