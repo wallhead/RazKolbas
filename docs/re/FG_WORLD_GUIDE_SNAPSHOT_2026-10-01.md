@@ -38,9 +38,23 @@ INI SHA-256:
 manifest SHA-256:
 `a57e41a1d82fe4531629f725088a90827b9af22fd6bdd5e43bd1571723190c04`.
 
-**0.1.150 game capture, colour/UI/FPS and FG-On: NOT RUN.** The next game run
-must verify that the exact Skyrim/ENB guide descriptors accept these copies,
-that same-frame camera candidates remain present, and that the added sampled
-copy work does not regress image/UI or steady FPS. Continuous resource pooling,
-converted guide semantics, transparent UI and full consumer retirement remain
-separate required steps.
+The user started Skyrim through MO2 with FG Off, loaded the same save, and
+reported normal image, UI and steady FPS. The 0.1.150 session begins at the
+11:48:40 bootstrap marker. From loaded-world frame 9,323, the log shows
+`rawWorldGuides=true`, `cameraProducer=true`, `srJitter=true` and
+`cameraCandidate=true`; frame 10,200 still has all four. The captured session
+has 19 candidate-true packet lines, no raw-guide capture warning, no SR
+suspension and no sampled nonzero Present failure. This verifies that the
+actual Skyrim/ENB texture descriptors accepted the new snapshot allocation
+and copy calls and that the sampled FG-Off visual/FPS path remained healthy.
+It does not independently read back the game's copied pixels or validate a
+continuous FG input lease.
+
+Ignored live log snapshot:
+`artifacts/local/fg-guide-snapshots-0150-live-snapshot.log`, 24,390,307 bytes,
+SHA-256 `b2ec8cdf4a2f3e72f3bda8597e670df6fec163b41ae450cffaf0b158a28b5f31`.
+The log includes earlier appended sessions and was copied while Skyrim was
+running. **0.1.150 sampled world-guide path: RUN/PASS. FG-On/generated
+Skyrim frames: NOT RUN.** Continuous resource pooling, converted guide
+semantics, transparent UI and full consumer retirement remain separate
+required steps.

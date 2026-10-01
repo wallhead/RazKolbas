@@ -6220,6 +6220,14 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `a57e41a1d82fe4531629f725088a90827b9af22fd6bdd5e43bd1571723190c04`.
-**0.1.150 Skyrim runtime and FG-On: NOT RUN.** The next user-started FG-Off
-run must verify the actual game/ENB descriptor copy path and visual/FPS
-regression before more continuous input-lease work.
+The user-started FG-Off run loaded the same save and reported normal image,
+UI and steady FPS. Its 11:48:40 session logged 19 sampled loaded-world
+packets with raw guides, matching SR jitter and same-frame camera candidates;
+frame 10,200 remained candidate-true. There were no raw-guide capture
+warnings, SR suspensions or sampled failed Presents in the live snapshot.
+The game's descriptor/copy path is therefore **RUN/PASS for sampled capture**;
+the game pixels were not independently read back, and continuous FG resource
+ownership is still open. Snapshot path and SHA-256 are in
+`docs/re/FG_WORLD_GUIDE_SNAPSHOT_2026-10-01.md`.
+**FG-On/generated Skyrim frames: NOT RUN.** Next: connect converted guides,
+transparent native UI and an end-to-end retirement lease before FG-On.
