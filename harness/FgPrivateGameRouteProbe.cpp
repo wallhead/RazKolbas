@@ -9,7 +9,9 @@
 #include <wrl/client.h>
 #include <iostream>
 #include <array>
+#include <atomic>
 #include <cstring>
+#include <mutex>
 #include <optional>
 #include <variant>
 
@@ -27,6 +29,145 @@ struct Callback {
 Callback* active{};
 rk::FactoryCreateFn wrapperNext{};
 unsigned wrapperCalls{};
+// ReShade 6.8 public add-on event IDs and callback ABI. This probe is
+// hash-gated to the installed 6.8 DLL; it never changes effect state.
+struct EffectView {std::uint64_t handle;};
+struct EffectTrace {
+    struct Runtime {
+        void* identity{};
+        unsigned epoch{};
+        unsigned firstFrame{};
+        unsigned lastFrame{};
+        unsigned presents{};
+        unsigned begins{};
+        unsigned techniques{};
+        unsigned finishes{};
+        std::array<std::uint8_t,240> techniqueFrames{};
+    };
+    using RegisterAddon=bool(*)(HMODULE,std::uint32_t);
+    using RegisterEvent=void(*)(std::uint32_t,void*);
+    using UnregisterAddon=void(*)(HMODULE);
+    RegisterEvent registerEvent{};
+    RegisterEvent unregisterEvent{};
+    UnregisterAddon unregisterAddon{};
+    HMODULE addon{};
+    std::mutex mutex;
+    std::array<Runtime,8> runtimes{};
+    unsigned count{};
+    unsigned overflow{};
+    std::atomic<unsigned> frame{};
+    std::atomic<unsigned> epoch{};
+    bool registered{};
+    static std::atomic<EffectTrace*> active;
+    static constexpr std::uint32_t presentEvent=75;
+    static constexpr std::uint32_t beginEvent=76;
+    static constexpr std::uint32_t finishEvent=77;
+    static constexpr std::uint32_t techniqueEvent=83;
+
+    void record(void* runtime,std::uint32_t event) noexcept {
+        if(!runtime)return;
+        std::lock_guard lock(mutex);
+        const auto currentEpoch=epoch.load(std::memory_order_relaxed);
+        const auto currentFrame=frame.load(std::memory_order_relaxed);
+        Runtime* found{};
+        for(unsigned index=0;index<count;++index)
+            if(runtimes[index].identity==runtime&&
+               runtimes[index].epoch==currentEpoch) {found=&runtimes[index];break;}
+        if(!found) {
+            if(count==runtimes.size()) {++overflow;return;}
+            found=&runtimes[count++];
+            found->identity=runtime;
+            found->epoch=currentEpoch;
+            found->firstFrame=currentFrame;
+        }
+        found->lastFrame=currentFrame;
+        if(event==presentEvent)++found->presents;
+        else if(event==beginEvent)++found->begins;
+        else if(event==finishEvent)++found->finishes;
+        else if(event==techniqueEvent) {
+            ++found->techniques;
+            if(currentFrame<found->techniqueFrames.size())
+                found->techniqueFrames[currentFrame]=1;
+        }
+    }
+    static void presented(void* runtime) noexcept {
+        if(auto* trace=active.load(std::memory_order_acquire))
+            trace->record(runtime,presentEvent);
+    }
+    static void began(void* runtime,void*,EffectView,EffectView) noexcept {
+        if(auto* trace=active.load(std::memory_order_acquire))
+            trace->record(runtime,beginEvent);
+    }
+    static void finished(void* runtime,void*,EffectView,EffectView) noexcept {
+        if(auto* trace=active.load(std::memory_order_acquire))
+            trace->record(runtime,finishEvent);
+    }
+    static void technique(void* runtime,EffectView,void*,EffectView,EffectView) noexcept {
+        if(auto* trace=active.load(std::memory_order_acquire))
+            trace->record(runtime,techniqueEvent);
+    }
+    bool start(HMODULE module) noexcept {
+        if(active.load(std::memory_order_acquire)||!module)return false;
+        auto* add=reinterpret_cast<RegisterAddon>(GetProcAddress(module,"ReShadeRegisterAddon"));
+        registerEvent=reinterpret_cast<RegisterEvent>(GetProcAddress(module,"ReShadeRegisterEvent"));
+        unregisterEvent=reinterpret_cast<RegisterEvent>(GetProcAddress(module,"ReShadeUnregisterEvent"));
+        unregisterAddon=reinterpret_cast<UnregisterAddon>(GetProcAddress(module,"ReShadeUnregisterAddon"));
+        addon=GetModuleHandleW(nullptr);
+        if(!add||!registerEvent||!unregisterEvent||!unregisterAddon||
+           !addon||!add(addon,14))return false;
+        active.store(this,std::memory_order_release);
+        registerEvent(presentEvent,reinterpret_cast<void*>(&presented));
+        registerEvent(beginEvent,reinterpret_cast<void*>(&began));
+        registerEvent(finishEvent,reinterpret_cast<void*>(&finished));
+        registerEvent(techniqueEvent,reinterpret_cast<void*>(&technique));
+        registered=true;
+        return true;
+    }
+    void nextFrame(unsigned number) noexcept {frame.store(number,std::memory_order_relaxed);}
+    void nextEpoch() noexcept {epoch.fetch_add(1,std::memory_order_relaxed);}
+    void report() {
+        std::lock_guard lock(mutex);
+        std::cout<<"Effect trace registered="<<registered<<
+            " runtimes="<<count<<" overflow="<<overflow<<'\n';
+        for(unsigned index=0;index<count;++index) {
+            const auto& item=runtimes[index];
+            std::cout<<"Effect trace runtime="<<item.identity<<
+                " epoch="<<item.epoch<<
+                " firstFrame="<<item.firstFrame<<
+                " lastFrame="<<item.lastFrame<<
+                " presents="<<item.presents<<
+                " begins="<<item.begins<<
+                " techniques="<<item.techniques<<
+                " finishes="<<item.finishes<<'\n';
+        }
+        for(unsigned observedEpoch=0;observedEpoch<=epoch.load(std::memory_order_relaxed);
+            ++observedEpoch) {
+            unsigned simultaneousFrames{};
+            for(unsigned frameNumber=0;frameNumber<240;++frameNumber) {
+                unsigned executingRuntimes{};
+                for(unsigned index=0;index<count;++index)
+                    if(runtimes[index].epoch==observedEpoch&&
+                       runtimes[index].techniqueFrames[frameNumber])
+                        ++executingRuntimes;
+                if(executingRuntimes>=2)++simultaneousFrames;
+            }
+            std::cout<<"Effect trace coexecuted epoch="<<observedEpoch<<
+                " frames="<<simultaneousFrames<<'\n';
+        }
+    }
+    void stop() noexcept {
+        if(!registered)return;
+        unregisterEvent(techniqueEvent,reinterpret_cast<void*>(&technique));
+        unregisterEvent(finishEvent,reinterpret_cast<void*>(&finished));
+        unregisterEvent(beginEvent,reinterpret_cast<void*>(&began));
+        unregisterEvent(presentEvent,reinterpret_cast<void*>(&presented));
+        active.store(nullptr,std::memory_order_release);
+        unregisterAddon(addon);
+        registered=false;
+    }
+    ~EffectTrace() {stop();}
+};
+std::atomic<EffectTrace*> EffectTrace::active{};
 bool sameIdentity(IUnknown* first,IUnknown* second) noexcept {
     ComPtr<IUnknown> a,b;
     return first&&second&&SUCCEEDED(first->QueryInterface(IID_PPV_ARGS(&a)))&&
@@ -88,13 +229,18 @@ HRESULT WINAPI replace(IDXGIFactory* factory,IUnknown* device,
     return state->next(factory,device,desc,output);
 }
 int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
-    const wchar_t* enbPath,bool failAfterSrv) {
+    const wchar_t* enbPath,bool failAfterSrv,bool effectTrace) {
     const auto hash=rk::sha256File(reshadePath);
     if(!std::holds_alternative<std::string>(hash)||
        std::get<std::string>(hash)!=rk::reshade680FactoryCreateSite().moduleSha256)
         return 13;
     Module reshade{LoadLibraryW(reshadePath)};
     if(!reshade.value)return 14;
+    std::optional<EffectTrace> trace;
+    if(effectTrace) {
+        trace.emplace();
+        if(!trace->start(reshade.value))return 44;
+    }
     Module enb;
     if(enbPath) {
         const auto enbHash=rk::sha256File(enbPath);
@@ -314,20 +460,25 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     DXGI_SWAP_CHAIN_DESC current{};
     if(FAILED(upper->GetDesc(&current)))return 34;
     std::cout<<"Game requested/lower flags=0x"<<std::hex<<game.Flags<<"/0x"<<current.Flags<<std::dec<<'\n';
+    if(trace)trace->nextFrame(0);
     const auto presented=upper->Present(0,DXGI_PRESENT_ALLOW_TEARING);
     std::cout<<"Game route first Present=0x"<<std::hex<<
         static_cast<unsigned>(presented)<<std::dec<<'\n';
     report();
     if(FAILED(presented))return 24;
+    if(trace)Sleep(30);
     reportPixel("Colour upper after Present",firstPixel(d11.Get(),context.Get(),colour.Get()));
     reportPixel("Colour inner after Present",firstPixel(d11.Get(),context.Get(),innerColour.Get()));
     innerColour.Reset();
     for(unsigned frame=1;frame<120;++frame) {
+        if(trace)trace->nextFrame(frame);
         const float next[4]{frame%2?1.f:0.f,frame%3?0.f:1.f,0.f,1.f};
         context->ClearRenderTargetView(view.Get(),next);
         if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 38;
+        if(trace)Sleep(30);
     }
     view.Reset();colour.Reset();context->ClearState();context->Flush();
+    if(trace)trace->nextEpoch();
     if(FAILED(upper->ResizeBuffers(3,192,108,
         DXGI_FORMAT_R8G8B8A8_UNORM,current.Flags)))return 25;
     DXGI_SWAP_CHAIN_DESC after{};
@@ -336,8 +487,10 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&colour)))||
        FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 39;
     for(unsigned frame=0;frame<120;++frame) {
+        if(trace)trace->nextFrame(120+frame);
         context->ClearRenderTargetView(view.Get(),red);
         if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 40;
+        if(trace)Sleep(30);
     }
     view.Reset();colour.Reset();context->ClearState();context->Flush();
     upper.Reset();context->ClearState();context->Flush();
@@ -352,6 +505,7 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     std::cout<<"D3D11 released\n";
     adapter.Reset();
     std::cout<<"adapter/factory released\n";
+    if(trace) {trace->report();trace->stop();}
     FreeLibrary(reshade.value);reshade.value=nullptr;
     std::cout<<"ReShade released\n";
     return 0;
@@ -361,7 +515,8 @@ int wmain(int argc,wchar_t** argv) {
     std::cout.setf(std::ios::unitbuf);
     if(argc<3||argc>6)return 1;
     const bool failAfterSrv=argc==6&&std::wcscmp(argv[5],L"fail-after-srv")==0;
-    if(argc==6&&!failAfterSrv)return 1;
+    const bool effectTrace=argc==6&&std::wcscmp(argv[5],L"effect-trace")==0;
+    if(argc==6&&!failAfterSrv&&!effectTrace)return 1;
     if(argc>=4&&std::wcscmp(argv[3],L"-")!=0) {
         const auto hash=rk::sha256File(argv[3]);
         const auto& profile=rk::steamFactoryInlineProfile();
@@ -373,7 +528,8 @@ int wmain(int argc,wchar_t** argv) {
         if(!LoadLibraryW(argv[3]))return 33;
         std::cout<<"Exact Steam overlay preloaded for the factory-chain probe\n";
     } else std::cout<<"No Steam overlay preload; pristine native factory required\n";
-    try {return run(argv[1],argv[2],argc>=5?argv[4]:nullptr,failAfterSrv);}
+    try {return run(argv[1],argv[2],argc>=5?argv[4]:nullptr,
+        failAfterSrv,effectTrace);}
     catch(const std::exception& error) {
         std::cerr<<error.what()<<'\n';return 2;
     }

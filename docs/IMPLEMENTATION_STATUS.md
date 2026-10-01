@@ -5824,3 +5824,16 @@ does not prove both techniques ran over one Skyrim frame. The next bounded
 offline diagnostic is per-runtime technique and stage-colour attribution with
 isolated effects configurations. The archive was not added to Git; no game
 change was made. See `docs/re/FG_BRANCH_REVIEW_37_2026-09-30.md`.
+
+The exact-wrapper `effect-trace` probe now counts actual ReShade 6.8 technique
+callbacks per runtime and synthetic frame. With the copied three-technique
+preset active on both stages, two runtimes executed on 111/96 of the 120
+frames before/after resize without Steam and 103/99 with the exact Steam
+overlay preloaded. Empty-preset and D3D11-only/D3D12-only controls produced
+the expected zero or single-runtime counts. The copied DLL/config/preset
+hashes were restored to match the originals. This establishes duplicate
+effect execution in the *offline reproduction*, not a measured double-colour
+pass or FPS cause in Skyrim. See
+`docs/re/FG_RESHADE_EFFECT_EXECUTION_2026-10-01.md`. **Installed private
+route Off; FG Off; game FG-On: NOT RUN.** Next is ordered midtone pixel capture
+at each effect/copy stage before changing the game route.
