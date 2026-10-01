@@ -1,0 +1,157 @@
+#include <catch2/catch_test_macros.hpp>
+#include "rk/FgGameInputCandidate.hpp"
+#include "rk/FgGameInputProbe.hpp"
+#include <dxgi1_6.h>
+#include <array>
+#include <chrono>
+#include <thread>
+#include <variant>
+
+using Microsoft::WRL::ComPtr;
+
+namespace {
+ComPtr<ID3D11Texture2D> texture(ID3D11Device* device,rk::Extent size,
+    DXGI_FORMAT format) {
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=size.width;desc.Height=size.height;
+    desc.MipLevels=1;desc.ArraySize=1;desc.SampleDesc.Count=1;
+    desc.Format=format;desc.Usage=D3D11_USAGE_DEFAULT;
+    desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> result;
+    REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&result)));
+    return result;
+}
+struct Fixture {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    rk::FgWorldGuideFrame world{};
+    rk::FgUiPlaneFrame ui{};
+    Fixture() {
+        D3D_FEATURE_LEVEL level{};
+        REQUIRE(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,
+            nullptr,0,nullptr,0,D3D11_SDK_VERSION,
+            &device,&level,&context)));
+        world.frame.source=33;
+        world.frame.generation=7;
+        world.frame.presentToken=9000;
+        world.frame.resetEpoch=4;
+        world.frame.render={19,11};
+        world.frame.display={37,19};
+        world.frame.worldActive=true;
+        world.depth=texture(device.Get(),world.frame.render,DXGI_FORMAT_R32_FLOAT);
+        world.motion=texture(device.Get(),world.frame.render,DXGI_FORMAT_R16G16_FLOAT);
+        world.hudless=texture(device.Get(),world.frame.display,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
+        ui.source=33;ui.generation=7;ui.presentToken=9000;ui.resetEpoch=4;
+        ui.display=world.frame.display;
+        const auto stamp=rk::FgResourceStamp{33,7,ui.display,true,4};
+        ui.hudlessStamp=stamp;ui.uiStamp=stamp;ui.finalStamp=stamp;
+        ui.hudless=texture(device.Get(),ui.display,DXGI_FORMAT_R8G8B8A8_UNORM);
+        ui.uiColorAlpha=texture(device.Get(),ui.display,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
+        ui.finalColor=texture(device.Get(),ui.display,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
+    }
+};
+}
+
+TEST_CASE("FG game inputs pair five owned textures from one real frame",
+    "[fg_game_inputs]") {
+    Fixture f;
+    const auto result=rk::pairFgGameInputs(f.world,f.ui);
+    REQUIRE(std::holds_alternative<rk::FgGameInputCandidate>(result));
+    const auto& packet=std::get<rk::FgGameInputCandidate>(result);
+    REQUIRE(packet.frame.source==33);
+    REQUIRE(packet.frame.presentToken==9000);
+    REQUIRE(packet.frame.depth.ready);
+    REQUIRE(packet.frame.motion.ready);
+    REQUIRE(packet.frame.hudless.ready);
+    REQUIRE(packet.frame.uiColorAlpha.ready);
+    const auto sources=packet.sources();
+    REQUIRE(sources.textures[0]==f.ui.finalColor.Get());
+    REQUIRE(sources.textures[1]==f.world.depth.Get());
+    REQUIRE(sources.textures[2]==f.world.motion.Get());
+    REQUIRE(sources.textures[3]==f.world.hudless.Get());
+    REQUIRE(sources.textures[4]==f.ui.uiColorAlpha.Get());
+}
+
+TEST_CASE("FG game input pairing rejects stale identity and wrong guide formats",
+    "[fg_game_inputs]") {
+    Fixture f;
+    f.ui.presentToken++;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::pairFgGameInputs(f.world,f.ui)));
+    f.ui.presentToken=f.world.frame.presentToken;
+    f.world.depth=texture(f.device.Get(),f.world.frame.render,
+        DXGI_FORMAT_R24G8_TYPELESS);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::pairFgGameInputs(f.world,f.ui)));
+    f.world.depth=texture(f.device.Get(),f.world.frame.render,
+        DXGI_FORMAT_R32_FLOAT);
+    f.world.hudless.Reset();
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::pairFgGameInputs(f.world,f.ui)));
+}
+
+TEST_CASE("FG paired game inputs enter and retire a five-surface WARP lease",
+    "[fg_game_inputs]") {
+    Fixture f;
+    ComPtr<IDXGIFactory4> factory;
+    REQUIRE(SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))));
+    ComPtr<IDXGIAdapter> adapter;
+    REQUIRE(SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&adapter))));
+    ComPtr<ID3D12Device> d12;
+    REQUIRE(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
+        IID_PPV_ARGS(&d12))));
+    D3D12_COMMAND_QUEUE_DESC queueDesc{};
+    ComPtr<ID3D12CommandQueue> queue;
+    REQUIRE(SUCCEEDED(d12->CreateCommandQueue(&queueDesc,IID_PPV_ARGS(&queue))));
+    auto bridgeResult=rk::FgSharedInputs::create(f.device.Get(),
+        d12.Get(),queue.Get());
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgSharedInputs>>(
+        bridgeResult));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgSharedInputs>>(
+        bridgeResult));
+    auto paired=rk::pairFgGameInputs(f.world,f.ui);
+    REQUIRE(std::holds_alternative<rk::FgGameInputCandidate>(paired));
+    auto packet=std::get<rk::FgGameInputCandidate>(std::move(paired));
+    rk::FgInputLeaseRing ring(*bridge,packet.frame.generation);
+    auto prepared=ring.prepare(packet.frame,packet.sources(),f.context.Get(),
+        {packet.frame.generation,0,0,0,0,0});
+    REQUIRE(std::holds_alternative<rk::FgInputLease>(prepared));
+    auto lease=std::get<rk::FgInputLease>(std::move(prepared));
+    REQUIRE(lease.source==packet.frame.source);
+    REQUIRE(lease.presentToken==packet.frame.presentToken);
+    for(const auto& resource:lease.resources)REQUIRE(resource!=nullptr);
+    REQUIRE(bridge->waitCopy(lease.lastCopy.copy));
+    REQUIRE(ring.discard(lease));
+    REQUIRE(ring.stop({packet.frame.generation,0,0,0,0,0}));
+}
+
+TEST_CASE("FG game probe completes the sampled five-input copy without provider use",
+    "[fg_game_inputs]") {
+    Fixture f;
+    auto paired=rk::pairFgGameInputs(f.world,f.ui);
+    REQUIRE(std::holds_alternative<rk::FgGameInputCandidate>(paired));
+    auto packet=std::get<rk::FgGameInputCandidate>(std::move(paired));
+    REQUIRE(std::holds_alternative<rk::Error>(rk::FgGameInputProbe::begin(
+        nullptr,f.context.Get(),packet)));
+    auto started=rk::FgGameInputProbe::begin(f.device.Get(),
+        f.context.Get(),packet);
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgGameInputProbe>>(
+        started));
+    auto probe=std::move(std::get<std::unique_ptr<rk::FgGameInputProbe>>(
+        started));
+    REQUIRE(probe->source()==packet.frame.source);
+    REQUIRE(probe->presentToken()==packet.frame.presentToken);
+    const auto deadline=std::chrono::steady_clock::now()+
+        std::chrono::seconds(5);
+    auto status=probe->poll();
+    while(status==rk::FgGameCopyState::Pending&&
+          std::chrono::steady_clock::now()<deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        status=probe->poll();
+    }
+    REQUIRE(status==rk::FgGameCopyState::Complete);
+    REQUIRE(probe->poll()==rk::FgGameCopyState::Complete);
+}

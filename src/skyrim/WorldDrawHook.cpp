@@ -2,6 +2,7 @@
 #include "rk/FgLiveFrameAdmission.hpp"
 #include "rk/FgWorldGuideLatch.hpp"
 #include "rk/FgUiPlanes.hpp"
+#include "rk/FgGameInputProbe.hpp"
 #include "rk/FgCameraFramePairer.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
@@ -73,6 +74,7 @@ struct WorldState {
     std::optional<FgWorldGuideFrame> fgObservedGuides;
     std::optional<FgBoundarySample> fgObservedBoundary;
     std::optional<FgUiPlaneFrame> fgObservedUi;
+    std::unique_ptr<FgGameInputProbe> fgGameInputProbe;
     FgCameraFramePairer fgCameraPairer;
     std::optional<FgCameraProducerSample> fgCameraProducer;
     struct FgSourceJitter {
@@ -1346,6 +1348,28 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
                         packet->uiStamp.extent.height,
                         packet->finalStamp.extent.width,
                         packet->finalStamp.extent.height);
+                    const auto pairedInputs=pairFgGameInputs(
+                        *state->fgObservedGuides,*state->fgObservedUi);
+                    if(const auto* input=std::get_if<FgGameInputCandidate>(
+                           &pairedInputs)) {
+                        auto started=FgGameInputProbe::begin(
+                            reinterpret_cast<ID3D11Device*>(device),context,
+                            *input);
+                        if(auto* probe=std::get_if<
+                               std::unique_ptr<FgGameInputProbe>>(&started)) {
+                            state->fgGameInputProbe=std::move(*probe);
+                            const auto ticket=state->fgGameInputProbe->copyTicket();
+                            spdlog::info("FG five-input game copy queued: source={} present={} generation={} producerFence={} copyFence={}; no provider submission",
+                                state->fgGameInputProbe->source(),
+                                state->fgGameInputProbe->presentToken(),
+                                state->fgGameInputProbe->generation(),
+                                ticket.producer,ticket.copy);
+                        } else if(const auto* error=std::get_if<Error>(&started))
+                            spdlog::warn("FG five-input game copy frame {} unavailable: {}",
+                                frame,error->message);
+                    } else if(const auto* error=std::get_if<Error>(&pairedInputs))
+                        spdlog::warn("FG five-input game packet frame {} rejected: {}",
+                            frame,error->message);
                 } else if(const auto* error=std::get_if<Error>(&finished))
                     spdlog::warn("FG native UI candidate frame {} rejected: {}",
                         frame,error->message);
@@ -3301,6 +3325,16 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             swap&&swap==expected);
         if(boundary.kind!=FgBoundaryKind::Test&&
            boundary.kind!=FgBoundaryKind::ForeignSwap) {
+            if(state->fgGameInputProbe) {
+                const auto copy=state->fgGameInputProbe->poll();
+                if(copy!=FgGameCopyState::Pending) {
+                    spdlog::info("FG five-input game copy source={} present={} status={}; provider submission remains off",
+                        state->fgGameInputProbe->source(),
+                        state->fgGameInputProbe->presentToken(),
+                        copy==FgGameCopyState::Complete?"complete":"failed");
+                    state->fgGameInputProbe.reset();
+                }
+            }
             state->fgObservedBoundary=boundary;
             state->fgObservedUi.reset();
             // This callback runs before the real DXGI Present. The outer world
@@ -3382,6 +3416,7 @@ void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
         state->fgObservedGuides.reset();
         state->fgObservedBoundary.reset();
         state->fgObservedUi.reset();
+        state->fgGameInputProbe.reset();
         if(state->directUiPlaneFrame)
             retireDirectUiPlane(state,state->directUiPlaneFrame);
         state->fgUiCaptureAttempted=false;

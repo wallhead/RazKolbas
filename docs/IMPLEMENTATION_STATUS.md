@@ -6285,3 +6285,21 @@ sampled nonzero Present failures. Log identity and limits are in the report.
 **0.1.152 sampled native-UI pairing: RUN/PASS. FG-On/generated Skyrim frames:
 NOT RUN.** Next: continuous native UI and a retained D3D11-to-D3D12
 five-input lease with provider retirement.
+
+## Source 0.1.153 five-input D3D12 copy trial (2026-10-01)
+
+The sampled 0.1.152 world/UI pair now passes one exact-frame validator and
+queues its five textures through the same-adapter D3D11-to-D3D12 shared-copy
+lease. A later real Present polls completion; the lease is discarded and
+stopped without a provider submission. The WARP integration exercises the
+same five formats and observes completed copy/retirement. Both new APIs
+were test-first; Release build/CTest passed **70/70** and Debug passed
+**65/65** after the version bump.
+Details: `docs/re/FG_FIVE_INPUT_GAME_COPY_2026-10-01.md`.
+The 0.1.153 stage and previous install verified 14/14. After Skyrim closed,
+the old DLL/INI/manifest were backed up and only DLL and manifest replaced.
+The new install verified 14/14 with INI byte-identical. The user-started game
+copy test is pending. **0.1.153 game copy: NOT RUN. FG-On/generated frames:
+NOT RUN.** Next:
+run the one-shot same-adapter copy in Skyrim, then make the UI/input lease
+continuous and bind provider/Present retirement before enabling FG.
