@@ -56,6 +56,38 @@ bool sameAdapter(ID3D11Device* d11,const LUID& expected) noexcept {
 }
 }
 FgPrivateSwapRoute::~FgPrivateSwapRoute() noexcept {retire();}
+Result<ComPtr<IDXGISwapChain4>>
+FgPrivateSwapRoute::inspectNativeLowerForProbe() const noexcept {
+    void* nativeRaw{};
+    if(!issued()||!runtime_||!lower_||
+       runtime_->getNativeInterface(lower_.Get(),&nativeRaw)!=sl::Result::eOk||
+       !nativeRaw)
+        return Error{ErrorCode::Unavailable,
+            "Lower native swap is unavailable to the offline probe"};
+    ComPtr<IUnknown> native;
+    native.Attach(static_cast<IUnknown*>(nativeRaw));
+    ComPtr<IDXGISwapChain4> swap;
+    if(FAILED(native.As(&swap)))
+        return Error{ErrorCode::Unsupported,
+            "Lower native swap has no IDXGISwapChain4 interface"};
+    return swap;
+}
+Result<ComPtr<ID3D12CommandQueue>>
+FgPrivateSwapRoute::inspectNativeQueueForProbe() const noexcept {
+    void* nativeRaw{};
+    if(!issued()||!runtime_||!queue_||
+       runtime_->getNativeInterface(queue_.Get(),&nativeRaw)!=sl::Result::eOk||
+       !nativeRaw)
+        return Error{ErrorCode::Unavailable,
+            "Lower native queue is unavailable to the offline probe"};
+    ComPtr<IUnknown> native;
+    native.Attach(static_cast<IUnknown*>(nativeRaw));
+    ComPtr<ID3D12CommandQueue> queue;
+    if(FAILED(native.As(&queue)))
+        return Error{ErrorCode::Unsupported,
+            "Lower native queue has no ID3D12CommandQueue interface"};
+    return queue;
+}
 void FgPrivateSwapRoute::retire() noexcept {
     lower_.Reset();queue_.Reset();upgradedFactory_.Reset();parentFactory_.Reset();
     upgradedD12_.Reset();verifiedNative_.Reset();d12_.Reset();

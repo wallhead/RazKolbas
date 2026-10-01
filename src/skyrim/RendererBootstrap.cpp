@@ -21,6 +21,7 @@
 #include "rk/RipCall6.hpp"
 #ifdef RK_WITH_STREAMLINE
 #include "rk/FgPrivateSwapRoute.hpp"
+#include "rk/FgReShadeEffectOwner.hpp"
 #endif
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -65,6 +66,7 @@ struct FactoryTraceLease {
     std::atomic<unsigned> downstreamCalls{0};
 #ifdef RK_WITH_STREAMLINE
     std::atomic<FgPrivateSwapRoute*> privateFgRoute{nullptr};
+    std::unique_ptr<FgReShadeEffectOwner> privateFgEffectOwner;
     std::atomic<bool> downstreamNativeOwner{false};
 #endif
 };
@@ -766,6 +768,7 @@ HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
         if(factory!=state->downstreamTarget.load(std::memory_order_acquire)||
            !admitPrivateFgSwap(route->admission(),actual)) {
             route->abandon();
+            state->privateFgEffectOwner.reset();
             try {spdlog::warn("FG-Off private swap refused: native callback contract differs; native swap retained");}
             catch(...) {}
         } else {
@@ -787,6 +790,7 @@ HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
             } else try {spdlog::warn("FG-Off private swap fell back: native D3D11 device unavailable");}
                 catch(...) {}
             route->abandon();
+            state->privateFgEffectOwner.reset();
         }
     }
 #endif
@@ -955,6 +959,7 @@ HRESULT WINAPI factoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
        route&&(!state->downstreamNext.load(std::memory_order_acquire)||
               !state->downstreamNativeOwner.load(std::memory_order_acquire))) {
         route->abandon();
+        state->privateFgEffectOwner.reset();
         try {spdlog::warn("FG-Off private swap disabled: exact native DXGI callback not installed");}
         catch(...) {}
     }
@@ -1374,6 +1379,7 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
     logFactoryBeforeCreation(adapter);
 #ifdef RK_WITH_STREAMLINE
     std::unique_ptr<FgPrivateSwapRoute> preparedPrivate;
+    std::unique_ptr<FgReShadeEffectOwner> preparedEffects;
     if(state->privateFgOffProbe&&swapDesc&&
        !state->privateFgAttempted.test_and_set(std::memory_order_acq_rel)) {
         logAdapterFactoryCode(adapter,"before-private-prepare");
@@ -1389,13 +1395,27 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
             } else {
                 const auto directory=std::filesystem::path(path).parent_path()/
                     L"RazKolbasRuntime"/L"FG";
-                auto prepared=FgPrivateSwapRoute::prepare(adapter,*swapDesc,
-                    directory);
-                if(auto* error=std::get_if<Error>(&prepared))
-                    spdlog::warn("FG-Off private swap not armed: {}",
+                auto effectOwner=FgReShadeEffectOwner::arm(adapter,*swapDesc);
+                if(auto* error=std::get_if<Error>(&effectOwner))
+                    spdlog::warn("FG-Off private swap not armed: ReShade effect ownership: {}",
                         error->message);
-                else preparedPrivate=std::move(std::get<
-                    std::unique_ptr<FgPrivateSwapRoute>>(prepared));
+                else {
+                    preparedEffects=std::move(std::get<
+                        std::unique_ptr<FgReShadeEffectOwner>>(effectOwner));
+                    auto prepared=FgPrivateSwapRoute::prepare(adapter,*swapDesc,
+                        directory);
+                    if(auto* prepareError=std::get_if<Error>(&prepared))
+                        spdlog::warn("FG-Off private swap not armed: {}",
+                            prepareError->message);
+                    else {
+                        preparedPrivate=std::move(std::get<
+                            std::unique_ptr<FgPrivateSwapRoute>>(prepared));
+                        if(!preparedEffects->initialSuppressed()) {
+                            spdlog::warn("FG-Off private swap not armed: lower ReShade runtime was not suppressed");
+                            preparedPrivate.reset();
+                        }
+                    }
+                }
             }
         } catch(const std::exception& error) {
             try {spdlog::warn("FG-Off private swap preparation failed: {}",error.what());}
@@ -1424,15 +1444,21 @@ HRESULT WINAPI createProxy(IDXGIAdapter* adapter,D3D_DRIVER_TYPE driverType,HMOD
         if(tracedInstalled&&trace&&trace->target&&
            isOwnedSceneFactoryCandidate(trace->target,trace->target,
                swapDesc)) {
-            spdlog::info("FG-Off private Streamline lower prepared: {}x{}; thread={}; game swap callback pending",
-                preparedPrivate->admission().width,
-                preparedPrivate->admission().height,
-                preparedPrivate->admission().thread);
+            preparedEffects->commit();
+            trace->privateFgEffectOwner=std::move(preparedEffects);
+            const auto admission=preparedPrivate->admission();
             trace->privateFgRoute.store(preparedPrivate.release(),
                 std::memory_order_release);
+            try {
+                spdlog::info("FG-Off ReShade effect owner: D3D11 preset retained; lower D3D12 runtime suppressed at {} initialization(s)",
+                    trace->privateFgEffectOwner->suppressedInits());
+                spdlog::info("FG-Off private Streamline lower prepared: {}x{}; thread={}; game swap callback pending",
+                    admission.width,admission.height,admission.thread);
+            } catch(...) {}
         } else {
             spdlog::warn("FG-Off private swap released: exact ReShade game hook unavailable");
             preparedPrivate.reset();
+            preparedEffects.reset();
         }
     }
 #endif

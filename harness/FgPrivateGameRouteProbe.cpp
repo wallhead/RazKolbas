@@ -1,4 +1,5 @@
 #include "rk/FgPrivateSwapRoute.hpp"
+#include "rk/FgReShadeEffectOwner.hpp"
 #include "rk/FgD3D11SwapFacade.hpp"
 #include "rk/FactoryCreateTrace.hpp"
 #include "rk/OwnedRouteProfile.hpp"
@@ -14,6 +15,7 @@
 #include <mutex>
 #include <optional>
 #include <variant>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 namespace {
@@ -35,6 +37,10 @@ struct EffectView {std::uint64_t handle;};
 struct EffectTrace {
     struct Runtime {
         void* identity{};
+        std::uint64_t native{};
+        std::uint64_t commandQueueNative{};
+        void* window{};
+        std::uint32_t api{};
         unsigned epoch{};
         unsigned firstFrame{};
         unsigned lastFrame{};
@@ -43,6 +49,11 @@ struct EffectTrace {
         unsigned techniques{};
         unsigned finishes{};
         std::array<std::uint8_t,240> techniqueFrames{};
+        std::vector<std::uint8_t> screenshot;
+        std::uint32_t screenshotWidth{};
+        std::uint32_t screenshotHeight{};
+        bool screenshotAttempted{};
+        bool screenshotSucceeded{};
     };
     using RegisterAddon=bool(*)(HMODULE,std::uint32_t);
     using RegisterEvent=void(*)(std::uint32_t,void*);
@@ -63,10 +74,25 @@ struct EffectTrace {
     static constexpr std::uint32_t beginEvent=76;
     static constexpr std::uint32_t finishEvent=77;
     static constexpr std::uint32_t techniqueEvent=83;
+    struct Identity {std::uint64_t native{};std::uint64_t queue{};
+        void* window{};std::uint32_t api{};};
+    static Identity runtimeIdentity(void* runtime) noexcept {
+        auto** table=*reinterpret_cast<void***>(runtime);
+        auto* device=reinterpret_cast<void*(*)(void*)>(table[3])(runtime);
+        if(!device)return {};
+        auto** deviceTable=*reinterpret_cast<void***>(device);
+        auto* queue=reinterpret_cast<void*(*)(void*)>(table[8])(runtime);
+        return {
+            reinterpret_cast<std::uint64_t(*)(void*)>(table[0])(runtime),
+            queue?reinterpret_cast<std::uint64_t(*)(void*)>(
+                (*reinterpret_cast<void***>(queue))[0])(queue):0,
+            reinterpret_cast<void*(*)(void*)>(table[4])(runtime),
+            reinterpret_cast<std::uint32_t(*)(void*)>(deviceTable[3])(device)};
+    }
 
     void record(void* runtime,std::uint32_t event) noexcept {
         if(!runtime)return;
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex);
         const auto currentEpoch=epoch.load(std::memory_order_relaxed);
         const auto currentFrame=frame.load(std::memory_order_relaxed);
         Runtime* found{};
@@ -77,6 +103,11 @@ struct EffectTrace {
             if(count==runtimes.size()) {++overflow;return;}
             found=&runtimes[count++];
             found->identity=runtime;
+            const auto identity=runtimeIdentity(runtime);
+            found->native=identity.native;
+            found->commandQueueNative=identity.queue;
+            found->window=identity.window;
+            found->api=identity.api;
             found->epoch=currentEpoch;
             found->firstFrame=currentFrame;
         }
@@ -88,6 +119,30 @@ struct EffectTrace {
             ++found->techniques;
             if(currentFrame<found->techniqueFrames.size())
                 found->techniqueFrames[currentFrame]=1;
+        }
+        if(event==presentEvent&&found->api==0xc000&&
+           (currentFrame==100||currentFrame==220)&&
+           !found->screenshotAttempted) {
+            found->screenshotAttempted=true;
+            lock.unlock();
+            std::uint32_t width{},height{};
+            auto** table=*reinterpret_cast<void***>(runtime);
+            reinterpret_cast<void(*)(void*,std::uint32_t*,std::uint32_t*)>(
+                table[11])(runtime,&width,&height);
+            bool succeeded=false;
+            std::vector<std::uint8_t> pixels;
+            try {
+                if(width&&height&&width<=8192&&height<=8192) {
+                    pixels.resize(static_cast<std::size_t>(width)*height*4);
+                    succeeded=reinterpret_cast<bool(*)(void*,void*)>(
+                        table[10])(runtime,pixels.data());
+                }
+            } catch(...) {succeeded=false;}
+            lock.lock();
+            found->screenshotSucceeded=succeeded;
+            found->screenshotWidth=width;
+            found->screenshotHeight=height;
+            if(succeeded)found->screenshot=std::move(pixels);
         }
     }
     static void presented(void* runtime) noexcept {
@@ -132,6 +187,10 @@ struct EffectTrace {
         for(unsigned index=0;index<count;++index) {
             const auto& item=runtimes[index];
             std::cout<<"Effect trace runtime="<<item.identity<<
+                " native=0x"<<std::hex<<item.native<<
+                " queueNative=0x"<<item.commandQueueNative<<
+                " window="<<item.window<<
+                " api=0x"<<item.api<<std::dec<<
                 " epoch="<<item.epoch<<
                 " firstFrame="<<item.firstFrame<<
                 " lastFrame="<<item.lastFrame<<
@@ -139,6 +198,32 @@ struct EffectTrace {
                 " begins="<<item.begins<<
                 " techniques="<<item.techniques<<
                 " finishes="<<item.finishes<<'\n';
+            if(item.api==0xc000&&item.screenshotAttempted) {
+                std::uint64_t hash=1469598103934665603ull;
+                for(const auto byte:item.screenshot)
+                    hash=(hash^byte)*1099511628211ull;
+                std::cout<<"Effect screenshot epoch="<<item.epoch<<
+                    " frame="<<(item.epoch?220:100)<<
+                    " succeeded="<<item.screenshotSucceeded<<
+                    " size="<<item.screenshotWidth<<'x'<<item.screenshotHeight<<
+                    " hash="<<std::hex<<hash<<std::dec;
+                if(item.screenshotSucceeded&&item.screenshotWidth>=4&&
+                   item.screenshotHeight>=4) {
+                    for(const auto [x,y]:std::array<std::pair<unsigned,unsigned>,4>{{
+                        {item.screenshotWidth/4,item.screenshotHeight/4},
+                        {item.screenshotWidth*3/4,item.screenshotHeight/4},
+                        {item.screenshotWidth/4,item.screenshotHeight*3/4},
+                        {item.screenshotWidth*3/4,item.screenshotHeight*3/4}}}) {
+                        const auto offset=(static_cast<std::size_t>(y)*
+                            item.screenshotWidth+x)*4;
+                        std::cout<<" sample=";
+                        for(unsigned channel=0;channel<4;++channel)
+                            std::cout<<(channel?",":"")<<
+                                static_cast<unsigned>(item.screenshot[offset+channel]);
+                    }
+                }
+                std::cout<<'\n';
+            }
         }
         for(unsigned observedEpoch=0;observedEpoch<=epoch.load(std::memory_order_relaxed);
             ++observedEpoch) {
@@ -203,6 +288,177 @@ void reportPixel(const char* stage,
     else for(const auto channel:*pixel)std::cout<<static_cast<unsigned>(channel)<<',';
     std::cout<<'\n';
 }
+using ColourSamples=std::array<std::array<std::uint8_t,4>,4>;
+struct ColourReadback {
+    ColourSamples samples{};
+    std::vector<std::uint8_t> pixels;
+};
+constexpr ColourSamples sourcePattern{{
+    {{100,120,140,255}},{{150,130,100,255}},
+    {{80,100,70,255}},{{180,170,160,255}}}};
+constexpr std::array<const char*,4> sampleNames{"TL","TR","BL","BR"};
+ColourSamples samplePixels(const std::uint8_t* data,UINT rowPitch,
+    UINT width,UINT height) noexcept {
+    const std::array<std::pair<UINT,UINT>,4> positions{{
+        {width/4,height/4},{width*3/4,height/4},
+        {width/4,height*3/4},{width*3/4,height*3/4}}};
+    ColourSamples result{};
+    for(unsigned index=0;index<4;++index) {
+        const auto [x,y]=positions[index];
+        const auto* pixel=data+y*rowPitch+x*4;
+        std::copy_n(pixel,4,result[index].begin());
+    }
+    return result;
+}
+ColourReadback readColour(const std::uint8_t* data,UINT rowPitch,
+    UINT width,UINT height) {
+    ColourReadback result;
+    result.samples=samplePixels(data,rowPitch,width,height);
+    result.pixels.resize(static_cast<std::size_t>(width)*height*4);
+    for(UINT y=0;y<height;++y)
+        std::copy_n(data+static_cast<std::size_t>(y)*rowPitch,width*4,
+            result.pixels.begin()+static_cast<std::size_t>(y)*width*4);
+    return result;
+}
+std::uint64_t colourHash(const std::vector<std::uint8_t>& pixels) noexcept {
+    std::uint64_t value=14695981039346656037ull;
+    for(const auto byte:pixels) {
+        value^=byte;
+        value*=1099511628211ull;
+    }
+    return value;
+}
+void uploadPattern(ID3D11DeviceContext* context,ID3D11Texture2D* target) {
+    D3D11_TEXTURE2D_DESC desc{};
+    target->GetDesc(&desc);
+    std::vector<std::uint8_t> data(
+        static_cast<std::size_t>(desc.Width)*desc.Height*4);
+    for(UINT y=0;y<desc.Height;++y)
+        for(UINT x=0;x<desc.Width;++x) {
+            const auto quadrant=(y>=desc.Height/2?2u:0u)+
+                (x>=desc.Width/2?1u:0u);
+            std::copy(sourcePattern[quadrant].begin(),
+                sourcePattern[quadrant].end(),
+                data.begin()+(static_cast<std::size_t>(y)*desc.Width+x)*4);
+        }
+    context->UpdateSubresource(target,0,nullptr,data.data(),desc.Width*4,0);
+}
+std::optional<ColourReadback> sampleD3D11(ID3D11Device* device,
+    ID3D11DeviceContext* context,ID3D11Texture2D* source) {
+    if(!device||!context||!source)return std::nullopt;
+    D3D11_TEXTURE2D_DESC desc{};
+    source->GetDesc(&desc);
+    if(!desc.Width||!desc.Height||desc.SampleDesc.Count!=1||
+       desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM)return std::nullopt;
+    desc.Usage=D3D11_USAGE_STAGING;
+    desc.BindFlags=0;
+    desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    desc.MiscFlags=0;
+    ComPtr<ID3D11Texture2D> staging;
+    if(FAILED(device->CreateTexture2D(&desc,nullptr,&staging)))return std::nullopt;
+    context->CopyResource(staging.Get(),source);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if(FAILED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)))
+        return std::nullopt;
+    const auto result=readColour(
+        static_cast<const std::uint8_t*>(mapped.pData),mapped.RowPitch,
+        desc.Width,desc.Height);
+    context->Unmap(staging.Get(),0);
+    return result;
+}
+std::optional<ColourReadback> sampleD3D12(IDXGISwapChain4* swap,
+    ID3D12CommandQueue* queue,UINT index) {
+    if(!swap||!queue)return std::nullopt;
+    ComPtr<ID3D12Device> device;
+    ComPtr<ID3D12Resource> back;
+    if(FAILED(queue->GetDevice(IID_PPV_ARGS(&device)))||
+       FAILED(swap->GetBuffer(index,IID_PPV_ARGS(&back))))return std::nullopt;
+    const auto desc=back->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
+       desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||!desc.Width||!desc.Height||
+       desc.SampleDesc.Count!=1)return std::nullopt;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+    UINT64 bytes{};
+    device->GetCopyableFootprints(&desc,0,1,0,&footprint,nullptr,nullptr,&bytes);
+    D3D12_HEAP_PROPERTIES heap{};heap.Type=D3D12_HEAP_TYPE_READBACK;
+    D3D12_RESOURCE_DESC buffer{};
+    buffer.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer.Width=bytes;buffer.Height=1;buffer.DepthOrArraySize=1;
+    buffer.MipLevels=1;buffer.SampleDesc.Count=1;
+    buffer.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    ComPtr<ID3D12Resource> readback;
+    if(FAILED(device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,
+        &buffer,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,
+        IID_PPV_ARGS(&readback))))return std::nullopt;
+    ComPtr<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12GraphicsCommandList> commands;
+    ComPtr<ID3D12Fence> fence;
+    if(FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+        IID_PPV_ARGS(&allocator)))||
+       FAILED(device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,
+        allocator.Get(),nullptr,IID_PPV_ARGS(&commands)))||
+       FAILED(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&fence))))return std::nullopt;
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition={back.Get(),D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_COPY_SOURCE};
+    commands->ResourceBarrier(1,&barrier);
+    D3D12_TEXTURE_COPY_LOCATION from{};
+    from.pResource=back.Get();
+    from.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    D3D12_TEXTURE_COPY_LOCATION to{};
+    to.pResource=readback.Get();
+    to.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    to.PlacedFootprint=footprint;
+    commands->CopyTextureRegion(&to,0,0,0,&from,nullptr);
+    barrier.Transition.StateBefore=D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.StateAfter=D3D12_RESOURCE_STATE_PRESENT;
+    commands->ResourceBarrier(1,&barrier);
+    if(FAILED(commands->Close()))return std::nullopt;
+    const auto event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+    if(!event)return std::nullopt;
+    ID3D12CommandList* lists[]{commands.Get()};
+    queue->ExecuteCommandLists(1,lists);
+    if(FAILED(queue->Signal(fence.Get(),1)))std::terminate();
+    const auto armed=fence->SetEventOnCompletion(1,event);
+    const auto waited=SUCCEEDED(armed)?WaitForSingleObject(event,5000):WAIT_FAILED;
+    CloseHandle(event);
+    if(waited!=WAIT_OBJECT_0||fence->GetCompletedValue()!=1||
+       FAILED(device->GetDeviceRemovedReason()))std::terminate();
+    void* mapped{};
+    if(FAILED(readback->Map(0,nullptr,&mapped)))return std::nullopt;
+    const auto result=readColour(static_cast<const std::uint8_t*>(mapped),
+        footprint.Footprint.RowPitch,static_cast<UINT>(desc.Width),
+        desc.Height);
+    readback->Unmap(0,nullptr);
+    return result;
+}
+void reportColour(unsigned epoch,unsigned frame,const ColourSamples& source,
+    const ColourSamples& d3d11,const ColourSamples& d3d12) {
+    const auto print=[](const std::array<std::uint8_t,4>& pixel) {
+        for(unsigned channel=0;channel<4;++channel) {
+            if(channel)std::cout<<',';
+            std::cout<<static_cast<unsigned>(pixel[channel]);
+        }
+    };
+    for(unsigned index=0;index<4;++index) {
+        std::cout<<"Colour trace epoch="<<epoch<<" frame="<<frame<<
+            " sample="<<sampleNames[index]<<" source=";
+        print(source[index]);std::cout<<" d3d11=";
+        print(d3d11[index]);std::cout<<" d3d12=";
+        print(d3d12[index]);std::cout<<'\n';
+    }
+}
+void reportColourStage(unsigned epoch,unsigned frame,
+    const ColourReadback& source,const ColourReadback& d3d11,
+    const ColourReadback& d3d12) {
+    std::cout<<"Colour stage epoch="<<epoch<<" frame="<<frame<<
+        " sourceHash="<<std::hex<<colourHash(source.pixels)<<
+        " d3d11Hash="<<colourHash(d3d11.pixels)<<
+        " d3d12Hash="<<colourHash(d3d12.pixels)<<std::dec<<
+        " fullEqual="<<(d3d11.pixels==d3d12.pixels)<<'\n';
+}
 HRESULT WINAPI wrapFactory(IDXGIFactory* factory,IUnknown* device,
     DXGI_SWAP_CHAIN_DESC* desc,IDXGISwapChain** output) noexcept {
     ++wrapperCalls;
@@ -229,7 +485,8 @@ HRESULT WINAPI replace(IDXGIFactory* factory,IUnknown* device,
     return state->next(factory,device,desc,output);
 }
 int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
-    const wchar_t* enbPath,bool failAfterSrv,bool effectTrace) {
+    const wchar_t* enbPath,bool failAfterSrv,bool effectTrace,
+    bool colourTrace,bool suppressD3D12) {
     const auto hash=rk::sha256File(reshadePath);
     if(!std::holds_alternative<std::string>(hash)||
        std::get<std::string>(hash)!=rk::reshade680FactoryCreateSite().moduleSha256)
@@ -277,6 +534,16 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     game.BufferCount=3;game.OutputWindow=window.value;game.Windowed=TRUE;
     game.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;
     game.Flags=DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    std::unique_ptr<rk::FgReShadeEffectOwner> effectOwner;
+    if(suppressD3D12) {
+        auto armed=rk::FgReShadeEffectOwner::arm(adapter.Get(),game,
+            trace.has_value());
+        if(const auto* error=std::get_if<rk::Error>(&armed)) {
+            std::cerr<<"effect owner: "<<error->message<<'\n';return 48;
+        }
+        effectOwner=std::move(std::get<
+            std::unique_ptr<rk::FgReShadeEffectOwner>>(armed));
+    }
     auto prepared=rk::FgPrivateSwapRoute::prepare(adapter.Get(),game,
         runtimeDirectory);
     if(const auto* error=std::get_if<rk::Error>(&prepared)) {
@@ -285,6 +552,10 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     }
     auto route=std::move(std::get<std::unique_ptr<rk::FgPrivateSwapRoute>>(
         prepared));
+    if(effectOwner) {
+        if(!effectOwner->initialSuppressed())return 49;
+        effectOwner->commit();
+    }
     // Reproduce the live chain: a downstream owner enables tearing after
     // the early private lower was prepared, before native game creation.
     game.Flags|=DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -410,6 +681,103 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     if(!std::holds_alternative<bool>(restored)||
        !std::holds_alternative<bool>(wrapperRestored)||FAILED(created)||!upper||
        callback.substitutions!=1||wrapperCalls!=1||!route->issued())return 22;
+    ComPtr<IDXGISwapChain4> lowerForProbe;
+    ComPtr<IDXGISwapChain4> nativeLowerForProbe;
+    ComPtr<ID3D12CommandQueue> nativeQueueForProbe;
+    ComPtr<ID3D12CommandQueue> reshadeQueueForProbe;
+    ComPtr<IDXGISwapChain3> indexedLowerForProbe;
+    ComPtr<ID3D12CommandQueue> lowerQueueForProbe;
+    if(colourTrace&&
+       (!route->inspectLowerForProbe(lowerForProbe,lowerQueueForProbe)||
+        FAILED(lowerForProbe.As(&indexedLowerForProbe))))return 45;
+    if(colourTrace)std::cout<<"Colour lower swap=0x"<<std::hex<<
+        reinterpret_cast<std::uintptr_t>(lowerForProbe.Get())<<
+        " queue=0x"<<reinterpret_cast<std::uintptr_t>(lowerQueueForProbe.Get())<<
+        std::dec<<'\n';
+    if(colourTrace) {
+        auto native=route->inspectNativeLowerForProbe();
+        if(auto* swap=std::get_if<ComPtr<IDXGISwapChain4>>(&native)) {
+            nativeLowerForProbe=*swap;
+            std::cout<<"Colour native lower swap=0x"<<std::hex<<
+                reinterpret_cast<std::uintptr_t>(nativeLowerForProbe.Get())<<
+                std::dec<<'\n';
+        } else std::cout<<"Colour native lower unavailable: "<<
+            std::get<rk::Error>(native).message<<'\n';
+        auto queue=route->inspectNativeQueueForProbe();
+        if(auto* nativeQueue=std::get_if<ComPtr<ID3D12CommandQueue>>(&queue)) {
+            nativeQueueForProbe=*nativeQueue;
+            std::cout<<"Colour native queue=0x"<<std::hex<<
+                reinterpret_cast<std::uintptr_t>(nativeQueueForProbe.Get())<<
+                std::dec<<'\n';
+        } else std::cout<<"Colour native queue unavailable: "<<
+            std::get<rk::Error>(queue).message<<'\n';
+        if(trace&&nativeQueueForProbe) {
+            std::lock_guard lock(trace->mutex);
+            for(unsigned index=0;index<trace->count;++index) {
+                const auto& observed=trace->runtimes[index];
+                if(observed.api!=0xc000||!observed.commandQueueNative)continue;
+                auto* runtimeQueue=reinterpret_cast<IUnknown*>(
+                    observed.commandQueueNative);
+                std::cout<<"Colour lower queue identity="<<
+                    sameIdentity(runtimeQueue,nativeQueueForProbe.Get())<<'\n';
+                auto* runtimeSwap=reinterpret_cast<IUnknown*>(observed.native);
+                std::cout<<"Colour ReShade swap matches proxy/native="<<
+                    sameIdentity(runtimeSwap,lowerForProbe.Get())<<'/'<<
+                    sameIdentity(runtimeSwap,nativeLowerForProbe.Get())<<'\n';
+                ComPtr<IDXGISwapChain> reshadeSwap;
+                if(SUCCEEDED(runtimeSwap->QueryInterface(
+                    IID_PPV_ARGS(&reshadeSwap)))) {
+                    DXGI_SWAP_CHAIN_DESC runtimeDesc{};
+                    ComPtr<ID3D12Device> runtimeSwapDevice;
+                    const auto description=reshadeSwap->GetDesc(&runtimeDesc);
+                    const auto device=reshadeSwap->GetDevice(
+                        IID_PPV_ARGS(&runtimeSwapDevice));
+                    std::cout<<"Colour ReShade native swap desc/device=0x"<<
+                        std::hex<<static_cast<unsigned>(description)<<"/0x"<<
+                        static_cast<unsigned>(device)<<std::dec;
+                    if(SUCCEEDED(description))std::cout<<" size="<<
+                        runtimeDesc.BufferDesc.Width<<'x'<<runtimeDesc.BufferDesc.Height<<
+                        " buffers="<<runtimeDesc.BufferCount;
+                    std::cout<<'\n';
+                } else std::cout<<"Colour ReShade native is not a DXGI swap\n";
+                if(SUCCEEDED(runtimeQueue->QueryInterface(
+                    IID_PPV_ARGS(&reshadeQueueForProbe)))) {
+                    ComPtr<ID3D12Device> reshadeDevice,lowerDevice,
+                        nativeLowerDevice,routeQueueDevice;
+                    ComPtr<ID3D12Resource> lowerBuffer;
+                    ComPtr<ID3D12Resource> nativeLowerBuffer;
+                    const bool deviceMatch=SUCCEEDED(
+                        reshadeQueueForProbe->GetDevice(IID_PPV_ARGS(&reshadeDevice)))&&
+                        SUCCEEDED(lowerForProbe->GetBuffer(0,IID_PPV_ARGS(&lowerBuffer)))&&
+                        SUCCEEDED(lowerBuffer->GetDevice(IID_PPV_ARGS(&lowerDevice)))&&
+                        sameIdentity(reshadeDevice.Get(),lowerDevice.Get());
+                    std::cout<<"Colour ReShade queue device matches lower="<<
+                        deviceMatch<<'\n';
+                    if(nativeLowerForProbe&&SUCCEEDED(nativeLowerForProbe->GetBuffer(
+                        0,IID_PPV_ARGS(&nativeLowerBuffer)))&&
+                       nativeLowerBuffer)
+                        nativeLowerBuffer->GetDevice(IID_PPV_ARGS(&nativeLowerDevice));
+                    if(nativeQueueForProbe)nativeQueueForProbe->GetDevice(
+                        IID_PPV_ARGS(&routeQueueDevice));
+                    std::cout<<"Colour device identities reshade/lower/native/route="<<
+                        sameIdentity(reshadeDevice.Get(),lowerDevice.Get())<<'/'<<
+                        sameIdentity(reshadeDevice.Get(),nativeLowerDevice.Get())<<'/'<<
+                        sameIdentity(reshadeDevice.Get(),routeQueueDevice.Get())<<'/'<<
+                        sameIdentity(lowerDevice.Get(),nativeLowerDevice.Get())<<'/'<<
+                        sameIdentity(lowerDevice.Get(),routeQueueDevice.Get())<<'\n';
+                    if(reshadeDevice&&lowerDevice&&nativeLowerDevice)
+                        std::cout<<"Colour device LUID reshade/lower/native="<<
+                            reshadeDevice->GetAdapterLuid().HighPart<<':'<<
+                            reshadeDevice->GetAdapterLuid().LowPart<<'/'<<
+                            lowerDevice->GetAdapterLuid().HighPart<<':'<<
+                            lowerDevice->GetAdapterLuid().LowPart<<'/'<<
+                            nativeLowerDevice->GetAdapterLuid().HighPart<<':'<<
+                            nativeLowerDevice->GetAdapterLuid().LowPart<<'\n';
+                } else std::cout<<"Colour ReShade native queue QI failed\n";
+                break;
+            }
+        }
+    }
     const auto& diagnostics=static_cast<rk::FgD3D11SwapFacade*>(callback.facade.Get())->diagnostics();
     const auto report=[&] {
         std::cout<<"Bridge copy="<<diagnostics.copyPhase()<<" hr=0x"<<std::hex<<
@@ -473,8 +841,45 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     for(unsigned frame=1;frame<120;++frame) {
         if(trace)trace->nextFrame(frame);
         const float next[4]{frame%2?1.f:0.f,frame%3?0.f:1.f,0.f,1.f};
-        context->ClearRenderTargetView(view.Get(),next);
+        if(colourTrace)uploadPattern(context.Get(),colour.Get());
+        else context->ClearRenderTargetView(view.Get(),next);
+        void* reenabledRuntime{};
+        if(effectOwner&&trace&&frame==100) {
+            std::lock_guard lock(trace->mutex);
+            for(unsigned index=0;index<trace->count;++index) {
+                if(trace->runtimes[index].api!=0xc000)continue;
+                reenabledRuntime=trace->runtimes[index].identity;
+                auto** runtimeTable=*reinterpret_cast<void***>(reenabledRuntime);
+                reinterpret_cast<void(*)(void*,bool)>(runtimeTable[61])(
+                    reenabledRuntime,true);
+                break;
+            }
+            if(!reenabledRuntime)return 50;
+        }
+        const bool capture=colourTrace&&frame==100;
+        const auto source=capture?sampleD3D11(d11.Get(),context.Get(),colour.Get()):
+            std::optional<ColourReadback>{};
+        if(capture&&(!source||source->samples!=sourcePattern))return 47;
+        const auto lowerIndex=capture?
+            indexedLowerForProbe->GetCurrentBackBufferIndex():0;
         if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 38;
+        if(reenabledRuntime) {
+            auto** runtimeTable=*reinterpret_cast<void***>(reenabledRuntime);
+            const bool reasserted=!reinterpret_cast<bool(*)(void*)>(
+                runtimeTable[60])(reenabledRuntime)&&effectOwner->reassertions()>0;
+            std::cout<<"Effect suppression direct-toggle reasserted="<<
+                reasserted<<'\n';
+            if(!reasserted)return 50;
+        }
+        if(capture) {
+            const auto afterD11=sampleD3D11(d11.Get(),context.Get(),colour.Get());
+            const auto afterD12=sampleD3D12(lowerForProbe.Get(),
+                lowerQueueForProbe.Get(),lowerIndex);
+            if(!afterD11||!afterD12)return 46;
+            reportColour(0,frame,source->samples,
+                afterD11->samples,afterD12->samples);
+            reportColourStage(0,frame,*source,*afterD11,*afterD12);
+        }
         if(trace)Sleep(30);
     }
     view.Reset();colour.Reset();context->ClearState();context->Flush();
@@ -488,8 +893,24 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
        FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 39;
     for(unsigned frame=0;frame<120;++frame) {
         if(trace)trace->nextFrame(120+frame);
-        context->ClearRenderTargetView(view.Get(),red);
+        if(colourTrace)uploadPattern(context.Get(),colour.Get());
+        else context->ClearRenderTargetView(view.Get(),red);
+        const bool capture=colourTrace&&frame==100;
+        const auto source=capture?sampleD3D11(d11.Get(),context.Get(),colour.Get()):
+            std::optional<ColourReadback>{};
+        if(capture&&(!source||source->samples!=sourcePattern))return 47;
+        const auto lowerIndex=capture?
+            indexedLowerForProbe->GetCurrentBackBufferIndex():0;
         if(FAILED(upper->Present(0,DXGI_PRESENT_ALLOW_TEARING)))return 40;
+        if(capture) {
+            const auto afterD11=sampleD3D11(d11.Get(),context.Get(),colour.Get());
+            const auto afterD12=sampleD3D12(lowerForProbe.Get(),
+                lowerQueueForProbe.Get(),lowerIndex);
+            if(!afterD11||!afterD12)return 46;
+            reportColour(1,120+frame,source->samples,
+                afterD11->samples,afterD12->samples);
+            reportColourStage(1,120+frame,*source,*afterD11,*afterD12);
+        }
         if(trace)Sleep(30);
     }
     view.Reset();colour.Reset();context->ClearState();context->Flush();
@@ -499,8 +920,18 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     std::cout<<"facade released\n";
     wrapper.Reset();
     std::cout<<"wrapper released\n";
+    indexedLowerForProbe.Reset();lowerForProbe.Reset();
+    nativeLowerForProbe.Reset();lowerQueueForProbe.Reset();
+    nativeQueueForProbe.Reset();
+    reshadeQueueForProbe.Reset();
     route.reset();
     std::cout<<"route shutdown\n";
+    if(effectOwner) {
+        std::cout<<"Effect suppression D3D12 init="<<
+            effectOwner->suppressedInits()<<" failures=0 reassertions="<<
+            effectOwner->reassertions()<<'\n';
+        effectOwner.reset();
+    }
     context.Reset();d11.Reset();
     std::cout<<"D3D11 released\n";
     adapter.Reset();
@@ -514,9 +945,19 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
 int wmain(int argc,wchar_t** argv) {
     std::cout.setf(std::ios::unitbuf);
     if(argc<3||argc>6)return 1;
-    const bool failAfterSrv=argc==6&&std::wcscmp(argv[5],L"fail-after-srv")==0;
-    const bool effectTrace=argc==6&&std::wcscmp(argv[5],L"effect-trace")==0;
-    if(argc==6&&!failAfterSrv&&!effectTrace)return 1;
+    const bool failAfterSrv=argc==6&&
+        (std::wcscmp(argv[5],L"fail-after-srv")==0||
+         std::wcscmp(argv[5],L"single-owner-early-fail")==0);
+    const bool suppressD3D12=argc==6&&
+        (std::wcscmp(argv[5],L"colour-single-d3d11")==0||
+         std::wcscmp(argv[5],L"single-owner-registration")==0||
+         std::wcscmp(argv[5],L"single-owner-early-fail")==0);
+    const bool colourTrace=argc==6&&
+        (std::wcscmp(argv[5],L"colour-single-d3d11")==0||
+         std::wcscmp(argv[5],L"colour-trace")==0);
+    const bool effectTrace=colourTrace||
+        (argc==6&&std::wcscmp(argv[5],L"effect-trace")==0);
+    if(argc==6&&!failAfterSrv&&!effectTrace&&!suppressD3D12)return 1;
     if(argc>=4&&std::wcscmp(argv[3],L"-")!=0) {
         const auto hash=rk::sha256File(argv[3]);
         const auto& profile=rk::steamFactoryInlineProfile();
@@ -529,7 +970,7 @@ int wmain(int argc,wchar_t** argv) {
         std::cout<<"Exact Steam overlay preloaded for the factory-chain probe\n";
     } else std::cout<<"No Steam overlay preload; pristine native factory required\n";
     try {return run(argv[1],argv[2],argc>=5?argv[4]:nullptr,
-        failAfterSrv,effectTrace);}
+        failAfterSrv,effectTrace,colourTrace,suppressD3D12);}
     catch(const std::exception& error) {
         std::cerr<<error.what()<<'\n';return 2;
     }

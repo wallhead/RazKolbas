@@ -27,6 +27,19 @@ public:
         bool nativeMethodOwner) noexcept;
     const FgPrivateSwapAdmission& admission() const noexcept {return expected_;}
     bool issued() const noexcept {return issued_.load(std::memory_order_acquire);}
+    // Offline probe only: retain the exact lower swap and its submission
+    // queue while this route remains alive. No game caller uses this path.
+    bool inspectLowerForProbe(
+        Microsoft::WRL::ComPtr<IDXGISwapChain4>& swap,
+        Microsoft::WRL::ComPtr<ID3D12CommandQueue>& queue) const noexcept {
+        if(!issued()||!lower_||!queue_)return false;
+        swap=lower_;queue=queue_;
+        return true;
+    }
+    Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>>
+        inspectNativeLowerForProbe() const noexcept;
+    Result<Microsoft::WRL::ComPtr<ID3D12CommandQueue>>
+        inspectNativeQueueForProbe() const noexcept;
     void abandon() noexcept {
         std::scoped_lock lock(mutex_);
         if(!issued())retire();

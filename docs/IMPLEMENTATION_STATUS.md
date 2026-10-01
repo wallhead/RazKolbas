@@ -5837,3 +5837,30 @@ pass or FPS cause in Skyrim. See
 `docs/re/FG_RESHADE_EFFECT_EXECUTION_2026-10-01.md`. **Installed private
 route Off; FG Off; game FG-On: NOT RUN.** Next is ordered midtone pixel capture
 at each effect/copy stage before changing the game route.
+
+0.1.145 single-effect-owner checkpoint: four-patch midtone readbacks and
+ReShade's own D3D12 screenshot API exposed a second colour transform after
+the private route's D3D11 output. The exact ENB/ReShade reproduction showed
+similar final RGB after either one of the two preset stages, but a larger
+change when both were active. A hash-gated ReShade 6.8 add-on lease now keeps
+the D3D11 preset as the only private-route effect owner. It suppresses the
+lower D3D12 runtime at initialization and resize, and reasserts Off at the
+begin-effects callback before any technique can render if another add-on
+enables it. Registration or suppression failure keeps the native swap path.
+The real add-on registration path, 240 Presents, resize, exact Steam overlay,
+direct re-enable and intentional early cleanup passed offline. Full Release
+and Debug builds/CTest passed **65/65** and **60/60**; 0.1.145 Release/Debug
+plugin rebuilds passed. See
+`docs/re/FG_RESHADE_SINGLE_EFFECT_OWNER_2026-10-01.md` for pixel values,
+hashes, raw-output locations and limits.
+
+With Skyrim closed, 0.1.145 was staged and installed in the V5.4 MO2 mod.
+The installed payload passes **14/14** manifest hashes; prior DLL, INI and
+manifest are backed up. FG remains **Off**, the brighter reduced-loading
+route remains On, and only the private-route diagnostic flag changed from
+Off to On. **0.1.145 game image, UI, loading artwork and FPS: NOT RUN. Actual
+game FG-On: NOT RUN.** The next action requires the user to start Skyrim
+through MO2, load the same save at the same viewpoint, report colour and
+steady FPS, then fast-travel once and report loading-artwork brightness and
+sharpness. Do not infer that the earlier ten-FPS gap is resolved from the
+offline colour correction.

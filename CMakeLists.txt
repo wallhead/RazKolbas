@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(RazKolbas VERSION 0.1.144 LANGUAGES C CXX)
+project(RazKolbas VERSION 0.1.145 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -111,6 +111,7 @@ if(WIN32)
       src/backends/fg/FgStreamlineSubmit.cpp
       src/backends/fg/FgStreamlineFrameSession.cpp
       src/backends/fg/FgStreamlineInputLease.cpp
+      src/backends/fg/FgReShadeEffectOwner.cpp
       src/backends/fg/FgPrivateSwapRoute.cpp
       src/backends/dlss/FgStreamlineTags.cpp)
     target_include_directories(rk_fg_streamline PUBLIC include)
