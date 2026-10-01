@@ -29,6 +29,7 @@ FgCopyStatus classifyFgCopyStatus(std::uint64_t completed,
 // Holds the interop devices, queue and fences when work has uncertain
 // retirement and its shared surfaces must outlive the bridge object.
 struct FgInteropLifetime {
+    std::shared_ptr<void> providerLifetime;
     Microsoft::WRL::ComPtr<ID3D11Device5> d11;
     Microsoft::WRL::ComPtr<ID3D12Device> d12;
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
@@ -58,7 +59,8 @@ struct FgCopyPair {
 class FgSharedInputs {
 public:
     static Result<std::unique_ptr<FgSharedInputs>> create(ID3D11Device* d11,
-        ID3D12Device* d12,ID3D12CommandQueue* queue);
+        ID3D12Device* d12,ID3D12CommandQueue* queue,
+        std::shared_ptr<void> providerLifetime=nullptr);
     Result<FgSharedSurface> makeSurface(const D3D11_TEXTURE2D_DESC& desc) const;
     Result<FgSourceLease> captureSource(ID3D11Texture2D* source) const;
     Result<FgSourceLease> captureSource(const FgD3D11AuxSwapSource& source) const;
@@ -78,6 +80,7 @@ public:
     FgInteropLifetime retainLifetime() const noexcept;
 private:
     FgSharedInputs()=default;
+    std::shared_ptr<void> providerLifetime_;
     Result<FgCopyTicket> copyImpl(ID3D11DeviceContext* context,
         ID3D11Texture2D* source,const FgSharedSurface& target);
     Microsoft::WRL::ComPtr<ID3D11Device5> d11_;

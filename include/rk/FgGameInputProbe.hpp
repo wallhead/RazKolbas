@@ -16,6 +16,15 @@ public:
     static Result<std::unique_ptr<FgGameInputProbe>> begin(
         ID3D11Device* device,ID3D11DeviceContext* context,
         const FgGameInputCandidate& candidate);
+    // The caller supplies the verified native presentation device/queue.
+    // The caller proves this queue created the lower swap; this method checks
+    // queue/device identity only. No replacement device is created. Retain the provider through copies,
+    // including process-lifetime quarantine of uncertain work.
+    static Result<std::unique_ptr<FgGameInputProbe>> beginOnOwner(
+        ID3D11Device* device,ID3D11DeviceContext* context,
+        ID3D12Device* nativeDevice,ID3D12CommandQueue* nativeQueue,
+        std::shared_ptr<void> providerLifetime,
+        const FgGameInputCandidate& candidate);
     Result<FgCopyTicket> enqueue(ID3D11DeviceContext* context,
         const FgGameInputCandidate& candidate);
     // Metadata-only admission for the pending copied lease. This does not
@@ -33,6 +42,7 @@ public:
     FgCopyTicket copyTicket() const noexcept { return ticket_; }
 private:
     FgGameInputProbe()=default;
+    std::shared_ptr<void> providerLifetime_;
     Microsoft::WRL::ComPtr<ID3D12Device> d12_;
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;
     std::unique_ptr<FgSharedInputs> bridge_;

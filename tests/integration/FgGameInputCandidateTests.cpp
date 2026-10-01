@@ -225,3 +225,72 @@ TEST_CASE("FG game probe completes the sampled five-input copy without provider 
     REQUIRE(std::holds_alternative<rk::Error>(
         probe->enqueue(f.context.Get(),next)));
 }
+
+TEST_CASE("FG game copy binds the exact presentation device and direct queue",
+    "[fg_game_inputs]") {
+    Fixture f;
+    ComPtr<IDXGIDevice> dxgi;
+    ComPtr<IDXGIAdapter> adapter;
+    REQUIRE(SUCCEEDED(f.device.As(&dxgi)));
+    REQUIRE(SUCCEEDED(dxgi->GetAdapter(&adapter)));
+    ComPtr<ID3D12Device> d12;
+    REQUIRE(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
+        IID_PPV_ARGS(&d12))));
+    D3D12_COMMAND_QUEUE_DESC desc{};
+    desc.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
+    ComPtr<ID3D12CommandQueue> queue;
+    REQUIRE(SUCCEEDED(d12->CreateCommandQueue(&desc,IID_PPV_ARGS(&queue))));
+    const auto paired=rk::pairFgGameInputs(f.world,f.ui);
+    REQUIRE(std::holds_alternative<rk::FgGameInputCandidate>(paired));
+    const auto& packet=std::get<rk::FgGameInputCandidate>(paired);
+    auto lifetime=std::make_shared<int>(1);
+    std::weak_ptr<int> weak=lifetime;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::FgGameInputProbe::beginOnOwner(f.device.Get(),f.context.Get(),
+            nullptr,queue.Get(),lifetime,packet)));
+    desc.Type=D3D12_COMMAND_LIST_TYPE_COPY;
+    ComPtr<ID3D12CommandQueue> copyQueue;
+    REQUIRE(SUCCEEDED(d12->CreateCommandQueue(&desc,IID_PPV_ARGS(&copyQueue))));
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::FgGameInputProbe::beginOnOwner(f.device.Get(),f.context.Get(),
+            d12.Get(),copyQueue.Get(),lifetime,packet)));
+    auto started=rk::FgGameInputProbe::beginOnOwner(f.device.Get(),
+        f.context.Get(),d12.Get(),queue.Get(),lifetime,packet);
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgGameInputProbe>>(started));
+    auto probe=std::move(std::get<std::unique_ptr<rk::FgGameInputProbe>>(started));
+    lifetime.reset();
+    REQUIRE_FALSE(weak.expired());
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    auto status=probe->poll();
+    while(status==rk::FgGameCopyState::Pending&&
+          std::chrono::steady_clock::now()<deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        status=probe->poll();
+    }
+    REQUIRE(status==rk::FgGameCopyState::Complete);
+    REQUIRE(probe->close());
+    probe.reset();
+    REQUIRE(weak.expired());
+
+    // A resize/destructor may abandon a copy whose exact queue is still
+    // blocked. The ring must quarantine the runtime with its GPU owners.
+    ComPtr<ID3D12Fence> gate;
+    REQUIRE(SUCCEEDED(d12->CreateFence(0,D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&gate))));
+    REQUIRE(SUCCEEDED(queue->Wait(gate.Get(),1)));
+    struct Unblock { ID3D12Fence* fence;~Unblock(){fence->Signal(1);} } unblock{gate.Get()};
+    lifetime=std::make_shared<int>(2);
+    weak=lifetime;
+    const auto prior=rk::FgInputLeaseRing::quarantinedOwners();
+    started=rk::FgGameInputProbe::beginOnOwner(f.device.Get(),f.context.Get(),
+        d12.Get(),queue.Get(),lifetime,packet);
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgGameInputProbe>>(started));
+    probe=std::move(std::get<std::unique_ptr<rk::FgGameInputProbe>>(started));
+    REQUIRE(probe->poll()==rk::FgGameCopyState::Pending);
+    REQUIRE_FALSE(probe->close());
+    lifetime.reset();
+    probe.reset();
+    REQUIRE(rk::FgInputLeaseRing::quarantinedOwners()==prior+1);
+    REQUIRE_FALSE(weak.expired());
+    REQUIRE(SUCCEEDED(gate->Signal(1)));
+}

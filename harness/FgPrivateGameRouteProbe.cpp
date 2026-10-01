@@ -1,4 +1,5 @@
 #include "rk/FgPrivateSwapRoute.hpp"
+#include "rk/FgGameInputProbe.hpp"
 #include "rk/FgReShadeEffectOwner.hpp"
 #include "rk/FgD3D11SwapFacade.hpp"
 #include "rk/FactoryCreateTrace.hpp"
@@ -16,6 +17,8 @@
 #include <optional>
 #include <variant>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 using Microsoft::WRL::ComPtr;
 namespace {
@@ -257,6 +260,70 @@ bool sameIdentity(IUnknown* first,IUnknown* second) noexcept {
     ComPtr<IUnknown> a,b;
     return first&&second&&SUCCEEDED(first->QueryInterface(IID_PPV_ARGS(&a)))&&
         SUCCEEDED(second->QueryInterface(IID_PPV_ARGS(&b)))&&a.Get()==b.Get();
+}
+bool exerciseOwnerCopies(ID3D11Device* device,ID3D11DeviceContext* context,
+    const rk::FgPresentationInputOwner& owner) {
+    const rk::Extent size{owner.description.BufferDesc.Width,
+        owner.description.BufferDesc.Height};
+    rk::FgWorldGuideFrame world{};
+    world.frame.generation=1;world.frame.resetEpoch=1;
+    world.frame.render=size;world.frame.display=size;
+    world.frame.worldActive=true;
+    rk::FgUiPlaneFrame ui{};
+    ui.generation=1;ui.resetEpoch=1;ui.display=size;
+    ui.uiRegion={0,0,static_cast<LONG>(size.width),static_cast<LONG>(size.height)};
+    const auto make=[&](DXGI_FORMAT format,ComPtr<ID3D11Texture2D>& texture) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width=size.width;desc.Height=size.height;
+        desc.MipLevels=1;desc.ArraySize=1;desc.SampleDesc.Count=1;
+        desc.Format=format;desc.Usage=D3D11_USAGE_DEFAULT;
+        desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+        return SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&texture));
+    };
+    if(!make(DXGI_FORMAT_R32_FLOAT,world.depth)||
+       !make(DXGI_FORMAT_R16G16_FLOAT,world.motion)||
+       !make(DXGI_FORMAT_R8G8B8A8_UNORM,world.hudless)||
+       !make(DXGI_FORMAT_R8G8B8A8_UNORM,ui.hudless)||
+       !make(DXGI_FORMAT_R8G8B8A8_UNORM,ui.uiColorAlpha)||
+       !make(DXGI_FORMAT_R8G8B8A8_UNORM,ui.finalColor))return false;
+    std::unique_ptr<rk::FgGameInputProbe> probe;
+    for(unsigned n=1;n<=8;++n) {
+        world.frame.source=n;world.frame.presentToken=n;
+        ui.source=n;ui.presentToken=n;
+        const rk::FgResourceStamp stamp{n,1,size,true,1};
+        ui.hudlessStamp=stamp;ui.uiStamp=stamp;ui.finalStamp=stamp;
+        auto pair=rk::pairFgGameInputs(world,ui);
+        if(const auto* error=std::get_if<rk::Error>(&pair)) {
+            std::cout<<"Game route owner pair failed: "<<error->message<<'\n';
+            return false;
+        }
+        const auto& candidate=std::get<rk::FgGameInputCandidate>(pair);
+        if(!probe) {
+            auto result=rk::FgGameInputProbe::beginOnOwner(device,context,
+                owner.nativeDevice.Get(),owner.nativeQueue.Get(),owner.runtime,
+                candidate);
+            if(const auto* error=std::get_if<rk::Error>(&result)) {
+                std::cout<<"Game route owner copy failed: "<<error->message<<'\n';
+                return false;
+            }
+            probe=std::move(std::get<std::unique_ptr<rk::FgGameInputProbe>>(result));
+        } else if(std::holds_alternative<rk::Error>(probe->enqueue(context,candidate)))
+            return false;
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        auto state=probe->poll();
+        while(state==rk::FgGameCopyState::Pending&&
+              std::chrono::steady_clock::now()<deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            state=probe->poll();
+        }
+        if(state!=rk::FgGameCopyState::Complete)return false;
+        const auto ticket=probe->copyTicket();
+        std::cout<<"Game route exact-owner copy="<<n<<" producer="<<
+            ticket.producer<<" copy="<<ticket.copy<<" complete=1\n";
+    }
+    const bool clean=probe->close();
+    std::cout<<"Game route exact-owner copies=8 clean="<<clean<<'\n';
+    return clean;
 }
 std::optional<std::array<unsigned char,4>> firstPixel(
     ID3D11Device* device,ID3D11DeviceContext* context,
@@ -552,6 +619,7 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     }
     auto route=std::move(std::get<std::unique_ptr<rk::FgPrivateSwapRoute>>(
         prepared));
+    if(!std::holds_alternative<rk::Error>(route->acquireInputOwner()))return 53;
     if(effectOwner) {
         if(!effectOwner->initialSuppressed())return 49;
         effectOwner->commit();
@@ -681,6 +749,41 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     if(!std::holds_alternative<bool>(restored)||
        !std::holds_alternative<bool>(wrapperRestored)||FAILED(created)||!upper||
        callback.substitutions!=1||wrapperCalls!=1||!route->issued())return 22;
+    auto ownerResult=route->acquireInputOwner();
+    if(const auto* error=std::get_if<rk::Error>(&ownerResult)) {
+        std::cout<<"Game route input owner unavailable: "<<error->message<<'\n';
+        ComPtr<IDXGISwapChain4> proxy;
+        ComPtr<ID3D12CommandQueue> queue;
+        const auto nativeResult=route->inspectNativeLowerForProbe();
+        if(route->inspectLowerForProbe(proxy,queue)&&
+           std::holds_alternative<ComPtr<IDXGISwapChain4>>(nativeResult)) {
+            const auto& native=std::get<ComPtr<IDXGISwapChain4>>(nativeResult);
+            for(auto* current:{proxy.Get(),native.Get()}) {
+                DXGI_SWAP_CHAIN_DESC desc{};
+                const auto hr=current->GetDesc(&desc);
+                std::cout<<"Owner descriptor proxy="<<(current==proxy.Get())<<
+                    " hr="<<static_cast<unsigned>(hr)<<
+                    " width="<<desc.BufferDesc.Width<<" height="<<desc.BufferDesc.Height<<
+                    " format="<<desc.BufferDesc.Format<<" buffers="<<desc.BufferCount<<
+                    " effect="<<desc.SwapEffect<<" window="<<desc.OutputWindow<<'\n';
+            }
+        }
+        return 51;
+    }
+    auto inputOwner=std::get<rk::FgPresentationInputOwner>(std::move(ownerResult));
+    ComPtr<ID3D12Device> ownerQueueDevice,ownerLowerDevice;
+    if(!inputOwner.runtime||!inputOwner.nativeDevice||!inputOwner.nativeQueue||
+       !inputOwner.lower||!inputOwner.nativeLower||
+       FAILED(inputOwner.nativeQueue->GetDevice(IID_PPV_ARGS(&ownerQueueDevice)))||
+       FAILED(inputOwner.nativeLower->GetDevice(IID_PPV_ARGS(&ownerLowerDevice)))||
+       !sameIdentity(ownerQueueDevice.Get(),inputOwner.nativeDevice.Get())||
+       !sameIdentity(ownerLowerDevice.Get(),inputOwner.nativeDevice.Get()))return 52;
+    std::cout<<"Game route input owner exactDeviceQueue=1 runtimeRetained=1\n";
+    std::cout<<"Game route owner buffer domains proxy="<<inputOwner.description.BufferCount<<
+        " native="<<inputOwner.nativeDescription.BufferCount<<'\n';
+    if(inputOwner.description.BufferCount!=3||inputOwner.nativeDescription.BufferCount!=2)
+        return 55;
+    if(!exerciseOwnerCopies(d11.Get(),context.Get(),inputOwner))return 54;
     ComPtr<IDXGISwapChain4> lowerForProbe;
     ComPtr<IDXGISwapChain4> nativeLowerForProbe;
     ComPtr<ID3D12CommandQueue> nativeQueueForProbe;
@@ -889,6 +992,19 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     DXGI_SWAP_CHAIN_DESC after{};
     if(FAILED(upper->GetDesc(&after))||after.BufferDesc.Width!=192||
        after.BufferDesc.Height!=108)return 26;
+    ownerResult=route->acquireInputOwner();
+    if(const auto* error=std::get_if<rk::Error>(&ownerResult)) {
+        std::cout<<"Game route resized input owner failed: "<<error->message<<'\n';
+        return 56;
+    }
+    inputOwner=std::get<rk::FgPresentationInputOwner>(std::move(ownerResult));
+    if(inputOwner.description.BufferDesc.Width!=192||
+       inputOwner.description.BufferDesc.Height!=108||
+       inputOwner.nativeDescription.BufferDesc.Width!=192||
+       inputOwner.nativeDescription.BufferDesc.Height!=108||
+       inputOwner.description.BufferCount!=3||inputOwner.nativeDescription.BufferCount!=2)
+        return 57;
+    std::cout<<"Game route resized input owner=1 proxyBuffers=3 nativeBuffers=2\n";
     if(FAILED(upper->GetBuffer(0,IID_PPV_ARGS(&colour)))||
        FAILED(d11->CreateRenderTargetView(colour.Get(),nullptr,&view)))return 39;
     for(unsigned frame=0;frame<120;++frame) {
@@ -924,6 +1040,8 @@ int run(const wchar_t* runtimeDirectory,const wchar_t* reshadePath,
     nativeLowerForProbe.Reset();lowerQueueForProbe.Reset();
     nativeQueueForProbe.Reset();
     reshadeQueueForProbe.Reset();
+    inputOwner={};
+    ownerQueueDevice.Reset();ownerLowerDevice.Reset();
     route.reset();
     std::cout<<"route shutdown\n";
     if(effectOwner) {

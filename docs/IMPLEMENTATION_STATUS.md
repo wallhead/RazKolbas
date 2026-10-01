@@ -6376,8 +6376,40 @@ byte-identical. The user-started 0.1.155 run captured eight valid metadata
 packets and eight completed copies, source/Present 57872 through 57886,
 producer/copy fences 1 through 8. The session closed cleanly with zero
 metadata rejection, copy failure, SR suspension or sampled failed Present.
-Later Present observations report occlusion with no failure. The user's
-image/UI/FPS assessment is still pending; log identity is in the report.
+Later Present observations report occlusion with no failure. The user
+confirmed normal image/UI/FPS and closed Skyrim; log identity is in the report.
 **0.1.155 eight-frame game metadata/copy trial: RUN/PASS. Visual/FPS check:
-PENDING. FG-On/generated Skyrim frames: NOT RUN.** Next: connect the copied
+RUN/PASS (qualitative). FG-On/generated Skyrim frames: NOT RUN.** Next: connect the copied
 lease to the actual lower presentation owner and provider retirement.
+
+## Source/installed 0.1.156 exact presentation input owner (2026-10-01)
+
+The game copy callback now uses the issued private presentation owner's
+verified native D3D12 device/direct queue when attached. The endpoint pins
+Streamline, validates exact device COM identities, and records proxy/native
+swap descriptions separately (the pinned runtime exposes 3/2 buffers).
+Attached-owner failure stops the copy; only route absence can use a labelled
+companion diagnostic. Pending-copy quarantine retains the runtime with its
+GPU owners. Normal close releases GPU interfaces before the runtime pin.
+
+Test-first APIs, WARP rejection/retention/quarantine tests and independent
+subagent review completed. Release build/CTest passed **70/70** and Debug
+**65/65**. The exact ENB/ReShade hardware reproduction passed with and
+without Steam overlay: eight copies on the verified presentation queue,
+240 Presents, resize/owner reacquisition, full colour equality at both
+sampled sizes, zero duplicate effect execution and clean process exit.
+The standalone synthetic FG-On regression still reported two presented
+frames and complete input retirement for all eight source frames. An early
+harness teardown failure and the measured proxy/native buffer-count
+distinction were diagnosed and corrected; details/log identities are in
+`docs/re/FG_EXACT_PRESENTATION_INPUT_OWNER_2026-10-01.md`.
+
+Skyrim was closed. Previous install and new stage each verified **14/14**;
+INI/DLL/manifest were backed up and replaced, and installed 0.1.156 verified
+**14/14**. The only INI change enables `ProbeFgPrivateSwapOff` for this
+startup owner trial; requested FG remains Off and SR/NR/loading settings
+remain unchanged. **0.1.156 Skyrim exact-owner trial: NOT RUN.
+FG-On/generated Skyrim frames: NOT RUN.** Next: user-started MO2 save load
+for the exact-owner log, eight metadata/copy completions and normal
+image/UI/FPS; then join verified game phase markers, continuous eligible
+inputs and actual provider/Present/allocator retirement on this owner.

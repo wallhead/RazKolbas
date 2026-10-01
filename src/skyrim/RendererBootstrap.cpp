@@ -1657,6 +1657,30 @@ ID3D11Texture2D* activeOwnedSceneTexture() noexcept {
 bool ownedScenePreviouslyActive() noexcept {
     return ownedEverActive.load(std::memory_order_acquire);
 }
+#ifdef RK_WITH_STREAMLINE
+Result<FgPresentationInputOwner> acquireGameFgInputOwner(
+    IDXGISwapChain* outer,Extent display) noexcept {
+    auto* buffers=bufferTrace.load(std::memory_order_acquire);
+    auto* factory=factoryTrace.load(std::memory_order_acquire);
+    auto* route=factory?factory->privateFgRoute.load(std::memory_order_acquire):nullptr;
+    if(!route)
+        return Error{ErrorCode::Unavailable,"No private FG presentation route attached"};
+    if(!outer||!buffers||buffers->outerSwap!=outer||
+       !buffers->ownedArmed.load(std::memory_order_acquire)||
+       buffers->cleanupPending.load(std::memory_order_acquire))
+        return Error{ErrorCode::Conflict,
+            "FG input owner is not attached to this active game swap"};
+    auto owner=route->acquireInputOwner();
+    if(const auto* error=std::get_if<Error>(&owner))
+        return Error{ErrorCode::Conflict,"Attached FG input owner rejected: "+error->message};
+    if(auto* endpoint=std::get_if<FgPresentationInputOwner>(&owner);
+       endpoint&&(endpoint->description.BufferDesc.Width!=display.width||
+                  endpoint->description.BufferDesc.Height!=display.height))
+        return Error{ErrorCode::Conflict,
+            "FG input owner display differs from this game resource generation"};
+    return owner;
+}
+#endif
 Result<bool> installOwnedRendererRectHook(HMODULE game,
     std::string_view verifiedGameHash,const Settings& settings) {
     constexpr std::string_view id="skyrim1170.renderer-client-rect-v1";

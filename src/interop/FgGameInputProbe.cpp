@@ -27,19 +27,42 @@ Result<std::unique_ptr<FgGameInputProbe>> FgGameInputProbe::begin(
        FAILED(dxgi->GetAdapter(&adapter)))
         return Error{ErrorCode::Unavailable,
             "FG game copy cannot identify the render adapter"};
-    auto probe=std::unique_ptr<FgGameInputProbe>(new FgGameInputProbe);
+    ComPtr<ID3D12Device> d12;
     if(FAILED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
-        IID_PPV_ARGS(&probe->d12_))))
+        IID_PPV_ARGS(&d12))))
         return Error{ErrorCode::Unavailable,
             "FG game copy cannot create a same-adapter D3D12 device"};
     D3D12_COMMAND_QUEUE_DESC queueDesc{};
     queueDesc.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
-    if(FAILED(probe->d12_->CreateCommandQueue(&queueDesc,
-        IID_PPV_ARGS(&probe->queue_))))
+    ComPtr<ID3D12CommandQueue> queue;
+    if(FAILED(d12->CreateCommandQueue(&queueDesc,
+        IID_PPV_ARGS(&queue))))
         return Error{ErrorCode::Unavailable,
             "FG game copy cannot create the companion direct queue"};
-    auto bridge=FgSharedInputs::create(device,probe->d12_.Get(),
-        probe->queue_.Get());
+    return beginOnOwner(device,context,d12.Get(),queue.Get(),nullptr,candidate);
+}
+Result<std::unique_ptr<FgGameInputProbe>> FgGameInputProbe::beginOnOwner(
+    ID3D11Device* device,ID3D11DeviceContext* context,
+    ID3D12Device* nativeDevice,ID3D12CommandQueue* nativeQueue,
+    std::shared_ptr<void> providerLifetime,
+    const FgGameInputCandidate& candidate) {
+    ComPtr<ID3D11Device> contextDevice;
+    if(context)context->GetDevice(&contextDevice);
+    ComPtr<ID3D12Device> queueDevice;
+    if(!device||!context||
+       context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE||
+       !sameObject(device,contextDevice.Get())||!nativeDevice||!nativeQueue||
+       nativeQueue->GetDesc().Type!=D3D12_COMMAND_LIST_TYPE_DIRECT||
+       FAILED(nativeQueue->GetDevice(IID_PPV_ARGS(&queueDevice)))||
+       !sameObject(nativeDevice,queueDevice.Get()))
+        return Error{ErrorCode::Conflict,
+            "FG input copy requires the exact native presentation device/direct queue"};
+    auto probe=std::unique_ptr<FgGameInputProbe>(new FgGameInputProbe);
+    probe->d12_=nativeDevice;
+    probe->queue_=nativeQueue;
+    probe->providerLifetime_=providerLifetime;
+    auto bridge=FgSharedInputs::create(device,nativeDevice,nativeQueue,
+        std::move(providerLifetime));
     if(const auto* error=std::get_if<Error>(&bridge))return *error;
     probe->bridge_=std::move(std::get<std::unique_ptr<FgSharedInputs>>(
         bridge));
@@ -112,6 +135,8 @@ bool FgGameInputProbe::close() noexcept {
     if(!ring_->stop({generation_,0,0,0,0,0}))return false;
     ring_.reset();
     bridge_.reset();
+    queue_.Reset();d12_.Reset();
+    providerLifetime_.reset();
     return true;
 }
 }

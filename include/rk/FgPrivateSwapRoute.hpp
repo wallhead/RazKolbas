@@ -13,6 +13,19 @@
 namespace rk {
 struct FgBridgeCpuSample;
 using FgBridgeCpuReporter=void(*)(void*,const FgBridgeCpuSample&) noexcept;
+// A retained snapshot of the issued presentation owner. Native interfaces
+// come from the pinned Streamline API and are verified by COM identity.
+// Reacquire at a current game/resize boundary before using swap metadata.
+struct FgPresentationInputOwner {
+    std::shared_ptr<FgStreamlineRuntime> runtime;
+    Microsoft::WRL::ComPtr<ID3D12Device> nativeDevice;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> nativeQueue;
+    Microsoft::WRL::ComPtr<IDXGISwapChain4> lower,nativeLower;
+    DXGI_SWAP_CHAIN_DESC description{};
+    // Streamline can expose three public buffers over two native buffers.
+    // Each swap's index belongs to its own description, never the other's.
+    DXGI_SWAP_CHAIN_DESC nativeDescription{};
+};
 // Prepared before Skyrim's D3D11 swap creation. The object must outlive the
 // returned facade and every Streamline proxy callback that can reach it.
 class FgPrivateSwapRoute final {
@@ -30,6 +43,7 @@ public:
         void* reporterContext=nullptr) noexcept;
     const FgPrivateSwapAdmission& admission() const noexcept {return expected_;}
     bool issued() const noexcept {return issued_.load(std::memory_order_acquire);}
+    Result<FgPresentationInputOwner> acquireInputOwner() noexcept;
     // Offline probe only: retain the exact lower swap and its submission
     // queue while this route remains alive. No game caller uses this path.
     bool inspectLowerForProbe(

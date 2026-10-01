@@ -32,10 +32,12 @@ bool sameDevice(ID3D11Device* a,ID3D11Device* b) noexcept {
 }
 }
 Result<std::unique_ptr<FgSharedInputs>> FgSharedInputs::create(
-    ID3D11Device* d11,ID3D12Device* d12,ID3D12CommandQueue* queue) {
+    ID3D11Device* d11,ID3D12Device* d12,ID3D12CommandQueue* queue,
+    std::shared_ptr<void> providerLifetime) {
     if(!d11||!d12||!queue)
         return Error{ErrorCode::InvalidInput,"FG interop requires both devices and a D3D12 queue"};
     auto bridge=std::unique_ptr<FgSharedInputs>(new FgSharedInputs);
+    bridge->providerLifetime_=std::move(providerLifetime);
     bridge->id_=nextBridgeId.fetch_add(1,std::memory_order_relaxed);
     if(FAILED(d11->QueryInterface(IID_PPV_ARGS(&bridge->d11_))))
         return Error{ErrorCode::Unsupported,"D3D11 fence interface is unavailable"};
@@ -232,7 +234,7 @@ bool FgSharedInputs::healthy() const noexcept {
         consumerFence_&&consumerFence_->GetCompletedValue()!=UINT64_MAX;
 }
 FgInteropLifetime FgSharedInputs::retainLifetime() const noexcept {
-    return {d11_,d12_,queue_,producerFence_,producerGate_,consumerFence_};
+    return {providerLifetime_,d11_,d12_,queue_,producerFence_,producerGate_,consumerFence_};
 }
 bool FgSharedInputs::producerComplete(std::uint64_t value) const noexcept {
     return producerGate_&&d12_&&classifyFgCopyStatus(

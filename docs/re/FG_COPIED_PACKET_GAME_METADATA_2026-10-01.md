@@ -59,14 +59,15 @@ The captured 0.1.155 session contains zero metadata rejection/unavailable
 records, copy rejection/failure, SR suspension or sampled failed Present.
 Later observations report `DXGI_STATUS_OCCLUDED` (`0x087a0001`) with
 `failed=0`; these are not successful visible-frame measurements. The user
-has not yet separately confirmed image/UI/FPS for this run.
+confirmed normal image/UI/FPS and closed Skyrim after the capture. A process
+check confirmed Skyrim was closed before subsequent offline work.
 
 The ignored snapshot is
 `artifacts/local/fg-copied-metadata-0155-live-snapshot.log`, 25,541,475 bytes,
 SHA-256 `d301429422bd3c667318d189dc12501a0c52c026c158dba38a889c198b5af351`.
 
 **0.1.155 eight-frame Skyrim metadata/copy check: RUN/PASS. User visual/FPS
-check: PENDING. FG-On/generated Skyrim frames: NOT RUN.** A valid metadata
+check: RUN/PASS (qualitative). FG-On/generated Skyrim frames: NOT RUN.** A valid metadata
 line is not provider readiness; the game-owned lower swap, verified
 Streamline phase markers, read transitions and actual
 provider/Present/allocator retirement remain to be joined.

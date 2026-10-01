@@ -56,6 +56,51 @@ bool sameAdapter(ID3D11Device* d11,const LUID& expected) noexcept {
 }
 }
 FgPrivateSwapRoute::~FgPrivateSwapRoute() noexcept {retire();}
+Result<FgPresentationInputOwner> FgPrivateSwapRoute::acquireInputOwner() noexcept {
+    std::scoped_lock lock(mutex_);
+    if(!issued()||!runtime_||!runtime_->initialized()||!lower_||!queue_||
+       !verifiedNative_||!sameIdentity(d12_.Get(),verifiedNative_.Get()))
+        return Error{ErrorCode::Unavailable,
+            "FG presentation input owner is not issued or initialized"};
+    void* queueRaw{};void* lowerRaw{};
+    if(runtime_->getNativeInterface(queue_.Get(),&queueRaw)!=sl::Result::eOk||
+       !queueRaw)
+        return Error{ErrorCode::Unavailable,"FG native presentation queue unavailable"};
+    ComPtr<IUnknown> queueNative;
+    queueNative.Attach(static_cast<IUnknown*>(queueRaw));
+    if(runtime_->getNativeInterface(lower_.Get(),&lowerRaw)!=sl::Result::eOk||
+       !lowerRaw)
+        return Error{ErrorCode::Unavailable,"FG native presentation swap unavailable"};
+    ComPtr<IUnknown> lowerNative;
+    lowerNative.Attach(static_cast<IUnknown*>(lowerRaw));
+    FgPresentationInputOwner owner{};
+    ComPtr<ID3D12Device> queueDevice,lowerDevice,proxyLowerDevice;
+    if(FAILED(queueNative.As(&owner.nativeQueue))||
+       FAILED(lowerNative.As(&owner.nativeLower))||
+       owner.nativeQueue->GetDesc().Type!=D3D12_COMMAND_LIST_TYPE_DIRECT||
+       FAILED(owner.nativeQueue->GetDevice(IID_PPV_ARGS(&queueDevice)))||
+       FAILED(owner.nativeLower->GetDevice(IID_PPV_ARGS(&lowerDevice)))||
+       FAILED(lower_->GetDevice(IID_PPV_ARGS(&proxyLowerDevice)))||
+       !sameIdentity(queueDevice.Get(),verifiedNative_.Get())||
+       !sameIdentity(lowerDevice.Get(),verifiedNative_.Get())||
+       !sameIdentity(proxyLowerDevice.Get(),verifiedNative_.Get())||
+       FAILED(lower_->GetDesc(&owner.description))||
+       FAILED(owner.nativeLower->GetDesc(&owner.nativeDescription))||
+       owner.nativeDescription.BufferDesc.Width!=owner.description.BufferDesc.Width||
+       owner.nativeDescription.BufferDesc.Height!=owner.description.BufferDesc.Height||
+       owner.nativeDescription.BufferDesc.Format!=owner.description.BufferDesc.Format||
+       owner.nativeDescription.BufferCount<2||owner.nativeDescription.BufferCount>4||
+       owner.nativeDescription.SwapEffect!=owner.description.SwapEffect||
+       owner.nativeDescription.OutputWindow!=owner.description.OutputWindow||
+       !owner.description.BufferDesc.Width||!owner.description.BufferDesc.Height||
+       owner.description.BufferCount<2||owner.description.BufferCount>4)
+        return Error{ErrorCode::Conflict,
+            "FG native presentation device, direct queue or swap identity differs"};
+    owner.runtime=runtime_;
+    owner.nativeDevice=verifiedNative_;
+    owner.lower=lower_;
+    return owner;
+}
 Result<ComPtr<IDXGISwapChain4>>
 FgPrivateSwapRoute::inspectNativeLowerForProbe() const noexcept {
     void* nativeRaw{};

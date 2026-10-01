@@ -1,6 +1,10 @@
 #pragma once
 #include "rk/RendererHook.hpp"
 #include "rk/Settings.hpp"
+#include "rk/FrameContracts.hpp"
+#ifdef RK_WITH_STREAMLINE
+#include "rk/FgPrivateSwapRoute.hpp"
+#endif
 namespace rk {
 class OwnedSceneDomain;
 class NativeUiRedirector;
@@ -18,6 +22,12 @@ NativeUiRedirector* ownedUiRedirector() noexcept;
 OwnedSceneDomain* activeOwnedSceneDomain() noexcept;
 ID3D11Texture2D* activeOwnedSceneTexture() noexcept;
 bool ownedScenePreviouslyActive() noexcept;
+#ifdef RK_WITH_STREAMLINE
+// Only the currently attached outer game swap may acquire its exact lower
+// input owner. Call at the serialized pre-Present boundary, after resize.
+Result<FgPresentationInputOwner> acquireGameFgInputOwner(
+    IDXGISwapChain* outer,Extent display) noexcept;
+#endif
 // The verified Renderer::Begin CALL is installed pass-through at startup.
 // Logical reduction is enabled only after the complete owned scene route is
 // prepared at the device-creation boundary.

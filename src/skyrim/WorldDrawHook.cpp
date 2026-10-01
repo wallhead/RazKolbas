@@ -1359,9 +1359,24 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
                         if(state->fgGameInputProbe)
                             queued=state->fgGameInputProbe->enqueue(context,*input);
                         else {
-                            auto started=FgGameInputProbe::begin(
-                                reinterpret_cast<ID3D11Device*>(device),context,
-                                *input);
+                            auto started=[&]() -> Result<std::unique_ptr<FgGameInputProbe>> {
+#ifdef RK_WITH_STREAMLINE
+                                auto owner=acquireGameFgInputOwner(swap,input->frame.display);
+                                if(auto* endpoint=std::get_if<FgPresentationInputOwner>(&owner)) {
+                                    spdlog::info("FG game input copy owner: exact private presentation device/direct queue; pinned runtime retained; FG remains off");
+                                    return FgGameInputProbe::beginOnOwner(
+                                        reinterpret_cast<ID3D11Device*>(device),context,
+                                        endpoint->nativeDevice.Get(),endpoint->nativeQueue.Get(),
+                                        endpoint->runtime,*input);
+                                }
+                                if(const auto* error=std::get_if<Error>(&owner);
+                                   error&&error->code!=ErrorCode::Unavailable)
+                                    return *error;
+#endif
+                                spdlog::info("FG game input copy owner: companion source-only queue; no private presentation owner attached");
+                                return FgGameInputProbe::begin(
+                                    reinterpret_cast<ID3D11Device*>(device),context,*input);
+                            }();
                             if(auto* probe=std::get_if<
                                    std::unique_ptr<FgGameInputProbe>>(&started)) {
                                 state->fgGameInputProbe=std::move(*probe);
