@@ -5874,9 +5874,36 @@ FG-Off private Streamline lower/facade was returned to ReShade. Through the
 observed Present #149400 at 09:12:51, the log reports `failed=0` and active
 owned world submissions. This verifies private-route selection and ongoing
 presentation, not colour equivalence, steady FPS, or loading-artwork quality.
-The same-view FPS and fast-travel visual checks are pending user observations;
-actual game FG-On remains **NOT RUN**.
+At this first live checkpoint, the same-view FPS and fast-travel visual checks
+were pending user observations; actual game FG-On remained **NOT RUN**.
 An ignored live-log snapshot is saved at
 `artifacts/local/fg-single-owner-2026-10-01/runtime-0145/RazKolbas.log`
 (23,561,443 bytes, SHA-256
 `83b1791771a5e11dffc0636c660410c090d43e4fcf7a374f250c5d000a7bbfa3`).
+
+The user completed the same-view and loading checks: with 0.1.145's FG-Off
+private route active, loading artwork was **pixelated** and steady FPS was
+about **10 below the 60-FPS baseline** (approximately 50 FPS). This is a
+user-reported result, not an instrumented frame-time measurement. The final
+closed-session log reaches Present #256800 at 09:42:15 with `failed=0` and
+145,809 owned provider submissions. It is preserved at ignored
+`artifacts/local/fg-single-owner-2026-10-01/runtime-0145/RazKolbas-final.log`
+(23,690,973 bytes; SHA-256
+`d1dcfe1bc534b7af0cc707e445b76beff6a170e2b19b6e05c5e239c747d0df51`).
+The one-effect correction was exercised in Skyrim, but the private route's
+FPS cost remains open. The bright loading workaround still spatially enlarges
+1485x835 artwork to 2560x1440; full-resolution loading repair is open.
+
+After Skyrim exited, the installed 0.1.145 INI was restored to the native
+presentation route by changing **only** `ProbeFgPrivateSwapOff` from `true `
+to `false`. The installed DLL remains SHA-256
+`3e77e5a531a6c44bb2ca232cde81aa9fb7e5f276a8b2ffd209058969e1e768bb`.
+The new INI SHA-256 is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`;
+the manifest SHA-256 is
+`31ea5707019dda3a073ab05ac48ffd7371c0d8c3879d5494033bf6c1f9c3bc57`.
+The prior trial INI and manifest are backed up under ignored
+`artifacts/local/fg-single-owner-2026-10-01/backup-after-0145-trial`, and
+all **14/14** installed payload hashes verify. FG remains Off, the bright
+reduced-loading route remains On, and the user's other INI bytes are retained.
+FPS after this rollback: **NOT RUN**. Game FG-On: **NOT RUN**.

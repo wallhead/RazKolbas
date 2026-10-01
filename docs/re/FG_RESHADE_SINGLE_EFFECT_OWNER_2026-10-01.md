@@ -105,8 +105,31 @@ one lower D3D12 ReShade runtime suppressed, the D3D11 preset retained, and
 the FG-Off private lower/facade returned to ReShade. The observed Present
 #149400 at 09:12:51 reports `failed=0`; owned world submissions are active.
 This is a live route/presentation observation, not a matched colour or FPS
-measurement. Same-view steady FPS and fast-travel loading artwork remain
-pending user report. Actual game FG-On remains **NOT RUN**. The ignored log
+measurement. Same-view steady FPS and fast-travel loading artwork were
+pending at this first checkpoint. Actual game FG-On remains **NOT RUN**. The ignored log
 snapshot is `artifacts/local/fg-single-owner-2026-10-01/runtime-0145/RazKolbas.log`
 (23,561,443 bytes; SHA-256
 `83b1791771a5e11dffc0636c660410c090d43e4fcf7a374f250c5d000a7bbfa3`).
+
+The completed trial report is **pixelated loading artwork** and roughly
+**10 FPS below the prior 60-FPS same-view baseline**. The user's initial
+"seems fine" image report is qualitative; no matched game screenshot or
+pixel comparison proves exact colour parity. The final closed-session log
+reaches Present #256800 at 09:42:15 with `failed=0` and 145,809 owned DLSS
+submissions; its ignored snapshot is `runtime-0145/RazKolbas-final.log`
+(23,690,973 bytes; SHA-256
+`d1dcfe1bc534b7af0cc707e445b76beff6a170e2b19b6e05c5e239c747d0df51`).
+Successful Presents do not explain the ten-FPS private-route cost. Loading
+pixelation is expected from the active 1485x835 spatial loading workaround;
+it is not a full-resolution repair.
+
+After the process exited, only the installed INI private-route flag was
+restored Off, with the same 0.1.145 DLL and FG Off. The installed 14-file
+manifest verifies **14/14**. INI SHA-256 is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`;
+manifest SHA-256 is
+`31ea5707019dda3a073ab05ac48ffd7371c0d8c3879d5494033bf6c1f9c3bc57`.
+The previous trial INI/manifest are in ignored `backup-after-0145-trial`.
+This rollback has **NOT RUN** in Skyrim; a return to 60 FPS is not claimed.
+The private-route cost and full-resolution loading remain open. Actual game
+FG-On remains **NOT RUN**.
