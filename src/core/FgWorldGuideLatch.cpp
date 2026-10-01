@@ -97,4 +97,23 @@ void FgWorldGuideLatch::clear() {
     std::scoped_lock lock(mutex_);
     pending_={};
 }
+Result<bool> attachFgWorldCameraCandidate(FgWorldGuideFrame& packet,
+    const FgCameraProducerSample& producer,std::uint64_t jitterSource,
+    std::uint64_t jitterGeneration,NgxJitter jitter) {
+    const auto& frame=packet.frame;
+    if(packet.cameraCandidate)
+        return Error{ErrorCode::Conflict,"FG camera candidate was already attached"};
+    if(!producer.source||!producer.revision||!producer.writeGeneration||
+       producer.source!=frame.source||jitterSource!=frame.source||
+       jitterGeneration!=frame.generation)
+        return Error{ErrorCode::Conflict,
+            "FG camera write or SR jitter belongs to a different source"};
+    auto candidateFrame=frame;
+    candidateFrame.cameraValid=true;
+    const auto bound=bindFgGameCamera(candidateFrame,producer.camera,jitter,
+        producer.revision,false);
+    if(const auto* error=std::get_if<Error>(&bound))return *error;
+    packet.cameraCandidate=std::get<FgCameraData>(bound);
+    return true;
+}
 }

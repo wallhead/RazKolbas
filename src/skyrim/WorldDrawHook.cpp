@@ -1,6 +1,7 @@
 #include "rk/WorldDrawHook.hpp"
 #include "rk/FgLiveFrameAdmission.hpp"
 #include "rk/FgWorldGuideLatch.hpp"
+#include "rk/FgCameraFramePairer.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/PatchDescriptor.hpp"
@@ -69,6 +70,13 @@ struct WorldState {
     FgRealFrameBoundaries fgFrameBoundaries;
     FgWorldGuideLatch fgWorldGuides;
     std::optional<FgWorldGuideFrame> fgObservedGuides;
+    FgCameraFramePairer fgCameraPairer;
+    std::optional<FgCameraProducerSample> fgCameraProducer;
+    struct FgSourceJitter {
+        std::uint64_t source{},generation{};
+        NgxJitter value{};
+    };
+    std::optional<FgSourceJitter> fgWorldJitter;
     unsigned fgWorldGuideCaptureAttempts{};
     bool probeFgFrameBoundaries{};
     std::atomic<std::uint32_t> fgLiveLastMask{UINT32_MAX};
@@ -1772,6 +1780,10 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                 }
                 const auto token=std::get<std::optional<SrEvaluationToken>>(evaluated);
                 if(!token)return false;
+                if(state->probeFgFrameBoundaries&&state->probeFgCameraWrites)
+                    state->fgWorldJitter=WorldState::FgSourceJitter{
+                        sequence,domain->plan().generation,
+                        std::get<NgxJitter>(renderJitter)};
                 if(state->captureFirstDlssFrame&&!state->ownedSrStageAttempted) {
                     state->ownedSrStageAttempted=true;
                     auto stages=state->srPresenter.captureEvaluated(context,*token);
@@ -2131,7 +2143,10 @@ void observeGameCameraWrites(WorldState* state,std::uint64_t frame,bool beforeUi
         const auto observation=snapshotFgCameraWrites();
         if(beforeUi) {
             state->fgBeforeUiFrame=frame;
-            state->fgBeforeUiWrite=observation.latest;return;
+            state->fgBeforeUiWrite=observation.latest;
+            if(state->probeFgFrameBoundaries)
+                state->fgCameraPairer.beforeUi(frame,observation.latest);
+            return;
         }
         for(unsigned i=state->fgLoggedWriters;i<observation.writerCount;++i) {
             const auto& writer=observation.writers[i];
@@ -2163,6 +2178,9 @@ void observeGameCameraWrites(WorldState* state,std::uint64_t frame,bool beforeUi
             canCompareFgCameraWriteHistory(*state->fgPriorPresentWrite,*current)&&
             state->fgPriorPresentFrame+1==frame&&
             fgGameCameraConsecutive(*state->fgPriorPresentCamera,*decoded);
+        if(state->probeFgFrameBoundaries)
+            state->fgCameraProducer=state->fgCameraPairer.beforePresent(
+                frame,observation.latest);
         state->fgValidCameras+=decoded.has_value();state->fgConsecutiveCameras+=consecutive;
         if(state->fgWriteFrames<=12||frame%600==0)
             spdlog::info("FG camera writes frame {}: buffer=0x{:x} generation={} revision={} completed={} rejected={} writers={} overflow={} fresh={} menuStable={} decoded={} consecutive={}; observedFrames={} freshFrames={} stableFrames={} missingFrames={} validCameras={} consecutiveCameras={}; diagnostic only, no SL token or FG submission",
@@ -3191,18 +3209,42 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             frame.worldActive=!frame.loading&&!frame.paused&&
                 state->displayedMode.load(std::memory_order_acquire)==
                     DisplayMode::DlssSr;
+            if(state->fgObservedGuides) {
+                state->fgObservedGuides->frame=frame;
+                if(frame.worldActive&&state->fgCameraProducer&&
+                   state->fgWorldJitter) {
+                    const auto& jitter=*state->fgWorldJitter;
+                    const auto attached=attachFgWorldCameraCandidate(
+                        *state->fgObservedGuides,
+                        *state->fgCameraProducer,jitter.source,
+                        jitter.generation,jitter.value);
+                    if(const auto* error=std::get_if<Error>(&attached);
+                       error&&(state->fgWorldGuideCaptureAttempts<=3||
+                               boundary.realPresent%600==0))
+                        spdlog::warn("FG camera candidate frame {} rejected: {}",
+                            frame.source,error->message);
+                }
+            }
             const auto inspected=inspectFgLiveFrame(boundary,frame,false);
             const auto prior=state->fgLiveLastMask.exchange(inspected.gaps,
                 std::memory_order_relaxed);
             if(state->fgObservedGuides||boundary.realPresent<=3||
                boundary.realPresent%600==0||
                prior!=inspected.gaps)
-                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} rawWorldGuides={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; raw guides are unconverted, no token or submission",
+                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} rawWorldGuides={} cameraProducer={} srJitter={} cameraCandidate={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; raw guides and camera are unadmitted candidates, no token or submission",
                     boundary.realPresent,boundary.world,frame.generation,
                     frame.loading,frame.paused,
                     static_cast<unsigned>(state->displayedMode.load(
                         std::memory_order_relaxed)),
-                    state->fgObservedGuides.has_value(),inspected.gaps);
+                    state->fgObservedGuides.has_value(),
+                    state->fgCameraProducer&&
+                        state->fgCameraProducer->source==frame.source,
+                    state->fgWorldJitter&&
+                        state->fgWorldJitter->source==frame.source&&
+                        state->fgWorldJitter->generation==frame.generation,
+                    state->fgObservedGuides&&
+                        state->fgObservedGuides->cameraCandidate.has_value(),
+                    inspected.gaps);
         }
         return boundary;
     }catch(...) {return std::nullopt;}
@@ -3215,6 +3257,9 @@ void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
         state->fgFrameBoundaries.reset();
         state->fgWorldGuides.clear();
         state->fgObservedGuides.reset();
+        state->fgCameraPairer.clear();
+        state->fgCameraProducer.reset();
+        state->fgWorldJitter.reset();
     }catch(...) {}
 }
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept {

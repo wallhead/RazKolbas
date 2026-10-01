@@ -1,6 +1,8 @@
 #pragma once
 #include "rk/FgFrameContract.hpp"
 #include "rk/FgRealFrameBoundaries.hpp"
+#include "rk/FgCameraFramePairer.hpp"
+#include "rk/FgCameraGeometry.hpp"
 #include "rk/Result.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -11,7 +13,14 @@ namespace rk {
 struct FgWorldGuideFrame {
     FgSourceFrame frame;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depth,motion,hudless;
+    std::optional<FgCameraData> cameraCandidate;
 };
+
+// Binds a validated producer write and the jitter used by this SR frame to
+// the same real-Present packet. The candidate does not set camera readiness.
+Result<bool> attachFgWorldCameraCandidate(FgWorldGuideFrame& packet,
+    const FgCameraProducerSample& producer,std::uint64_t jitterSource,
+    std::uint64_t jitterGeneration,NgxJitter jitter);
 
 // Retains raw world guide candidates across the native UI interval. The
 // pre-UI display is copied because Skyrim draws UI into its original target.

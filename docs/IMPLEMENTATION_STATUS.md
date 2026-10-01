@@ -6122,3 +6122,29 @@ Ignored log snapshot:
 SHA-256 `6c0c12c8f6a56ae0c63ac79a508ea71427489e90ae3232380026286d3f37709a`.
 The snapshot includes earlier appended sessions; the latest 0.1.147 session
 begins at its 10:56:48 marker. **FG-On remains NOT RUN.**
+
+## Source 0.1.148 paired camera candidate (2026-10-01)
+
+The FG input path now pairs the verified camera writes across adjacent real
+world frames and the post-menu/pre-Present phase, then binds a camera candidate
+to the raw world-guide packet only when the exact SR evaluation jitter has
+the same world source and owned-scene generation. The candidate does **not**
+mark the frame camera-ready or submit FG. Release CTest passed **69/69** and
+Debug **64/64**. The pre-implementation pairer and packet tests failed for
+their absent APIs, then passed with the source. Details and limits:
+`docs/re/FG_CAMERA_PACKET_CANDIDATE_2026-10-01.md`.
+
+The user-started game used installed 0.1.147. After that process exited, the
+0.1.148 Release build was staged with only `ProbeFgFrameBoundaries` changed
+from false to true in the preserved INI, while FG stays Off. A first install
+preflight stopped before any copy because its hardcoded expected old-manifest
+hash contained a typo; the actual old hash was reread and the corrected
+preflight passed. The previous three replaced files are backed up under
+`artifacts/local/backup-v54-before-0148`. Only the DLL, INI and manifest were
+installed, and **14/14** payload hashes verified. Installed DLL SHA-256:
+`29b45b9cf9fdeb985237958a04709be22773e15ab17e8c94cc615c2c000a9fcb`;
+INI SHA-256:
+`3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
+manifest SHA-256:
+`1cb68ea79a94a93c17b7d15bd5fa4ca8111734562a59646c70e2df4ddd5c78ab`.
+The 0.1.148 game candidate-binding result is **NOT RUN**.
