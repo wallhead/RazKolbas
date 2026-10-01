@@ -5907,3 +5907,13 @@ The prior trial INI and manifest are backed up under ignored
 all **14/14** installed payload hashes verify. FG remains Off, the bright
 reduced-loading route remains On, and the user's other INI bytes are retained.
 FPS after this rollback: **NOT RUN**. Game FG-On: **NOT RUN**.
+Next executable FG task is a source-only, fail-closed admission path joining
+the verified renderer/world/Present phase ledger to current-generation camera,
+colour, motion, depth, HUD-less scene and native UI stamps. It must reject
+loading/menu frames even when the phase ledger is ready, and keep token,
+marker and SDK submission disabled until that packet and its GPU retirement
+are proven in focused tests. Separately, attribute the private route's
+roughly ten-FPS cost by timing its D3D11 shared copy, D3D12 copy-slot wait,
+lower Present and ReShade stages before changing the presentation design.
+The full-resolution loading path requires tracing the upstream artwork
+producer; another copy after Loading Menu drawing did not repair it.
