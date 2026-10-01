@@ -6093,3 +6093,32 @@ INI SHA-256:
 manifest SHA-256:
 `c7881a5cbbedcdfb5250b0b286d1d23fb83c27250008af8749198f3d2133d72d`.
 The 0.1.147 Skyrim result is **NOT RUN** until the user starts the game.
+
+## User-started 0.1.147 camera-observer run (2026-10-01)
+
+The user started Skyrim through MO2 and reported that the loaded-world image
+and FPS are **good**. No numeric FPS or controlled same-view A/B was supplied,
+so this is a user visual/performance acceptance for this run, not a measured
+60-FPS restoration or a causal diagnosis of the earlier FPS change. Skyrim
+PID 28436 started at 10:56:38 Moscow time. The 0.1.147 bootstrap marker is at
+10:56:48 and the exact ENB camera observer armed at 10:57:25. One writer pair
+again resolved to Skyrim Map return RVA `0xe45c43` and Unmap return RVA
+`0xe45d10`.
+
+At real Present/world frame **18,000**, the selected camera buffer remained
+generation 1, write revision/completed count **342,913**, rejected **0**,
+writers **1**, overflow **0**, with fresh, menu-stable, decoded and consecutive
+current world-camera checks all true. The sampled totals were 17,997 fresh
+frames, 17,999 menu-stable frames, zero missing frames, 5,772 decoded camera
+frames and 5,771 consecutive camera frames. The matching outer Present was
+`S_OK`, failed **0**, with world-forwarded count **18,000**. This confirms
+continuous real-game camera observation with the lower-cost hook in the
+inspected interval; it does not validate an FG provider submission. The game
+remained running when this read-only snapshot was taken; no installed files
+were changed during the run.
+
+Ignored log snapshot:
+`artifacts/local/fg-camera-fast-0147-live-snapshot.log`, 23,924,468 bytes,
+SHA-256 `6c0c12c8f6a56ae0c63ac79a508ea71427489e90ae3232380026286d3f37709a`.
+The snapshot includes earlier appended sessions; the latest 0.1.147 session
+begins at its 10:56:48 marker. **FG-On remains NOT RUN.**
