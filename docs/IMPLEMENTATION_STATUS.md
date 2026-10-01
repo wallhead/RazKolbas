@@ -6355,3 +6355,24 @@ provider retirement: RUN/PASS. Skyrim FG-On/generated frames: NOT RUN.**
 Next: attach the game-owned input and camera to the startup-selected
 Streamline presentation owner, verify real Skyrim phase markers and lifetime
 fences, then conduct a guarded FG-On game run.
+
+## Source/installed 0.1.155 copied-packet metadata trial (2026-10-01)
+
+The previous game copy selected a separate world HUD-less snapshot while
+the provider validator requires the exact native-UI HUD-less snapshot. A
+test-first WARP regression failed on both resource identity and final
+submission metadata, then passed after selecting `ui.hudless`. A bounded
+FG-Off game diagnostic now validates the pending copied lease, UI and
+same-frame camera against the verified native flip target's index/count.
+It neither waits for provider use nor enables a Streamline token. An
+independent subagent found no FG-Off correctness blocker and its native
+target recommendation was incorporated. Release build/CTest: **70/70**;
+Debug: **65/65**. Details: `docs/re/FG_COPIED_PACKET_GAME_METADATA_2026-10-01.md`.
+
+Skyrim was closed; the prior installed and new staged packages each verified
+**14/14**. The old DLL/INI/manifest were backed up, only DLL and manifest
+were replaced, and installed 0.1.155 verified **14/14** with INI
+byte-identical. **0.1.155 game metadata trial: NOT RUN. FG-On/generated
+Skyrim frames: NOT RUN.** Next: one user-started FG-Off save load for the
+eight metadata/copy lines and image/UI/FPS check, then connect the copied
+lease to the actual lower presentation owner and provider retirement.

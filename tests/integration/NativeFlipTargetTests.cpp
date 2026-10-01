@@ -37,6 +37,7 @@ TEST_CASE("Current native flip target matches IDXGISwapChain3 buffer index", "[n
         REQUIRE(std::holds_alternative<rk::NativeFlipTarget>(target));
         auto& current=std::get<rk::NativeFlipTarget>(target);
         REQUIRE(current.index==flip->GetCurrentBackBufferIndex());
+        REQUIRE(current.bufferCount==3);
         REQUIRE(current.texture!=nullptr);
         REQUIRE(current.view!=nullptr);
         ComPtr<ID3D11Texture2D> direct;

@@ -1376,6 +1376,28 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
                                 state->fgGameInputProbe->presentToken(),
                                 state->fgGameInputProbe->generation(),
                                 ticket->producer,ticket->copy);
+                            // Validate the exact copied UI/camera packet while
+                            // this lease still exists. The native swap index
+                            // is a metadata bound only; it is not an FG lower
+                            // presentation owner or a GPU completion proof.
+                            if(state->fgObservedGuides->cameraCandidate) {
+                                const auto inspected=
+                                    state->fgGameInputProbe->inspectPrepared(
+                                        *input,*packet,
+                                        *state->fgObservedGuides->cameraCandidate,
+                                        target.index,target.bufferCount);
+                                if(const auto* prepared=std::get_if<
+                                       FgPreparedSubmission>(&inspected))
+                                    spdlog::info("FG copied packet metadata valid: source={} present={} cameraRevision={} nativeIndex={}/{}; GPU copy and provider admission remain separate",
+                                        prepared->source,prepared->presentToken,
+                                        prepared->camera.sampleRevision,
+                                        target.index,target.bufferCount);
+                                else if(const auto* error=std::get_if<Error>(&inspected))
+                                    spdlog::warn("FG copied packet metadata rejected at frame {}: {}",
+                                        frame,error->message);
+                            } else spdlog::warn(
+                                "FG copied packet metadata unavailable at frame {}: same-frame camera candidate missing",
+                                frame);
                         } else if(const auto* error=std::get_if<Error>(&queued)) {
                             state->fgGameInputProbeFailed=true;
                             spdlog::warn("FG five-input game copy frame {} unavailable: {}",

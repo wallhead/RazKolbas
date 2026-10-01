@@ -51,6 +51,7 @@ Result<NativeFlipTarget> acquireNativeFlipTarget(IDXGISwapChain* swap,
     ComPtr<ID3D11RenderTargetView> view;
     if(FAILED(device->CreateRenderTargetView(buffer.Get(),nullptr,view.GetAddressOf()))||!view)
         return Error{ErrorCode::Unavailable,"Cannot create current native flip RTV"};
-    return NativeFlipTarget{std::move(buffer),std::move(view),index};
+    return NativeFlipTarget{std::move(buffer),std::move(view),index,
+        chain.BufferCount};
 }
 }

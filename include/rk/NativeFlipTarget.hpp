@@ -10,6 +10,7 @@ struct NativeFlipTarget {
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> view;
     UINT index{};
+    UINT bufferCount{};
 };
 // Resolve the current native flip buffer through the caller's existing swap
 // wrapper. Every invocation reacquires the index; the caller must retire the

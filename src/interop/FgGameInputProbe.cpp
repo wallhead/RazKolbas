@@ -72,6 +72,28 @@ Result<FgCopyTicket> FgGameInputProbe::enqueue(
     state_=FgGameCopyState::Pending;
     return ticket_;
 }
+Result<FgPreparedSubmission> FgGameInputProbe::inspectPrepared(
+    const FgGameInputCandidate& candidate,const FgUiPlaneFrame& ui,
+    const FgCameraData& camera,std::uint32_t physicalOutputIndex,
+    std::uint32_t swapBufferCount) const {
+    if(!lease_||state_!=FgGameCopyState::Pending||
+       candidate.frame.source!=lease_->source||
+       candidate.frame.generation!=lease_->generation||
+       candidate.frame.presentToken!=lease_->presentToken||
+       candidate.frame.resetEpoch!=lease_->resetEpoch)
+        return Error{ErrorCode::Conflict,
+            "FG game copy has no matching pending input lease"};
+    for(std::size_t i=0;i<candidate.textures.size();++i)
+        if(candidate.textures[i].Get()!=lease_->sourceTextures[i].Get())
+            return Error{ErrorCode::Conflict,
+                "FG game candidate differs from the copied input lease"};
+    auto frame=candidate.frame;
+    // Promote only this candidate for metadata validation. The live frame
+    // stays unadmitted until owner, copy and provider fences are proven.
+    frame.cameraValid=true;
+    return prepareFgSubmission(frame,*lease_,ui,camera,physicalOutputIndex,
+        swapBufferCount);
+}
 FgGameCopyState FgGameInputProbe::poll() noexcept {
     if(state_!=FgGameCopyState::Pending)return state_;
     if(!bridge_||!ring_||!lease_)return state_=FgGameCopyState::Failed;

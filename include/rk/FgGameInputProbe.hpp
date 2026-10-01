@@ -1,5 +1,6 @@
 #pragma once
 #include "rk/FgGameInputCandidate.hpp"
+#include "rk/FgSubmission.hpp"
 #include <memory>
 #include <optional>
 
@@ -17,6 +18,12 @@ public:
         const FgGameInputCandidate& candidate);
     Result<FgCopyTicket> enqueue(ID3D11DeviceContext* context,
         const FgGameInputCandidate& candidate);
+    // Metadata-only admission for the pending copied lease. This does not
+    // prove GPU completion, lower-swap ownership or provider readiness.
+    Result<FgPreparedSubmission> inspectPrepared(
+        const FgGameInputCandidate& candidate,const FgUiPlaneFrame& ui,
+        const FgCameraData& camera,std::uint32_t physicalOutputIndex,
+        std::uint32_t swapBufferCount) const;
     FgGameCopyState poll() noexcept;
     bool close() noexcept;
     bool pending() const noexcept { return state_==FgGameCopyState::Pending; }

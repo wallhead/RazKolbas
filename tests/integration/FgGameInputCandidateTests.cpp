@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "rk/FgGameInputCandidate.hpp"
 #include "rk/FgGameInputProbe.hpp"
+#include "rk/FgSubmission.hpp"
 #include <dxgi1_6.h>
 #include <array>
 #include <chrono>
@@ -44,6 +45,7 @@ struct Fixture {
             DXGI_FORMAT_R8G8B8A8_UNORM);
         ui.source=33;ui.generation=7;ui.presentToken=9000;ui.resetEpoch=4;
         ui.display=world.frame.display;
+        ui.uiRegion={0,0,37,19};
         const auto stamp=rk::FgResourceStamp{33,7,ui.display,true,4};
         ui.hudlessStamp=stamp;ui.uiStamp=stamp;ui.finalStamp=stamp;
         ui.hudless=texture(device.Get(),ui.display,DXGI_FORMAT_R8G8B8A8_UNORM);
@@ -53,6 +55,24 @@ struct Fixture {
             DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 };
+rk::FgCameraData camera(const rk::FgSourceFrame& frame) {
+    rk::FgCameraData result{};
+    result.source=frame.source;
+    result.generation=frame.generation;
+    result.presentToken=frame.presentToken;
+    result.resetEpoch=frame.resetEpoch;
+    result.sampleRevision=1;
+    for(auto* matrix:{&result.viewToClip,&result.clipToView,
+        &result.clipToPrevClip,&result.prevClipToClip})
+        for(unsigned n=0;n<4;++n)(*matrix)[n*4+n]=1.0f;
+    result.right={1,0,0};result.up={0,1,0};
+    result.forward={0,0,1};result.mvecScale={1,1};
+    result.nearPlane=0.1f;result.farPlane=100.0f;
+    result.fovRadians=1.0f;
+    result.aspectRatio=static_cast<float>(frame.display.width)/
+        static_cast<float>(frame.display.height);
+    return result;
+}
 }
 
 TEST_CASE("FG game inputs pair five owned textures from one real frame",
@@ -71,7 +91,7 @@ TEST_CASE("FG game inputs pair five owned textures from one real frame",
     REQUIRE(sources.textures[0]==f.ui.finalColor.Get());
     REQUIRE(sources.textures[1]==f.world.depth.Get());
     REQUIRE(sources.textures[2]==f.world.motion.Get());
-    REQUIRE(sources.textures[3]==f.world.hudless.Get());
+    REQUIRE(sources.textures[3]==f.ui.hudless.Get());
     REQUIRE(sources.textures[4]==f.ui.uiColorAlpha.Get());
 }
 
@@ -89,6 +109,11 @@ TEST_CASE("FG game input pairing rejects stale identity and wrong guide formats"
     f.world.depth=texture(f.device.Get(),f.world.frame.render,
         DXGI_FORMAT_R32_FLOAT);
     f.world.hudless.Reset();
+    REQUIRE(std::holds_alternative<rk::Error>(
+        rk::pairFgGameInputs(f.world,f.ui)));
+    f.world.hudless=texture(f.device.Get(),f.world.frame.display,
+        DXGI_FORMAT_R8G8B8A8_UNORM);
+    f.ui.hudless=f.ui.uiColorAlpha;
     REQUIRE(std::holds_alternative<rk::Error>(
         rk::pairFgGameInputs(f.world,f.ui)));
 }
@@ -123,6 +148,11 @@ TEST_CASE("FG paired game inputs enter and retire a five-surface WARP lease",
     REQUIRE(lease.source==packet.frame.source);
     REQUIRE(lease.presentToken==packet.frame.presentToken);
     for(const auto& resource:lease.resources)REQUIRE(resource!=nullptr);
+    auto providerFrame=packet.frame;
+    providerFrame.cameraValid=true;
+    REQUIRE(std::holds_alternative<rk::FgPreparedSubmission>(
+        rk::prepareFgSubmission(providerFrame,lease,f.ui,
+            camera(providerFrame),0,2)));
     REQUIRE(bridge->waitCopy(lease.lastCopy.copy));
     REQUIRE(ring.discard(lease));
     REQUIRE(ring.stop({packet.frame.generation,0,0,0,0,0}));
@@ -144,6 +174,16 @@ TEST_CASE("FG game probe completes the sampled five-input copy without provider 
         started));
     REQUIRE(probe->source()==packet.frame.source);
     REQUIRE(probe->presentToken()==packet.frame.presentToken);
+    REQUIRE(std::holds_alternative<rk::FgPreparedSubmission>(
+        probe->inspectPrepared(packet,f.ui,camera(packet.frame),0,2)));
+    auto altered=packet;
+    altered.textures[3]=f.world.hudless;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        probe->inspectPrepared(altered,f.ui,camera(packet.frame),0,2)));
+    auto staleCamera=camera(packet.frame);
+    staleCamera.source++;
+    REQUIRE(std::holds_alternative<rk::Error>(
+        probe->inspectPrepared(packet,f.ui,staleCamera,0,2)));
     REQUIRE(std::holds_alternative<rk::Error>(
         probe->enqueue(f.context.Get(),packet)));
     const auto deadline=std::chrono::steady_clock::now()+
@@ -155,6 +195,8 @@ TEST_CASE("FG game probe completes the sampled five-input copy without provider 
         status=probe->poll();
     }
     REQUIRE(status==rk::FgGameCopyState::Complete);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        probe->inspectPrepared(packet,f.ui,camera(packet.frame),0,2)));
     REQUIRE(probe->poll()==rk::FgGameCopyState::Complete);
     f.world.frame.source=34;
     f.world.frame.presentToken=9001;

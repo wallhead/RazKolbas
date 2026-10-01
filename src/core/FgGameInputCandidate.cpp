@@ -67,6 +67,8 @@ Result<FgGameInputCandidate> pairFgGameInputs(
             DXGI_FORMAT_R8G8B8A8_UNORM)||
        !validTexture(ui.finalColor.Get(),owner.Get(),source.display,
             DXGI_FORMAT_R8G8B8A8_UNORM)||
+       sameObject(ui.hudless.Get(),ui.uiColorAlpha.Get())||
+       sameObject(ui.hudless.Get(),ui.finalColor.Get())||
        sameObject(world.hudless.Get(),ui.finalColor.Get())||
        sameObject(ui.uiColorAlpha.Get(),ui.finalColor.Get()))
         return Error{ErrorCode::InvalidInput,
@@ -80,8 +82,11 @@ Result<FgGameInputCandidate> pairFgGameInputs(
     result.frame.motion=result.frame.depth;
     result.frame.hudless=result.frame.color;
     result.frame.uiColorAlpha=result.frame.color;
+    // Provider submission validates the HUD-less input against the exact
+    // native-UI snapshot. The independent world latch is a phase witness,
+    // but its separate copy cannot be substituted for ui.hudless.
     result.textures={ui.finalColor,world.depth,world.motion,
-        world.hudless,ui.uiColorAlpha};
+        ui.hudless,ui.uiColorAlpha};
     return result;
 }
 }
