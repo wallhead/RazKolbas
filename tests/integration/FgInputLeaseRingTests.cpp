@@ -74,6 +74,10 @@ TEST_CASE("FG five-input GPU lease waits for every consumer before reuse",
     REQUIRE(std::holds_alternative<rk::FgInputLease>(prepared));
     auto first=std::get<rk::FgInputLease>(std::move(prepared));
     for(const auto& input:first.resources)REQUIRE(input!=nullptr);
+    // All five inputs from one real frame must share one producer/consumer
+    // synchronization pair before this path can run every frame.
+    REQUIRE(first.lastCopy.producer==1);
+    REQUIRE(first.lastCopy.copy==1);
     REQUIRE(gpu.bridge->waitCopy(first.lastCopy.copy));
     REQUIRE_FALSE(ring.submit(first,{7,first.lastCopy.producer,
         first.lastCopy.copy,0,2,3}));

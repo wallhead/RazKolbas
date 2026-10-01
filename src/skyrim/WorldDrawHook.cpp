@@ -75,6 +75,8 @@ struct WorldState {
     std::optional<FgBoundarySample> fgObservedBoundary;
     std::optional<FgUiPlaneFrame> fgObservedUi;
     std::unique_ptr<FgGameInputProbe> fgGameInputProbe;
+    unsigned fgGameInputCopiesQueued{};
+    bool fgGameInputProbeFailed{};
     FgCameraFramePairer fgCameraPairer;
     std::optional<FgCameraProducerSample> fgCameraProducer;
     struct FgSourceJitter {
@@ -195,7 +197,7 @@ struct WorldState {
     bool ownedSpatialBaseline{};
     bool captureFirstDlssFrame{};
     bool probeDirectUiPlane{},directUiPlaneAttempted{};
-    bool fgUiCaptureAttempted{};
+    unsigned fgUiCaptureAttempts{};
     std::unique_ptr<FgUiPlanes> fgUiCapture;
     bool probeFgCameraBuffer{},fgCameraProbeFinished{};
     bool probeFgCameraWrites{},fgPriorPresentFresh{};
@@ -1352,21 +1354,33 @@ void completeDirectUiPlaneProbe(WorldState* state,IDXGISwapChain* swap,
                         *state->fgObservedGuides,*state->fgObservedUi);
                     if(const auto* input=std::get_if<FgGameInputCandidate>(
                            &pairedInputs)) {
-                        auto started=FgGameInputProbe::begin(
-                            reinterpret_cast<ID3D11Device*>(device),context,
-                            *input);
-                        if(auto* probe=std::get_if<
-                               std::unique_ptr<FgGameInputProbe>>(&started)) {
-                            state->fgGameInputProbe=std::move(*probe);
-                            const auto ticket=state->fgGameInputProbe->copyTicket();
+                        Result<FgCopyTicket> queued=Error{ErrorCode::Unavailable,
+                            "FG game copy has not started"};
+                        if(state->fgGameInputProbe)
+                            queued=state->fgGameInputProbe->enqueue(context,*input);
+                        else {
+                            auto started=FgGameInputProbe::begin(
+                                reinterpret_cast<ID3D11Device*>(device),context,
+                                *input);
+                            if(auto* probe=std::get_if<
+                                   std::unique_ptr<FgGameInputProbe>>(&started)) {
+                                state->fgGameInputProbe=std::move(*probe);
+                                queued=state->fgGameInputProbe->copyTicket();
+                            } else if(const auto* error=std::get_if<Error>(&started))
+                                queued=*error;
+                        }
+                        if(const auto* ticket=std::get_if<FgCopyTicket>(&queued)) {
+                            ++state->fgGameInputCopiesQueued;
                             spdlog::info("FG five-input game copy queued: source={} present={} generation={} producerFence={} copyFence={}; no provider submission",
                                 state->fgGameInputProbe->source(),
                                 state->fgGameInputProbe->presentToken(),
                                 state->fgGameInputProbe->generation(),
-                                ticket.producer,ticket.copy);
-                        } else if(const auto* error=std::get_if<Error>(&started))
+                                ticket->producer,ticket->copy);
+                        } else if(const auto* error=std::get_if<Error>(&queued)) {
+                            state->fgGameInputProbeFailed=true;
                             spdlog::warn("FG five-input game copy frame {} unavailable: {}",
                                 frame,error->message);
+                        }
                     } else if(const auto* error=std::get_if<Error>(&pairedInputs))
                         spdlog::warn("FG five-input game packet frame {} rejected: {}",
                             frame,error->message);
@@ -1979,12 +1993,16 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
         }
         if(boundary==OwnedPublicationBoundary::MenuDisplay&&
            outcome.mode()==SdrSrFrameMode::Provider&&
-           state->probeFgFrameBoundaries&&!state->fgUiCaptureAttempted&&
+           state->probeFgFrameBoundaries&&
+           state->fgUiCaptureAttempts<8&&
+           !state->fgGameInputProbeFailed&&
+           (!state->fgGameInputProbe||
+                !state->fgGameInputProbe->pending())&&
            !state->directUiPlaneFrame&&
            !inventoryMenuOnStack(state)&&!magicMenuOnStack(state)&&
            !titleMenuOnStack(state)&&
            !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)) {
-            state->fgUiCaptureAttempted=true;
+            ++state->fgUiCaptureAttempts;
             D3D11_TEXTURE2D_DESC description{};
             display->GetDesc(&description);
             if(description.Format==DXGI_FORMAT_R8G8B8A8_UNORM&&
@@ -2022,7 +2040,7 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
                     state->directUiPlane=std::move(plane);
                     state->directUiPlaneView=std::move(view);
                     state->directUiPlaneFrame=sequence;
-                    spdlog::info("FG native UI candidate armed for one world frame {} at {}x{}; FG remains off",
+                    spdlog::info("FG native UI candidate armed for sampled world frame {} at {}x{}; FG remains off",
                         sequence,description.Width,description.Height);
                 } else if(const auto* error=std::get_if<Error>(&preUi))
                     spdlog::warn("FG native UI candidate frame {} unavailable: {}",
@@ -3325,15 +3343,30 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             swap&&swap==expected);
         if(boundary.kind!=FgBoundaryKind::Test&&
            boundary.kind!=FgBoundaryKind::ForeignSwap) {
-            if(state->fgGameInputProbe) {
+            if(state->fgGameInputProbe&&
+               state->fgGameInputProbe->pending()) {
                 const auto copy=state->fgGameInputProbe->poll();
                 if(copy!=FgGameCopyState::Pending) {
                     spdlog::info("FG five-input game copy source={} present={} status={}; provider submission remains off",
                         state->fgGameInputProbe->source(),
                         state->fgGameInputProbe->presentToken(),
                         copy==FgGameCopyState::Complete?"complete":"failed");
-                    state->fgGameInputProbe.reset();
+                    if(copy==FgGameCopyState::Failed) {
+                        state->fgGameInputProbeFailed=true;
+                        state->fgGameInputProbe.reset();
+                    }
                 }
+            }
+            if(state->fgGameInputProbe&&
+               !state->fgGameInputProbe->pending()&&
+               state->fgUiCaptureAttempts>=8&&
+               !state->directUiPlaneFrame) {
+                const bool closed=state->fgGameInputProbe->close();
+                spdlog::info("FG sampled eight-frame input session closed: attempts={} copies={} clean={}; no provider submission",
+                    state->fgUiCaptureAttempts,
+                    state->fgGameInputCopiesQueued,closed);
+                if(!closed)state->fgGameInputProbeFailed=true;
+                state->fgGameInputProbe.reset();
             }
             state->fgObservedBoundary=boundary;
             state->fgObservedUi.reset();
@@ -3417,9 +3450,12 @@ void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
         state->fgObservedBoundary.reset();
         state->fgObservedUi.reset();
         state->fgGameInputProbe.reset();
+        state->fgGameInputCopiesQueued=0;
+        state->fgGameInputProbeFailed=false;
         if(state->directUiPlaneFrame)
             retireDirectUiPlane(state,state->directUiPlaneFrame);
-        state->fgUiCaptureAttempted=false;
+        state->fgUiCaptureAttempts=0;
+        state->fgWorldGuideCaptureAttempts=0;
         state->fgCameraPairer.clear();
         state->fgCameraProducer.reset();
         state->fgWorldJitter.reset();

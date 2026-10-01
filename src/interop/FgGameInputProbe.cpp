@@ -45,15 +45,32 @@ Result<std::unique_ptr<FgGameInputProbe>> FgGameInputProbe::begin(
         bridge));
     probe->ring_=std::make_unique<FgInputLeaseRing>(*probe->bridge_,
         candidate.frame.generation);
-    auto prepared=probe->ring_->prepare(candidate.frame,candidate.sources(),
-        context,{candidate.frame.generation,0,0,0,0,0});
-    if(const auto* error=std::get_if<Error>(&prepared))return *error;
-    probe->lease_=std::move(std::get<FgInputLease>(prepared));
-    probe->source_=candidate.frame.source;
-    probe->presentToken_=candidate.frame.presentToken;
     probe->generation_=candidate.frame.generation;
-    probe->ticket_=probe->lease_->lastCopy;
+    const auto enqueued=probe->enqueue(context,candidate);
+    if(const auto* error=std::get_if<Error>(&enqueued))return *error;
     return Result<std::unique_ptr<FgGameInputProbe>>{std::move(probe)};
+}
+Result<FgCopyTicket> FgGameInputProbe::enqueue(
+    ID3D11DeviceContext* context,const FgGameInputCandidate& candidate) {
+    if(!ring_||!bridge_||lease_||state_!=FgGameCopyState::Complete||
+       candidate.frame.generation!=generation_||
+       !candidate.frame.source||!candidate.frame.presentToken||
+       (source_&&candidate.frame.source<=source_)||
+       (presentToken_&&candidate.frame.presentToken<=presentToken_))
+        return Error{ErrorCode::Conflict,
+            "FG game copy is pending, closed or out of source order"};
+    auto prepared=ring_->prepare(candidate.frame,candidate.sources(),
+        context,{generation_,0,0,0,0,0});
+    if(const auto* error=std::get_if<Error>(&prepared)) {
+        if(ring_->failed())state_=FgGameCopyState::Failed;
+        return *error;
+    }
+    lease_=std::move(std::get<FgInputLease>(prepared));
+    source_=candidate.frame.source;
+    presentToken_=candidate.frame.presentToken;
+    ticket_=lease_->lastCopy;
+    state_=FgGameCopyState::Pending;
+    return ticket_;
 }
 FgGameCopyState FgGameInputProbe::poll() noexcept {
     if(state_!=FgGameCopyState::Pending)return state_;
@@ -61,11 +78,18 @@ FgGameCopyState FgGameInputProbe::poll() noexcept {
     const auto progress=bridge_->copyStatus(ticket_.copy);
     if(progress==FgCopyStatus::Pending)return state_;
     if(progress!=FgCopyStatus::Complete||!ring_->discard(*lease_)||
-       !ring_->stop({generation_,0,0,0,0,0}))
+       !bridge_->healthy())
         return state_=FgGameCopyState::Failed;
     lease_.reset();
+    return state_=FgGameCopyState::Complete;
+}
+bool FgGameInputProbe::close() noexcept {
+    if(state_==FgGameCopyState::Pending||
+       state_==FgGameCopyState::Failed)return false;
+    if(!ring_)return true;
+    if(!ring_->stop({generation_,0,0,0,0,0}))return false;
     ring_.reset();
     bridge_.reset();
-    return state_=FgGameCopyState::Complete;
+    return true;
 }
 }

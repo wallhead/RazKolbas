@@ -38,4 +38,17 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `e79393fe1d6c3f548c07258fb66a80a1765253953e4f4d62c09eb0ef373aaf3e`.
-The game copy test is pending a user-started Skyrim run.
+The user started Skyrim through MO2, loaded the same save with FG Off, and
+reported normal world image, native UI, and steady FPS compared with 0.1.152.
+The 12:48:54 game session queued one five-input copy for source/Present 9472,
+generation 1, with producer/copy fence values 5/5. The next real Present
+reported `status=complete`. The captured 0.1.153 session had one queue,
+one completion, zero copy rejection/failure, 18 guide/camera candidates,
+zero SR suspensions, and zero sampled nonzero Present failures. The ignored
+log snapshot is `artifacts/local/fg-five-input-0153-live-snapshot.log`
+(25,009,893 bytes, SHA-256
+`14c76758ab6bac97c421e7cffb5f05d2447d487b5678881afd91455b8865facf`).
+This proves a sampled in-game D3D11-to-D3D12 copy-fence completion and a
+normal FG-Off visual regression check. It does not prove copied pixel values,
+continuous leases, provider consumption, or generated Skyrim frames. The user
+then closed Skyrim through its menu; the process was absent on inspection.

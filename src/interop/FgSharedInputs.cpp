@@ -168,6 +168,64 @@ Result<FgCopyTicket> FgSharedInputs::copyImpl(ID3D11DeviceContext* context,
     }
     return ticket;
 }
+Result<FgCopyTicket> FgSharedInputs::copyBatch(
+    ID3D11DeviceContext* context,std::span<const FgCopyPair> pairs) {
+    if(!context||pairs.empty()||pairs.size()>5||
+       context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        return Error{ErrorCode::InvalidInput,
+            "FG copy batch requires one to five inputs and an immediate context"};
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext4> context4;
+    Microsoft::WRL::ComPtr<ID3D11Device> contextDevice;
+    context->GetDevice(&contextDevice);
+    if(!sameDevice(contextDevice.Get(),d11_.Get()))
+        return Error{ErrorCode::Conflict,
+            "FG copy batch context device identity differs"};
+    const auto contextResult=context->QueryInterface(IID_PPV_ARGS(&context4));
+    if(FAILED(contextResult))
+        return Error{ErrorCode::Conflict,
+            "FG copy batch immediate context has no Context4: "+
+            std::to_string(static_cast<std::uint32_t>(contextResult))};
+    // No GPU work may be issued until all five roles have been checked. A
+    // stale/foreign later role must not leave the earlier roles half-copied.
+    for(const auto& pair:pairs) {
+        if(!pair.source||!pair.target||!pair.target->d11_||
+           !pair.target->d12_||pair.target->ownerId_!=id_)
+            return Error{ErrorCode::InvalidInput,
+                "FG copy batch has a missing or foreign shared surface"};
+        Microsoft::WRL::ComPtr<ID3D11Device> sourceDevice;
+        pair.source->GetDevice(&sourceDevice);
+        if(!sameDevice(sourceDevice.Get(),d11_.Get()))
+            return Error{ErrorCode::Conflict,
+                "FG copy batch source device identity differs"};
+        D3D11_TEXTURE2D_DESC sourceDesc{},targetDesc{};
+        pair.source->GetDesc(&sourceDesc);
+        pair.target->d11_->GetDesc(&targetDesc);
+        if(!sameDesc(sourceDesc,targetDesc))
+            return Error{ErrorCode::InvalidInput,
+                "FG copy batch source and target descriptors differ"};
+    }
+    std::scoped_lock lock(mutex_);
+    if(failed_||!healthy()||nextProducerValue_>=UINT64_MAX-1||
+       nextCopyValue_>=UINT64_MAX-1)
+        return Error{ErrorCode::Unavailable,
+            "FG copy batch fence timeline is unavailable"};
+    const FgCopyTicket ticket{++nextProducerValue_,++nextCopyValue_};
+    for(const auto& pair:pairs)
+        context->CopyResource(pair.target->d11_.Get(),pair.source);
+    if(FAILED(context4->Signal(producerFence_.Get(),ticket.producer))) {
+        failed_=true;
+        return Error{ErrorCode::DeviceRemoved,
+            "Cannot signal FG batch producer completion"};
+    }
+    context->Flush();
+    if(FAILED(queue_->Wait(producerGate_.Get(),ticket.producer))||
+       FAILED(queue_->Signal(consumerFence_.Get(),ticket.copy))) {
+        failed_=true;
+        return Error{ErrorCode::DeviceRemoved,
+            "Cannot signal FG batch shared-copy completion"};
+    }
+    return ticket;
+}
 bool FgSharedInputs::healthy() const noexcept {
     return d12_&&SUCCEEDED(d12_->GetDeviceRemovedReason())&&
         producerGate_&&producerGate_->GetCompletedValue()!=UINT64_MAX&&

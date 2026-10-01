@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <span>
 
 namespace rk {
 class FgD3D11AuxSwapSource;
@@ -45,6 +46,10 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> d12_;
     std::uint64_t ownerId_{};
 };
+struct FgCopyPair {
+    ID3D11Texture2D* source{};
+    const FgSharedSurface* target{};
+};
 
 // Copies one real-frame input into a shared texture. Its ticket proves the
 // D3D11 producer finished before the D3D12 queue reached its separate,
@@ -61,6 +66,10 @@ public:
         ID3D11Texture2D* source,const FgSharedSurface& target);
     Result<FgCopyTicket> copy(ID3D11DeviceContext* context,
         const FgSourceLease& source,const FgSharedSurface& target);
+    // Validate every source/target before issuing any copies, then publish
+    // one producer and one D3D12 copy-fence ticket for the whole source frame.
+    Result<FgCopyTicket> copyBatch(ID3D11DeviceContext* context,
+        std::span<const FgCopyPair> pairs);
     bool producerComplete(std::uint64_t value) const noexcept;
     FgCopyStatus copyStatus(std::uint64_t value) const noexcept;
     bool copyComplete(std::uint64_t value) const noexcept;

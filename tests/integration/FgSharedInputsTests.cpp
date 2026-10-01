@@ -181,6 +181,83 @@ TEST_CASE("FG copy progress rejects a removed-device fence sentinel",
     REQUIRE(classifyFgCopyStatus(5,UINT64_MAX,S_OK)==FgCopyStatus::Unknown);
 }
 
+TEST_CASE("FG batched inputs validate before copying and publish all five pixels",
+    "[fg_interop]") {
+    ComPtr<IDXGIFactory4> factory;
+    REQUIRE(SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))));
+    ComPtr<IDXGIAdapter> adapter;
+    REQUIRE(SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&adapter))));
+    ComPtr<ID3D11Device> d11;
+    ComPtr<ID3D11DeviceContext> context;
+    REQUIRE(SUCCEEDED(D3D11CreateDevice(adapter.Get(),D3D_DRIVER_TYPE_UNKNOWN,
+        nullptr,0,nullptr,0,D3D11_SDK_VERSION,&d11,nullptr,&context)));
+    ComPtr<ID3D12Device> d12;
+    REQUIRE(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,
+        IID_PPV_ARGS(&d12))));
+    D3D12_COMMAND_QUEUE_DESC queueDesc{};
+    ComPtr<ID3D12CommandQueue> queue;
+    REQUIRE(SUCCEEDED(d12->CreateCommandQueue(&queueDesc,IID_PPV_ARGS(&queue))));
+    auto made=rk::FgSharedInputs::create(d11.Get(),d12.Get(),queue.Get());
+    REQUIRE(std::holds_alternative<std::unique_ptr<rk::FgSharedInputs>>(made));
+    auto bridge=std::move(std::get<std::unique_ptr<rk::FgSharedInputs>>(made));
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=8;desc.Height=8;desc.MipLevels=1;desc.ArraySize=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    std::array<ComPtr<ID3D11Texture2D>,5> sources{};
+    std::array<rk::FgSharedSurface,5> targets{};
+    std::array<rk::FgCopyPair,5> pairs{};
+    std::array<std::uint32_t,8*8> pixels{},sentinel{};
+    sentinel.fill(0xff112233);
+    for(std::size_t i=0;i<pairs.size();++i) {
+        pixels.fill(0xff000000u|static_cast<std::uint32_t>(i+1));
+        const D3D11_SUBRESOURCE_DATA data{pixels.data(),8*4,0};
+        REQUIRE(SUCCEEDED(d11->CreateTexture2D(&desc,&data,&sources[i])));
+        auto target=bridge->makeSurface(desc);
+        REQUIRE(std::holds_alternative<rk::FgSharedSurface>(target));
+        targets[i]=std::move(std::get<rk::FgSharedSurface>(target));
+        context->UpdateSubresource(targets[i].d11(),0,nullptr,
+            sentinel.data(),8*4,0);
+        pairs[i]={sources[i].Get(),&targets[i]};
+    }
+    auto wrongDesc=desc;
+    wrongDesc.Width=7;
+    ComPtr<ID3D11Texture2D> wrong;
+    REQUIRE(SUCCEEDED(d11->CreateTexture2D(&wrongDesc,nullptr,&wrong)));
+    pairs[4].source=wrong.Get();
+    REQUIRE(std::holds_alternative<rk::Error>(
+        bridge->copyBatch(context.Get(),pairs)));
+
+    auto stagingDesc=desc;
+    stagingDesc.Usage=D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags=0;
+    stagingDesc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    ComPtr<ID3D11Texture2D> staging;
+    REQUIRE(SUCCEEDED(d11->CreateTexture2D(&stagingDesc,nullptr,&staging)));
+    context->CopyResource(staging.Get(),targets[0].d11());
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    REQUIRE(SUCCEEDED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped)));
+    REQUIRE(*static_cast<const std::uint32_t*>(mapped.pData)==sentinel.front());
+    context->Unmap(staging.Get(),0);
+
+    pairs[4].source=sources[4].Get();
+    const auto copied=bridge->copyBatch(context.Get(),pairs);
+    REQUIRE(std::holds_alternative<rk::FgCopyTicket>(copied));
+    const auto ticket=std::get<rk::FgCopyTicket>(copied);
+    REQUIRE(ticket.producer==1);
+    REQUIRE(ticket.copy==1);
+    REQUIRE(bridge->waitCopy(ticket.copy));
+    for(std::size_t i=0;i<targets.size();++i) {
+        context->CopyResource(staging.Get(),targets[i].d11());
+        REQUIRE(SUCCEEDED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,
+            &mapped)));
+        REQUIRE(*static_cast<const std::uint32_t*>(mapped.pData)==
+            (0xff000000u|static_cast<std::uint32_t>(i+1)));
+        context->Unmap(staging.Get(),0);
+    }
+}
+
 TEST_CASE("FG producer cannot certify a delayed consumer queue",
     "[fg_interop]") {
     ComPtr<IDXGIFactory4> factory;

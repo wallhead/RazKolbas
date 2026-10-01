@@ -6298,8 +6298,30 @@ were test-first; Release build/CTest passed **70/70** and Debug passed
 Details: `docs/re/FG_FIVE_INPUT_GAME_COPY_2026-10-01.md`.
 The 0.1.153 stage and previous install verified 14/14. After Skyrim closed,
 the old DLL/INI/manifest were backed up and only DLL and manifest replaced.
-The new install verified 14/14 with INI byte-identical. The user-started game
-copy test is pending. **0.1.153 game copy: NOT RUN. FG-On/generated frames:
-NOT RUN.** Next:
-run the one-shot same-adapter copy in Skyrim, then make the UI/input lease
-continuous and bind provider/Present retirement before enabling FG.
+The new install verified 14/14 with INI byte-identical. The user-started
+FG-Off game run reported normal image/UI/steady FPS. Source/Present 9472
+queued all five inputs with producer/copy fence 5/5, and the next real
+Present reported copy completion. The captured session had one queue and
+completion, zero copy rejection/failure, 18 guide/camera candidates, zero SR
+suspensions, and zero sampled nonzero Present failures. Log identity is in
+the report. **0.1.153 sampled game copy: RUN/PASS. FG-On/generated Skyrim
+frames: NOT RUN.** Next: batch the five D3D11 copies under one producer/copy
+fence, then make the UI/input lease continuous and bind provider/Present
+retirement before enabling FG.
+
+## Source 0.1.154 batched multi-frame FG input trial (2026-10-01)
+
+Five game inputs now copy under one producer/copy fence ticket after atomic
+prevalidation, and a bounded eight-world-frame FG-Off probe reuses one
+companion D3D12 device and input ring. The original five-fence test failed
+RED; WARP now validates a bad fifth input cannot alter earlier targets, all
+five copied pixel values arrive, and a second source frame reuses/retire the
+same session. Release build/CTest passed **70/70**; Debug passed **65/65**.
+Details: `docs/re/FG_BATCHED_GAME_INPUT_SESSION_2026-10-01.md`.
+The final stage and previous install each verified 14/14. After the user
+closed Skyrim, the old DLL/INI/manifest were backed up; only DLL and manifest
+were replaced. Installed 0.1.154 verifies 14/14 with the INI byte-identical.
+Hashes and stage/backup locations are in the report. **0.1.154 Skyrim
+multi-frame input trial: NOT RUN. FG-On/generated Skyrim frames: NOT RUN.**
+Next: check eight in-game copy completions and normal image/UI/FPS, then bind
+the retained inputs to the provider/presentation retirement contract.

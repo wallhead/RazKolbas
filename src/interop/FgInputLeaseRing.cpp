@@ -103,18 +103,20 @@ Result<FgInputLease> FgInputLeaseRing::prepare(const FgSourceFrame& frame,
         slot.sourceTextures[i]=sources.textures[i];
         lease.sourceTextures[i]=sources.textures[i];
     }
-    for(std::size_t i=0;i<descs.size();++i) {
-        const auto copied=bridge_.copy(context,sources.textures[i],*slot.surfaces[i]);
-        if(const auto error=std::get_if<Error>(&copied)) {
-            // A preceding copy may already be queued. Keep this slot and all
-            // its surfaces quarantined until the owning device is torn down.
-            failed_=true;
-            return *error;
-        }
-        lease.lastCopy=std::get<FgCopyTicket>(copied);
-        slot.lastCopy=lease.lastCopy;
-        lease.resources[i]=slot.surfaces[i]->d12();
+    std::array<FgCopyPair,5> pairs{};
+    for(std::size_t i=0;i<pairs.size();++i)
+        pairs[i]={sources.textures[i],&*slot.surfaces[i]};
+    const auto copied=bridge_.copyBatch(context,pairs);
+    if(const auto error=std::get_if<Error>(&copied)) {
+        // A device/queue failure can occur after D3D11 accepted the copies.
+        // Quarantine all five owners rather than guessing at GPU progress.
+        failed_=true;
+        return *error;
     }
+    lease.lastCopy=std::get<FgCopyTicket>(copied);
+    slot.lastCopy=lease.lastCopy;
+    for(std::size_t i=0;i<lease.resources.size();++i)
+        lease.resources[i]=slot.surfaces[i]->d12();
     return lease;
 }
 bool FgInputLeaseRing::current(const FgInputLease& lease) const noexcept {

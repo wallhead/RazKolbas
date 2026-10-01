@@ -144,6 +144,8 @@ TEST_CASE("FG game probe completes the sampled five-input copy without provider 
         started));
     REQUIRE(probe->source()==packet.frame.source);
     REQUIRE(probe->presentToken()==packet.frame.presentToken);
+    REQUIRE(std::holds_alternative<rk::Error>(
+        probe->enqueue(f.context.Get(),packet)));
     const auto deadline=std::chrono::steady_clock::now()+
         std::chrono::seconds(5);
     auto status=probe->poll();
@@ -154,4 +156,30 @@ TEST_CASE("FG game probe completes the sampled five-input copy without provider 
     }
     REQUIRE(status==rk::FgGameCopyState::Complete);
     REQUIRE(probe->poll()==rk::FgGameCopyState::Complete);
+    f.world.frame.source=34;
+    f.world.frame.presentToken=9001;
+    f.ui.source=34;
+    f.ui.presentToken=9001;
+    f.ui.hudlessStamp.source=34;
+    f.ui.uiStamp.source=34;
+    f.ui.finalStamp.source=34;
+    auto nextPair=rk::pairFgGameInputs(f.world,f.ui);
+    REQUIRE(std::holds_alternative<rk::FgGameInputCandidate>(nextPair));
+    const auto& next=std::get<rk::FgGameInputCandidate>(nextPair);
+    const auto enqueued=probe->enqueue(f.context.Get(),next);
+    REQUIRE(std::holds_alternative<rk::FgCopyTicket>(enqueued));
+    REQUIRE(std::get<rk::FgCopyTicket>(enqueued).producer==2);
+    REQUIRE(std::get<rk::FgCopyTicket>(enqueued).copy==2);
+    status=probe->poll();
+    while(status==rk::FgGameCopyState::Pending&&
+          std::chrono::steady_clock::now()<deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        status=probe->poll();
+    }
+    REQUIRE(status==rk::FgGameCopyState::Complete);
+    REQUIRE(probe->source()==34);
+    REQUIRE(probe->presentToken()==9001);
+    REQUIRE(probe->close());
+    REQUIRE(std::holds_alternative<rk::Error>(
+        probe->enqueue(f.context.Get(),next)));
 }
