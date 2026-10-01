@@ -6043,3 +6043,53 @@ the staged manifest hash is
 Substituting only that staged INI into the current mod verifies **14/14**
 manifest entries. Application and a native-route FPS comparison are still
 pending confirmed exit of the new process.
+
+The user then reported that a different DLSS setup showed the same lower FPS.
+That comparison weakens the private-route attribution; the 15-FPS change must
+not be described as a demonstrated RazKolbas regression. The new Skyrim PID
+8992 exited after one graceful window-close request. With the game absent,
+only the staged INI and manifest were copied into the installed mod. The
+native-route INI hash is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`,
+the manifest hash is
+`ffcfdcc80d9240dd734497788ae290b90db4dbe667839e389ff5bb3006df462a`,
+and all **14/14** payloads verify. The DLL remains the 0.1.146 build; FG is
+Off and `ProbeFgPrivateSwapOff=false`. A RazKolbas native-route FPS
+comparison after this rollback is **NOT RUN**. Performance attribution is
+deferred while the next FG camera-producer implementation proceeds offline.
+
+## Source 0.1.147 camera observer hot-path filter (2026-10-01)
+
+The previously verified 1.6.1170 camera producer and 0.505 ENB Map/Unmap
+slots remain unchanged. The observer now caches the selected buffer identity
+at installation and frame snapshots. Unrelated resources forward directly,
+without a mutex or Skyrim-global reads; the selected buffer retains exact
+validation and pre-Unmap copying. A buffer replaced between snapshots is
+skipped until the next identity refresh. A regression test failed on the old
+hook (exit 34) and passed after this change in both Release and Debug exact-ENB
+hardware probes. Full Release and Debug CTest passed **67/67** and **62/62**.
+The corrected unrelated-resource CPU microbenchmark had a median extra cost
+of approximately **0.0175 microseconds/pair** across three runs, versus
+**1.13835 microseconds/pair** in the saved old-hook run. The selected path
+remains about **1.1 microseconds/pair**. These are synthetic CPU timings, not
+Skyrim FPS. Evidence and limitations: `docs/re/FG_CAMERA_HOT_PATH_2026-10-01.md`.
+
+This new source has **not yet run in Skyrim**. FG remains Off; no FG token or
+generated Skyrim frame is claimed. A game run is needed to test real camera
+freshness and performance with the new observer.
+
+The 0.1.147 Release package was staged from the just-built DLL plus the exact
+installed vendor runtimes at
+`artifacts/local/stage-v54-fg-camera-fast-0147`. The user INI was preserved
+except for `ProbeFgCameraWrites=false` becoming **true**; FG and NR remain Off,
+SR settings and hotkeys are unchanged, and `ProbeFgPrivateSwapOff=false` stays
+in place. After confirming Skyrim was closed and backing up the previous DLL,
+INI and manifest to `artifacts/local/backup-v54-before-0147`, only those three
+files were replaced in the MO2 mod. A fresh installed-manifest verification
+passed **14/14** payloads. Installed DLL SHA-256:
+`523fb1bbb6ae9c5d46d25c6c7db4527abae1745465838d389408c46b5e31a6ab`;
+INI SHA-256:
+`7ee41ab8575d1590a3b5c6a8d7b856c508ef8e2924f26ef5e3ba46de0b63ce19`;
+manifest SHA-256:
+`c7881a5cbbedcdfb5250b0b286d1d23fb83c27250008af8749198f3d2133d72d`.
+The 0.1.147 Skyrim result is **NOT RUN** until the user starts the game.

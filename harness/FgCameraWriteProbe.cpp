@@ -95,6 +95,7 @@ int run(const wchar_t* enbPath,bool benchmark) {
     }
     if(!std::get<bool>(installed))return 16;
     *bufferCell=buffer.Get();
+    if(rk::snapshotFgCameraWrites().latest)return 38;
     for(unsigned frame=1;frame<=240;++frame) {
         if(frame==121) {
             ComPtr<ID3D11Buffer> replacement;
@@ -124,9 +125,25 @@ int run(const wchar_t* enbPath,bool benchmark) {
     const auto final=rk::snapshotFgCameraWrites();
     const bool same=std::memcmp(readback.pData,final.latest->bytes.data(),720)==0;
     context->Unmap(staging.Get(),0);if(!same||final.rejected)return 28;
+    // A replacement first observed between frame snapshots must fail closed.
+    // The next snapshot adopts its identity; only a later write is captured.
+    ComPtr<ID3D11Buffer> lateBuffer;
+    if(FAILED(device->CreateBuffer(&desc,nullptr,&lateBuffer)))return 32;
+    *bufferCell=lateBuffer.Get();
+    D3D11_MAPPED_SUBRESOURCE lateMapped{};
+    if(FAILED(context->Map(lateBuffer.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&lateMapped)))return 33;
+    std::memset(lateMapped.pData,0x66,720);context->Unmap(lateBuffer.Get(),0);
+    if(rk::snapshotFgCameraWrites().latest)return 34;
+    if(FAILED(context->Map(lateBuffer.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&lateMapped)))return 35;
+    std::memset(lateMapped.pData,0x77,720);context->Unmap(lateBuffer.Get(),0);
+    const auto lateFacts=rk::snapshotFgCameraWrites();
+    if(!lateFacts.latest||lateFacts.completed!=241||lateFacts.latest->revision!=241||
+       lateFacts.latest->buffer!=reinterpret_cast<std::uintptr_t>(lateBuffer.Get()))return 36;
+    for(auto byte:lateFacts.latest->bytes)if(byte!=0x77)return 37;
     *bufferCell=nullptr;if(rk::snapshotFgCameraWrites().latest)return 29;
     if(benchmark) {
         *bufferCell=foreignBuffer.Get();
+        if(rk::snapshotFgCameraWrites().latest)return 39;
         const double selected=measurePairs(context.Get(),foreignBuffer.Get());
         const double foreign=measurePairs(context.Get(),buffer.Get());
         if(selected<0||foreign<0)return 31;
@@ -136,7 +153,7 @@ int run(const wchar_t* enbPath,bool benchmark) {
             <<"; microbenchmark, not game FPS\n";
         *bufferCell=nullptr;rk::snapshotFgCameraWrites();
     }
-    std::cout<<"Exact ENB slots: disabled/foreign-owner rejection passed; 240 fresh identical writes, buffer replacement, foreign resource forwarding and GPU readback passed; writers="
+    std::cout<<"Exact ENB slots: disabled/foreign-owner rejection passed; 240 fresh identical writes, fail-closed late replacement, foreign resource forwarding and GPU readback passed; writers="
         <<final.writerCount<<" rejected="<<final.rejected<<"; synthetic camera fixture, no Skyrim or FG-On\n";
     // Callback lease retains one context and pinned modules until exit. Its
     // synthetic fixture cells must remain mapped for that lifetime.

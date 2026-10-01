@@ -34,6 +34,7 @@ struct State {
     MapFn nextMap{};UnmapFn nextUnmap{};
     PointerPatch mapPatch,unmapPatch;
     std::atomic<bool> armed{false};
+    std::atomic<std::uintptr_t> selectedBufferCache{0};
     FgCameraWriteObservation facts;
     std::mutex mutex;
 };
@@ -49,8 +50,10 @@ bool select(State& state,ID3D11Resource* resource) {
     if(!read(state.contextCell,&ctx,sizeof(ctx))||
        ctx!=reinterpret_cast<std::uintptr_t>(state.context.Get())||
        !read(state.bufferCell,&selected,sizeof(selected))) {
+        state.selectedBufferCache.store(0,std::memory_order_release);
         state.capture.selectBuffer(0);state.buffer.Reset();return false;
     }
+    state.selectedBufferCache.store(selected,std::memory_order_release);
     if(selected!=reinterpret_cast<std::uintptr_t>(state.buffer.Get())) {
         state.capture.selectBuffer(0);state.buffer.Reset();
     }
@@ -71,20 +74,23 @@ HRESULT STDMETHODCALLTYPE mapProxy(ID3D11DeviceContext* context,
     const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!state->nextMap)std::terminate();
+    const bool candidate=state->armed.load(std::memory_order_acquire)&&
+        context==state->context.Get()&&resource&&
+        reinterpret_cast<std::uintptr_t>(resource)==
+            state->selectedBufferCache.load(std::memory_order_acquire);
     const auto hr=state->nextMap(context,resource,subresource,kind,flags,mapped);
+    if(!candidate)return hr;
     const auto savedError=GetLastError();
-    if(state->armed.load(std::memory_order_acquire)&&context==state->context.Get()) {
-        try {
-            std::scoped_lock lock(state->mutex);
-            if(select(*state,resource)) {
-                const bool valid=SUCCEEDED(hr)&&mapped&&subresource==0&&
-                    (kind==D3D11_MAP_WRITE_DISCARD||kind==D3D11_MAP_WRITE_NO_OVERWRITE);
-                if(!state->capture.mapped(reinterpret_cast<std::uintptr_t>(context),
-                    reinterpret_cast<std::uintptr_t>(resource),GetCurrentThreadId(),caller,
-                    valid?mapped->pData:nullptr,720,valid))++state->facts.rejected;
-            }
-        }catch(...) {state->armed.store(false,std::memory_order_release);}
-    }
+    try {
+        std::scoped_lock lock(state->mutex);
+        if(select(*state,resource)) {
+            const bool valid=SUCCEEDED(hr)&&mapped&&subresource==0&&
+                (kind==D3D11_MAP_WRITE_DISCARD||kind==D3D11_MAP_WRITE_NO_OVERWRITE);
+            if(!state->capture.mapped(reinterpret_cast<std::uintptr_t>(context),
+                reinterpret_cast<std::uintptr_t>(resource),GetCurrentThreadId(),caller,
+                valid?mapped->pData:nullptr,720,valid))++state->facts.rejected;
+        }
+    }catch(...) {state->armed.store(false,std::memory_order_release);}
     SetLastError(savedError);return hr;
 }
 void STDMETHODCALLTYPE unmapProxy(ID3D11DeviceContext* context,
@@ -92,32 +98,35 @@ void STDMETHODCALLTYPE unmapProxy(ID3D11DeviceContext* context,
     const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!state->nextUnmap)std::terminate();
+    const bool candidate=state->armed.load(std::memory_order_acquire)&&
+        context==state->context.Get()&&resource&&
+        reinterpret_cast<std::uintptr_t>(resource)==
+            state->selectedBufferCache.load(std::memory_order_acquire);
+    if(!candidate) {state->nextUnmap(context,resource,subresource);return;}
     const auto savedError=GetLastError();
-    if(state->armed.load(std::memory_order_acquire)&&context==state->context.Get()) {
-        try {
-            std::scoped_lock lock(state->mutex);
-            if(select(*state,resource)) {
-                if(state->capture.beforeUnmap(reinterpret_cast<std::uintptr_t>(context),
-                    reinterpret_cast<std::uintptr_t>(resource),
-                    subresource==0?GetCurrentThreadId():0,caller)) {
-                    ++state->facts.completed;
-                    const auto write=state->capture.latest();
-                    bool found=false;
-                    for(unsigned i=0;i<state->facts.writerCount;++i) {
-                        const auto& writer=state->facts.writers[i];
-                        found|=writer.mapCaller==write->mapCaller&&
-                            writer.unmapCaller==write->unmapCaller;
-                    }
-                    if(!found) {
-                        if(state->facts.writerCount<state->facts.writers.size())
-                            state->facts.writers[state->facts.writerCount++]={
-                                write->mapCaller,write->unmapCaller};
-                        else ++state->facts.writerOverflow;
-                    }
-                }else ++state->facts.rejected;
-            }
-        }catch(...) {state->armed.store(false,std::memory_order_release);}
-    }
+    try {
+        std::scoped_lock lock(state->mutex);
+        if(select(*state,resource)) {
+            if(state->capture.beforeUnmap(reinterpret_cast<std::uintptr_t>(context),
+                reinterpret_cast<std::uintptr_t>(resource),
+                subresource==0?GetCurrentThreadId():0,caller)) {
+                ++state->facts.completed;
+                const auto write=state->capture.latest();
+                bool found=false;
+                for(unsigned i=0;i<state->facts.writerCount;++i) {
+                    const auto& writer=state->facts.writers[i];
+                    found|=writer.mapCaller==write->mapCaller&&
+                        writer.unmapCaller==write->unmapCaller;
+                }
+                if(!found) {
+                    if(state->facts.writerCount<state->facts.writers.size())
+                        state->facts.writers[state->facts.writerCount++]={
+                            write->mapCaller,write->unmapCaller};
+                    else ++state->facts.writerOverflow;
+                }
+            }else ++state->facts.rejected;
+        }
+    }catch(...) {state->armed.store(false,std::memory_order_release);}
     SetLastError(savedError);
     state->nextUnmap(context,resource,subresource);
 }
@@ -187,6 +196,7 @@ Result<bool> installFgCameraWriteHooks(ID3D11DeviceContext* context,
            !read(pending->contextCell,&ignored,sizeof(ignored))||
            context->GetType()!=D3D11_DEVICE_CONTEXT_IMMEDIATE)
             return Error{ErrorCode::Unsupported,"Camera globals or immediate context unavailable"};
+        select(*pending,nullptr); // seed the fast filter before callbacks are armed
         pending->nextMap=reinterpret_cast<MapFn>(base+sites[0].methodRva);
         pending->nextUnmap=reinterpret_cast<UnmapFn>(base+sites[1].methodRva);
         HMODULE self{},pinnedOwner{};
