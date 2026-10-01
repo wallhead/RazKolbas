@@ -6147,4 +6147,38 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `1cb68ea79a94a93c17b7d15bd5fa4ca8111734562a59646c70e2df4ddd5c78ab`.
-The 0.1.148 game candidate-binding result is **NOT RUN**.
+The user-started 0.1.148 run is **RUN** for the diagnostic path. The user
+reported normal image and FPS with FG Off. At world/Present frame 12,000,
+raw world guides and exact SR jitter reached the real DXGI pre-Present
+callback, but the camera producer and candidate were absent. The menu sample
+and later outer-world-hook camera snapshot were fresh, byte-stable, decoded
+and consecutive; the latter occurred only **after** the pre-Present callback.
+The attempted attach correctly rejected the older source. The outer Present
+returned `S_OK`, failed count zero. The live log snapshot and limits are in
+`docs/re/FG_CAMERA_PACKET_CANDIDATE_2026-10-01.md`. The 0.1.148 camera
+candidate result is **FAILED (phase mismatch)**; game FG-On is **NOT RUN**.
+
+## Source 0.1.149 real-Present camera pairing (2026-10-01)
+
+The pairer's second camera snapshot now occurs inside the verified DXGI
+pre-Present callback, after it identifies the current world source and before
+the raw guide packet is inspected. The outer world hook retains its later
+camera diagnostics but cannot publish a candidate. Existing pairer tests
+still reject missing, changed, stale, discontinuous or wrong-generation
+camera writes. Release build/CTest passed **69/69**; Debug passed **64/64**.
+The source does not set a camera-ready bit, create an FG token or submit a
+generated frame. **0.1.149 game candidate binding: NOT RUN. FG-On: NOT RUN.**
+The Release package is staged at
+`artifacts/local/stage-v54-fg-camera-present-0149`. After Skyrim exited, the
+installed 0.1.148 payload and staged 0.1.149 payload each passed **14/14**
+manifest hashes. The prior DLL/INI/manifest are backed up under
+`artifacts/local/backup-v54-before-0149`. Only DLL and manifest were replaced;
+the user INI and all vendor runtime files stayed byte-identical. The newly
+installed 14/14 files verify. DLL SHA-256:
+`b1c3c88b9c3decfc3385c6d35a11f540ee923c58b690b29536fab28f48191d5b`;
+INI SHA-256:
+`3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
+manifest SHA-256:
+`b5b9f9ab928b363486f99440daada73c78a24e919a884752cee6f36cda3e7940`.
+The next user-started FG-Off world run will test whether the camera candidate
+now binds at the real Present without visual or FPS regression.

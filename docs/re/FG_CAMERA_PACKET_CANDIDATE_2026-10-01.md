@@ -2,12 +2,12 @@
 
 The 0.1.147 user-started run confirmed continuous writes from the already
 disassembled Skyrim 1.6.1170 camera producer: world samples were fresh,
-unchanged between the post-menu-preparation and pre-Present snapshots,
+unchanged between the post-menu-preparation and post-world-hook snapshots,
 decoded, and consecutive. The user reported normal image and good FPS. The
 source of numeric game FPS variation remains unproven.
 
 Source 0.1.148 adds a frame pairer. It waits for two previously observed fresh
-adjacent world frames, then requires the current pre-UI and pre-Present writes
+adjacent world frames, then requires the current pre-UI and intended pre-Present writes
 to be byte-identical, to have a strictly newer producer revision from the same
 buffer generation, and to decode to consecutive current/previous matrices and
 positions. A missing phase, stale revision, buffer replacement, frame gap,
@@ -51,8 +51,46 @@ INI SHA-256:
 manifest SHA-256:
 `1cb68ea79a94a93c17b7d15bd5fa4ca8111734562a59646c70e2df4ddd5c78ab`.
 
-**0.1.148 Skyrim candidate binding: NOT RUN. FG-On: NOT RUN.** The camera
-record remains a candidate until its temporal/jitter semantics and the final
+## User-started 0.1.148 runtime result
+
+The user started Skyrim through MO2 with FG Off, loaded the save, and reported
+normal world image and FPS. In the actual call order the outer world-hook
+`observeGameCameraWrites(..., false)` runs **after** the DXGI pre-Present
+callback. At real boundary/world frame 12,000, the raw world guides and
+matching SR jitter were present, but `cameraProducer=false` and
+`cameraCandidate=false`; the candidate attach rejected the older camera
+source. The later post-world-hook observer reported one writer, 161,116
+completed writes, zero rejected writes, a fresh and menu-stable decoded
+camera with consecutive history. The outer Present returned `S_OK` with zero
+failures. These observations establish the phase-order bug; they do not
+establish a working candidate or FG submission.
+
+The ignored live log snapshot is
+`artifacts/local/fg-camera-candidate-0148-live-snapshot.log`, 24,146,831 bytes,
+SHA-256 `916c41534d8a2b6e2a5c246ed7626184c3cc7b6da6a966b99f81423426dc3d52`.
+The appended log's 0.1.148 session begins at the 11:17:59 marker. Skyrim
+was running when the snapshot was copied and closed afterward.
+
+Source 0.1.149 moves the pairer's second sample into
+`sampleFgFrameBoundary`, after the real boundary identifies its world source
+and before the raw guide packet is inspected. The later outer-hook observer
+still logs diagnostics but cannot publish a camera candidate. The pairer
+continues to reject a missing or different pre-UI sample, so this change does
+not relabel an earlier frame as current. Release build/CTest passed **69/69**;
+Debug passed **64/64**. The full 14-file stage is
+`artifacts/local/stage-v54-fg-camera-present-0149`. After Skyrim exited,
+all 14 old and staged files matched their manifests, and the staged INI
+matched the installed user INI. The previous DLL/INI/manifest were backed
+up in `artifacts/local/backup-v54-before-0149`; only the DLL and manifest
+were replaced. The installed 14/14 payloads verified. Installed DLL SHA-256:
+`b1c3c88b9c3decfc3385c6d35a11f540ee923c58b690b29536fab28f48191d5b`;
+unchanged INI SHA-256:
+`3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
+manifest SHA-256:
+`b5b9f9ab928b363486f99440daada73c78a24e919a884752cee6f36cda3e7940`.
+
+**0.1.149 Skyrim candidate binding: NOT RUN. FG-On: NOT RUN.** The camera record remains a candidate until its
+temporal/jitter semantics and the final
 colour, converted depth/motion, transparent UI and provider retirement path
-are jointly validated in a real frame. The prior 0.1.147 game build was not
-replaced while Skyrim was running.
+are jointly validated in a real frame. No installed files were replaced while
+Skyrim was running.

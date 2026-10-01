@@ -2178,9 +2178,6 @@ void observeGameCameraWrites(WorldState* state,std::uint64_t frame,bool beforeUi
             canCompareFgCameraWriteHistory(*state->fgPriorPresentWrite,*current)&&
             state->fgPriorPresentFrame+1==frame&&
             fgGameCameraConsecutive(*state->fgPriorPresentCamera,*decoded);
-        if(state->probeFgFrameBoundaries)
-            state->fgCameraProducer=state->fgCameraPairer.beforePresent(
-                frame,observation.latest);
         state->fgValidCameras+=decoded.has_value();state->fgConsecutiveCameras+=consecutive;
         if(state->fgWriteFrames<=12||frame%600==0)
             spdlog::info("FG camera writes frame {}: buffer=0x{:x} generation={} revision={} completed={} rejected={} writers={} overflow={} fresh={} menuStable={} decoded={} consecutive={}; observedFrames={} freshFrames={} stableFrames={} missingFrames={} validCameras={} consecutiveCameras={}; diagnostic only, no SL token or FG submission",
@@ -3186,6 +3183,12 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             swap&&swap==expected);
         if(boundary.kind!=FgBoundaryKind::Test&&
            boundary.kind!=FgBoundaryKind::ForeignSwap) {
+            // This callback runs before the real DXGI Present. The outer world
+            // hook's post-dispatch observer runs later and cannot produce a
+            // camera sample for this Present without a one-frame mismatch.
+            if(state->probeFgCameraWrites)
+                state->fgCameraProducer=state->fgCameraPairer.beforePresent(
+                    boundary.world,snapshotFgCameraWrites().latest);
             // The current hook has phase identity, but no continuously owned
             // camera, FG guide packet, separate UI texture or provider lease.
             // Keep those stamps absent until their actual producers publish
