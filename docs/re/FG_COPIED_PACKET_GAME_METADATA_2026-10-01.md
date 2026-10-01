@@ -45,9 +45,28 @@ hash remained unchanged.
 - INI SHA-256: `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`
 - Manifest SHA-256: `983a933724719c906a062fe35fce7306f593b80a8dad56957ca305e9e44d5815`
 
-**0.1.155 Skyrim runtime metadata check: NOT RUN. FG-On/generated Skyrim
-frames: NOT RUN.** The next user-started MO2 save load should report normal
-image/UI/FPS and allow collection of the eight copied-packet metadata lines
-and copy completions. A valid metadata line is not provider readiness; the
-game-owned lower swap, verified Streamline phase markers, read transitions
-and actual provider/Present/allocator retirement remain to be joined.
+## User-started Skyrim runtime check
+
+The user started Skyrim through MO2 on 2026-10-01. The log's 0.1.155 bootstrap
+is at 13:50:23 local time; the eight world packets were captured at 13:58:49.
+Source/Present identities are 57872 through 57886 in steps of two, generation
+1, UI epoch 1. All eight exact copied-packet metadata checks passed with
+same-frame camera revisions and the validated native target index/count
+0/3. All eight five-input copies queued and completed, producer/copy fence
+values 1 through 8. The session reported `attempts=8 copies=8 clean=true`.
+
+The captured 0.1.155 session contains zero metadata rejection/unavailable
+records, copy rejection/failure, SR suspension or sampled failed Present.
+Later observations report `DXGI_STATUS_OCCLUDED` (`0x087a0001`) with
+`failed=0`; these are not successful visible-frame measurements. The user
+has not yet separately confirmed image/UI/FPS for this run.
+
+The ignored snapshot is
+`artifacts/local/fg-copied-metadata-0155-live-snapshot.log`, 25,541,475 bytes,
+SHA-256 `d301429422bd3c667318d189dc12501a0c52c026c158dba38a889c198b5af351`.
+
+**0.1.155 eight-frame Skyrim metadata/copy check: RUN/PASS. User visual/FPS
+check: PENDING. FG-On/generated Skyrim frames: NOT RUN.** A valid metadata
+line is not provider readiness; the game-owned lower swap, verified
+Streamline phase markers, read transitions and actual
+provider/Present/allocator retirement remain to be joined.

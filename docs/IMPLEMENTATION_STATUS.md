@@ -6372,7 +6372,12 @@ Debug: **65/65**. Details: `docs/re/FG_COPIED_PACKET_GAME_METADATA_2026-10-01.md
 Skyrim was closed; the prior installed and new staged packages each verified
 **14/14**. The old DLL/INI/manifest were backed up, only DLL and manifest
 were replaced, and installed 0.1.155 verified **14/14** with INI
-byte-identical. **0.1.155 game metadata trial: NOT RUN. FG-On/generated
-Skyrim frames: NOT RUN.** Next: one user-started FG-Off save load for the
-eight metadata/copy lines and image/UI/FPS check, then connect the copied
+byte-identical. The user-started 0.1.155 run captured eight valid metadata
+packets and eight completed copies, source/Present 57872 through 57886,
+producer/copy fences 1 through 8. The session closed cleanly with zero
+metadata rejection, copy failure, SR suspension or sampled failed Present.
+Later Present observations report occlusion with no failure. The user's
+image/UI/FPS assessment is still pending; log identity is in the report.
+**0.1.155 eight-frame game metadata/copy trial: RUN/PASS. Visual/FPS check:
+PENDING. FG-On/generated Skyrim frames: NOT RUN.** Next: connect the copied
 lease to the actual lower presentation owner and provider retirement.
