@@ -6276,7 +6276,12 @@ build/CTest passed **69/69**; Debug passed **64/64**. Details:
 The 0.1.152 stage and previous install verified 14/14. The previous
 DLL/INI/manifest were backed up, only DLL and manifest replaced, and the new
 install verified 14/14 with the INI byte-identical. The user-started Skyrim
-check is pending. **0.1.152 game runtime: NOT RUN. FG-On/generated frames:
-NOT RUN.** Next:
-verify the one-frame candidate in Skyrim, then build continuous native UI and
-the retained D3D11-to-D3D12 five-input lease.
+check reported normal world image, UI and steady FPS. At world/present frame
+8850, the one-shot native UI route reported complete and paired three
+2560x1440 D3D11 textures with the same converted-guide packet and real
+Present epoch. The captured session has one accepted UI pair, zero UI
+rejections, 19 guide/camera candidate packets, zero SR suspensions and zero
+sampled nonzero Present failures. Log identity and limits are in the report.
+**0.1.152 sampled native-UI pairing: RUN/PASS. FG-On/generated Skyrim frames:
+NOT RUN.** Next: continuous native UI and a retained D3D11-to-D3D12
+five-input lease with provider retirement.

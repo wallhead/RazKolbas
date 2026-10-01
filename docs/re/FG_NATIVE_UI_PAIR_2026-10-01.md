@@ -43,4 +43,20 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `742456247b20796a3dc06c5b4e9d0e43c6997691cd1cd521a1d0287ba06c2667`.
-**Game runtime and generated frames remain NOT RUN until the user launches it.**
+At installation time, game runtime and generated frames were **NOT RUN**.
+
+The user then launched 0.1.152 through MO2 with FG Off, loaded the same save
+and reported normal world image, native UI and steady FPS. The session
+beginning at the 12:32:49 bootstrap marker armed one loaded-world UI frame
+at 12:35:57. Its real pre-Present boundary paired source/present **8850**,
+generation **1**, epoch **1**, a complete UI route and a matching converted
+guide packet. HUD-free colour, transparent UI and final colour were all
+captured at **2560x1440**. The snapshot contains one arm, one accepted pair,
+zero UI-candidate rejections, 19 sampled converted-guide/camera-candidate
+packets, zero SR suspensions and zero sampled nonzero Present failures.
+Ignored live log snapshot:
+`artifacts/local/fg-native-ui-0152-live-snapshot.log`, 24,890,903 bytes,
+SHA-256 `7852523d78c56ef0423be613ca7cced1e18417b15957972d8b7861a79ab72377`.
+This proves the **sampled pairing and visual regression check passed in the
+game**. It does not verify continuous UI routing, the eventual D3D12 copy,
+provider consumption, generated frames or loading-screen quality.
