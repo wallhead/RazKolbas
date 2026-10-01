@@ -5973,3 +5973,33 @@ presentation route while preserving all other settings, then compare FPS if
 the user wants a matched rollback measurement. FG admission's missing camera,
 guide, HUD-less, native UI and GPU-retirement producers remain the next code
 steps; do not enable FG submission from the phase ledger alone.
+
+## Source checkpoint after 0.1.146: world-guide handoff (2026-10-01)
+
+The owned DLSS world publication can now retain the actual D3D11 depth and
+motion resource references and snapshot the display image before native UI.
+This path runs only with the existing default-Off
+`Diagnostics.ProbeFgFrameBoundaries` switch, after a provider world frame and
+outside loading, title, inventory and magic menus. A new
+`FgWorldGuideLatch` pairs that capture with the verified real-Present world ID,
+thread and reset epoch; TEST/foreign, stale, unmatched and cross-thread
+Presents cannot consume it. Resize clears its retained inputs. The probe
+captures the first 16 eligible provider frames and each 600th later world
+frame, avoiding a sustained extra display-sized GPU copy. The live packet log
+reports whether this raw handoff reached Present.
+
+These are **raw guide candidates**, not converted DLSS-G input textures.
+The latch deliberately leaves colour, depth, motion, HUD-less and UI readiness
+stamps false, and it does not create an SDK token or lease. In particular,
+the pre-UI snapshot has not been established as a post-ENB HUD-less source.
+This is a concrete source-to-Present ownership connection; camera, guide
+conversion, continuous transparent UI, final colour placement and provider
+retirement still block FG-On.
+
+The integration test was written first and failed for the missing latch
+header. Its WARP run now checks the pre-UI pixel snapshot survives a later
+display overwrite, retained source identity and rejection of duplicate,
+wrong-sized, TEST, stale and cross-thread inputs. Full Release build/CTest
+passed **67/67**; full Debug build/CTest passed **62/62**. This source change
+has **not been installed or run in Skyrim**. The installed 0.1.146 timing
+trial is unchanged; its game timing run remains the next necessary launch.

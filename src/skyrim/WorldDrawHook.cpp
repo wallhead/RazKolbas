@@ -1,5 +1,6 @@
 #include "rk/WorldDrawHook.hpp"
 #include "rk/FgLiveFrameAdmission.hpp"
+#include "rk/FgWorldGuideLatch.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/PatchDescriptor.hpp"
@@ -66,6 +67,9 @@ struct WorldState {
     DeferredUiFlushForwarder deferredUiFlushForwarder;
     std::atomic<std::uint64_t> forwarded{0};
     FgRealFrameBoundaries fgFrameBoundaries;
+    FgWorldGuideLatch fgWorldGuides;
+    std::optional<FgWorldGuideFrame> fgObservedGuides;
+    unsigned fgWorldGuideCaptureAttempts{};
     bool probeFgFrameBoundaries{};
     std::atomic<std::uint32_t> fgLiveLastMask{UINT32_MAX};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
@@ -1883,6 +1887,26 @@ bool processOwnedWorldFrame(WorldState* state,void* world,
             } else spdlog::warn("Experimental direct UI plane rejected at frame {}: native format or geometry differs",
                 sequence);
         }
+        if(state->probeFgFrameBoundaries&&
+           boundary==OwnedPublicationBoundary::MenuDisplay&&
+           outcome.mode()==SdrSrFrameMode::Provider&&
+           !inventoryMenuOnStack(state)&&!magicMenuOnStack(state)&&
+           !titleMenuOnStack(state)&&
+           !namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME)&&
+           (state->fgWorldGuideCaptureAttempts<16||sequence%600==0)) {
+            ++state->fgWorldGuideCaptureAttempts;
+            const auto captured=state->fgWorldGuides.capture(sequence,
+                domain->plan().generation,domain->plan().render,
+                domain->plan().display,context,
+                reinterpret_cast<ID3D11Texture2D*>(numbers.depth),
+                reinterpret_cast<ID3D11Texture2D*>(numbers.motion),display);
+            if(const auto error=std::get_if<Error>(&captured)) {
+                if(state->fgWorldGuideCaptureAttempts<=3||
+                   state->fgWorldGuideCaptureAttempts==16||sequence%600==0)
+                    spdlog::warn("FG raw world guide frame {} unavailable: {}",
+                        sequence,error->message);
+            }
+        }
         if(FAILED(ui->commitPublishedUi(sequence))||ui->compatibilityFault())
             throw std::runtime_error("Owned native publication or context compatibility failed");
         if(boundary==OwnedPublicationBoundary::PrePresent&&
@@ -3148,14 +3172,18 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             // camera, FG guide packet, separate UI texture or provider lease.
             // Keep those stamps absent until their actual producers publish
             // matching source/generation/epoch and retirement tokens.
-            FgSourceFrame frame{};
-            frame.source=boundary.world;
-            frame.presentToken=boundary.realPresent;
-            frame.resetEpoch=boundary.epoch;
-            if(const auto* domain=activeOwnedSceneDomain()) {
-                frame.generation=domain->plan().generation;
-                frame.render=domain->plan().render;
-                frame.display=domain->plan().display;
+            state->fgObservedGuides=state->fgWorldGuides.take(boundary);
+            FgSourceFrame frame=state->fgObservedGuides?
+                state->fgObservedGuides->frame:FgSourceFrame{};
+            if(!state->fgObservedGuides) {
+                frame.source=boundary.world;
+                frame.presentToken=boundary.realPresent;
+                frame.resetEpoch=boundary.epoch;
+                if(const auto* domain=activeOwnedSceneDomain()) {
+                    frame.generation=domain->plan().generation;
+                    frame.render=domain->plan().render;
+                    frame.display=domain->plan().display;
+                }
             }
             frame.loading=namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
             frame.paused=titleMenuOnStack(state)||inventoryMenuOnStack(state)||
@@ -3166,13 +3194,15 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
             const auto inspected=inspectFgLiveFrame(boundary,frame,false);
             const auto prior=state->fgLiveLastMask.exchange(inspected.gaps,
                 std::memory_order_relaxed);
-            if(boundary.realPresent<=3||boundary.realPresent%600==0||
+            if(state->fgObservedGuides||boundary.realPresent<=3||
+               boundary.realPresent%600==0||
                prior!=inspected.gaps)
-                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; observation only, no token or submission",
+                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} rawWorldGuides={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; raw guides are unconverted, no token or submission",
                     boundary.realPresent,boundary.world,frame.generation,
                     frame.loading,frame.paused,
                     static_cast<unsigned>(state->displayedMode.load(
-                        std::memory_order_relaxed)),inspected.gaps);
+                        std::memory_order_relaxed)),
+                    state->fgObservedGuides.has_value(),inspected.gaps);
         }
         return boundary;
     }catch(...) {return std::nullopt;}
@@ -3181,7 +3211,11 @@ void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!state->probeFgFrameBoundaries||!swap||
        swap!=state->createdSwap.load(std::memory_order_acquire))return;
-    try {state->fgFrameBoundaries.reset();}catch(...) {}
+    try {
+        state->fgFrameBoundaries.reset();
+        state->fgWorldGuides.clear();
+        state->fgObservedGuides.reset();
+    }catch(...) {}
 }
 std::optional<DiagnosticsSnapshot> worldDiagnosticsSnapshot(IDXGISwapChain* swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);
