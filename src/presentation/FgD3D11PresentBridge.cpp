@@ -64,6 +64,23 @@ D3D12_RESOURCE_BARRIER transition(ID3D12Resource* resource,
     barrier.Transition={resource,D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,before,after};
     return barrier;
 }
+std::uint64_t elapsedNs(std::chrono::steady_clock::time_point start) noexcept {
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<
+        std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());
+}
+}
+void FgD3D11PresentBridge::beginCpuSample(std::uint64_t realPresent) noexcept {
+    cpuSample_={};
+    cpuSample_.realPresent=realPresent;
+    cpuSample_.queued=queueOwnsLowerSwap_;
+    cpuSampleStart_=std::chrono::steady_clock::now();
+    cpuSampleActive_=true;
+}
+FgBridgeCpuSample FgD3D11PresentBridge::endCpuSample(HRESULT result) noexcept {
+    if(cpuSampleActive_)cpuSample_.totalNs=elapsedNs(cpuSampleStart_);
+    cpuSample_.result=result;
+    cpuSampleActive_=false;
+    return cpuSample_;
 }
 FgD3D11PresentBridge::FgD3D11PresentBridge(FgLowerSwap lower,
     std::unique_ptr<FgSharedInputs> interop) noexcept:
@@ -324,13 +341,20 @@ HRESULT FgD3D11PresentBridge::copyToCurrentQueued(UINT index) noexcept {
        nextCopyFenceValue_==UINT64_MAX)return DXGI_ERROR_INVALID_CALL;
     auto& slot=copySlots_[index];
     copyPhase_="slot-retirement";
-    if(!waitCopyFence(slot.fenceValue)) {
+    const auto slotStart=cpuSampleActive_?
+        std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
+    const bool slotReady=waitCopyFence(slot.fenceValue);
+    if(cpuSampleActive_)cpuSample_.slotWaitNs=elapsedNs(slotStart);
+    if(!slotReady) {
         poisoned_=true;
         return FAILED(d12_->GetDeviceRemovedReason())?
             d12_->GetDeviceRemovedReason():HRESULT_FROM_WIN32(ERROR_TIMEOUT);
     }
     copyPhase_="shared-copy-submit";
+    const auto sharedStart=cpuSampleActive_?
+        std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
     auto ticket=interop_->copy(context_.Get(),sourceLease_,shared_[index]);
+    if(cpuSampleActive_)cpuSample_.sharedCopyNs=elapsedNs(sharedStart);
     if(!std::holds_alternative<FgCopyTicket>(ticket)) {
         copyDetail_=std::get<Error>(std::move(ticket)).message;
         poisoned_=true;
@@ -341,6 +365,8 @@ HRESULT FgD3D11PresentBridge::copyToCurrentQueued(UINT index) noexcept {
     // later lower Present therefore follow the D3D11 producer in queue order.
     poisoned_=true;
     HRESULT hr{};
+    const auto d12Start=cpuSampleActive_?
+        std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
     copyPhase_="lower-get-buffer";
     if(!slot.back&&FAILED(hr=lower_.getBuffer(index,
         __uuidof(ID3D12Resource),
@@ -379,6 +405,7 @@ HRESULT FgD3D11PresentBridge::copyToCurrentQueued(UINT index) noexcept {
     copyPhase_="d3d12-copy-signal";
     const auto value=++nextCopyFenceValue_;
     if(FAILED(hr=queue_->Signal(copyFence_.Get(),value)))return hr;
+    if(cpuSampleActive_)cpuSample_.d3d12CopyNs=elapsedNs(d12Start);
     slot.fenceValue=value;
     poisoned_=false;
     prepared_=true;
@@ -401,7 +428,11 @@ HRESULT FgD3D11PresentBridge::presentPrepared(const FgPresentCall& call) noexcep
         return DXGI_ERROR_INVALID_CALL;
     prepared_=false;
     presentPhase_="lower-present";
-    return lower_.present(call);
+    const auto presentStart=cpuSampleActive_?
+        std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
+    const auto result=lower_.present(call);
+    if(cpuSampleActive_)cpuSample_.lowerPresentNs=elapsedNs(presentStart);
+    return result;
 }
 HRESULT FgD3D11PresentBridge::resize(const FgResizeCall& call) noexcept {
     try {

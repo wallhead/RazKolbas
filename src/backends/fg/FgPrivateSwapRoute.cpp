@@ -214,7 +214,8 @@ Result<std::unique_ptr<FgPrivateSwapRoute>> FgPrivateSwapRoute::prepare(
 Result<ComPtr<IDXGISwapChain4>> FgPrivateSwapRoute::createFacade(
     FactoryCreateFn nativeCreate,IDXGIFactory* nativeFactory,
     ID3D11Device* nativeD11,const DXGI_SWAP_CHAIN_DESC& request,
-    bool nativeMethodOwner) noexcept {
+    bool nativeMethodOwner,FgBridgeCpuReporter reporter,
+    void* reporterContext) noexcept {
     std::scoped_lock lock(mutex_);
     if(attempted_.exchange(true))
         return Error{ErrorCode::Conflict,"Private FG facade was already attempted"};
@@ -234,7 +235,8 @@ Result<ComPtr<IDXGISwapChain4>> FgPrivateSwapRoute::createFacade(
         auto result=FgD3D11SwapFacade::create(nativeD11,context.Get(),
             upgradedD12_.Get(),queue_.Get(),lower_.Get(),
             verifiedNative_.Get(),std::move(std::get<
-                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)),runtime_,true);
+                std::unique_ptr<FgD3D11AuxSwapSource>>(auxiliary)),runtime_,true,
+            reporter,reporterContext);
         if(std::holds_alternative<ComPtr<IDXGISwapChain4>>(result))
             issued_.store(true,std::memory_order_release);
         return result;

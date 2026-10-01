@@ -6,6 +6,7 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 #include <memory>
+#include <chrono>
 #include <vector>
 
 namespace rk {
@@ -16,6 +17,15 @@ struct FgD3D11CopySlot {
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commands;
     std::uint64_t fenceValue{};
+};
+// Sampled CPU wall time only. GPU execution, outer ReShade and ENB work are
+// outside these intervals; a long stage is evidence for follow-up tracing.
+struct FgBridgeCpuSample {
+    std::uint64_t realPresent{};
+    std::uint64_t slotWaitNs{},sharedCopyNs{},d3d12CopyNs{},
+        lowerPresentNs{},totalNs{};
+    bool queued{};
+    HRESULT result{S_OK};
 };
 // D3D11-to-D3D12 colour path. D3D11 callers render to one stable
 // logical buffer zero; valid facade indices alias it while the lower D3D12
@@ -51,6 +61,8 @@ public:
     std::uint64_t copyCommandAllocations() const noexcept {
         return copyCommandAllocations_;
     }
+    void beginCpuSample(std::uint64_t realPresent) noexcept;
+    FgBridgeCpuSample endCpuSample(HRESULT result) noexcept;
 private:
     HRESULT copyToCurrentImpl() noexcept;
     HRESULT copyToCurrentQueued(UINT index) noexcept;
@@ -87,5 +99,8 @@ private:
     std::string copyDetail_;
     const char* firstCopyFailurePhase_{"none"};
     HRESULT firstCopyFailure_{S_OK};
+    bool cpuSampleActive_{};
+    std::chrono::steady_clock::time_point cpuSampleStart_{};
+    FgBridgeCpuSample cpuSample_{};
 };
 }

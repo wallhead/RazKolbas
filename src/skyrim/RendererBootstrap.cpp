@@ -20,6 +20,7 @@
 #include "rk/SamplerBiasCache.hpp"
 #include "rk/RipCall6.hpp"
 #ifdef RK_WITH_STREAMLINE
+#include "rk/FgD3D11PresentBridge.hpp"
 #include "rk/FgPrivateSwapRoute.hpp"
 #include "rk/FgReShadeEffectOwner.hpp"
 #endif
@@ -776,7 +777,17 @@ HRESULT WINAPI nativeFactoryCreateProxy(IDXGIFactory* factory,IUnknown* device,
             if(device&&SUCCEEDED(device->QueryInterface(
                 IID_PPV_ARGS(&nativeD11)))) {
                 auto made=route->createFacade(next,factory,nativeD11.Get(),
-                    *requested,true);
+                    *requested,true,[](void*,const FgBridgeCpuSample& sample) noexcept {
+                        constexpr double nsPerMs=1'000'000.0;
+                        try {spdlog::info("FG-Off private bridge CPU sample #{}: queued={} slotWait={:.3f}ms sharedD3D11Copy={:.3f}ms d3d12CopySubmit={:.3f}ms lowerPresent={:.3f}ms total={:.3f}ms result=0x{:08x}; sampled CPU wall time, GPU and outer ReShade/ENB stages excluded",
+                            sample.realPresent,sample.queued,
+                            sample.slotWaitNs/nsPerMs,
+                            sample.sharedCopyNs/nsPerMs,
+                            sample.d3d12CopyNs/nsPerMs,
+                            sample.lowerPresentNs/nsPerMs,
+                            sample.totalNs/nsPerMs,
+                            static_cast<std::uint32_t>(sample.result));}catch(...) {}
+                    });
                 if(auto* facade=std::get_if<Microsoft::WRL::ComPtr<
                     IDXGISwapChain4>>(&made)) {
                     *swap=facade->Detach();

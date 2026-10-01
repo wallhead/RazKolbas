@@ -11,6 +11,8 @@
 #include <mutex>
 
 namespace rk {
+struct FgBridgeCpuSample;
+using FgBridgeCpuReporter=void(*)(void*,const FgBridgeCpuSample&) noexcept;
 // Prepared before Skyrim's D3D11 swap creation. The object must outlive the
 // returned facade and every Streamline proxy callback that can reach it.
 class FgPrivateSwapRoute final {
@@ -24,7 +26,8 @@ public:
     Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> createFacade(
         FactoryCreateFn nativeCreate,IDXGIFactory* nativeFactory,
         ID3D11Device* nativeD11,const DXGI_SWAP_CHAIN_DESC& request,
-        bool nativeMethodOwner) noexcept;
+        bool nativeMethodOwner,FgBridgeCpuReporter reporter=nullptr,
+        void* reporterContext=nullptr) noexcept;
     const FgPrivateSwapAdmission& admission() const noexcept {return expected_;}
     bool issued() const noexcept {return issued_.load(std::memory_order_acquire);}
     // Offline probe only: retain the exact lower swap and its submission

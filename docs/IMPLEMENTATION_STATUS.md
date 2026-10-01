@@ -5917,3 +5917,59 @@ roughly ten-FPS cost by timing its D3D11 shared copy, D3D12 copy-slot wait,
 lower Present and ReShade stages before changing the presentation design.
 The full-resolution loading path requires tracing the upstream artwork
 producer; another copy after Loading Menu drawing did not repair it.
+
+## 0.1.146 fail-closed FG packet inventory and private-bridge timing (2026-10-01)
+
+Source-only FG admission now checks the verified renderer/world/real-Present
+boundary against source ID, reset epoch and present token, and independently
+reports missing presentation owner, inactive/loading/menu scene, camera,
+display colour, render depth/motion, HUD-less display colour, native UI and
+input-retirement proof. A phase-ready Loading Menu frame is rejected. The
+optional `Diagnostics.ProbeFgFrameBoundaries` path logs the resulting gap mask
+at transitions and bounded intervals; it deliberately publishes no camera,
+guide, UI or retention stamps until continuous producers own those resources.
+It does not create a Streamline token, emit markers or submit FG. This is an
+admission inventory, **not** an FG-On implementation or a provider capability
+claim. Current game packet readiness remains false by construction.
+
+The FG-Off private D3D11-to-D3D12 facade now samples CPU wall time for
+copy-slot retirement wait, D3D11 shared copy/flush, D3D12 copy recording and
+submission, and the lower Present on its first three and each 600th real
+Present. `DXGI_PRESENT_TEST` does not submit a sample. The game callback logs
+milliseconds without heap-allocating a reporter in the factory hook. These
+timings do not include GPU execution or outer ReShade/ENB stages, so they can
+localize a CPU-side stall but cannot alone account for the full FPS change.
+Neither copy order nor fence ownership changed.
+
+TDD red was observed for the missing admission header and later for the
+missing bridge sample API. The focused admission unit and WARP facade tests
+passed after implementation. After the final function-pointer reporter
+refinement, full Release build/CTest passed **66/66** and Debug build/CTest
+passed **61/61**. A Skyrim run with these changes is **NOT RUN**; GPU-time
+attribution and actual FG-On remain **NOT RUN**.
+
+With Skyrim absent, 0.1.146 Release was staged and installed in the exact
+V5.4 MO2 `RazKolbas` mod after verifying the existing 0.1.145 manifest and
+all 14 payloads. The installed trial retains FG Off, NR Off, the bright
+reduced-loading workaround On and the phase probe Off. Its INI is byte-identical
+to the prior verified private-route trial: only `ProbeFgPrivateSwapOff` differs
+from the 0.1.145 native-route rollback. The previous DLL, INI and manifest are
+backed up under ignored `artifacts/local/fg-single-owner-2026-10-01/backup-before-0146-private-cpu`.
+Installed payload verification passed **14/14** after replacing the initial
+stage DLL with the exact final Release build; both stages and the prior
+installed trial are retained under ignored artifacts. DLL SHA-256 is
+`b288f8d908b0a6af807f824e8c002624230b2951d000857a469a01228acc7630`,
+INI SHA-256 is
+`d4ad2750d9dcfe2d5e9d1ead50c917a14a707a2a24561fa3258c756d8bfdb51e`,
+and manifest SHA-256 is
+`4f43532ec5a9cb1b33db4b02a9bc0330e46a1e5a5d39d70a03b48aeb4f4d54ce`.
+
+**Next required action:** the user starts Skyrim through MO2, loads the same
+save and viewpoint with FG Off, waits at least 20 seconds, and reports steady
+FPS. Read the 0.1.146 private-bridge CPU samples from the live log before any
+performance change. Loading pixelation is still expected; another fast travel
+is not required for this timing run. After collection, restore the native
+presentation route while preserving all other settings, then compare FPS if
+the user wants a matched rollback measurement. FG admission's missing camera,
+guide, HUD-less, native UI and GPU-retirement producers remain the next code
+steps; do not enable FG submission from the phase ledger alone.

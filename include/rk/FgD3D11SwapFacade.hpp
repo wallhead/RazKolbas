@@ -8,6 +8,7 @@ namespace rk {
 // remains gated until external-buffer resize and lifetime tests exist.
 class FgD3D11SwapFacade final : public IDXGISwapChain4 {
 public:
+    using CpuReporter=void(*)(void*,const FgBridgeCpuSample&) noexcept;
     const FgD3D11PresentBridge& diagnostics() const noexcept { return *bridge_; }
     // Pass verifiedLowerNative only after proving its COM identity through
     // the lower proxy's official native-interface API. An external D3D11
@@ -19,7 +20,8 @@ public:
         ID3D12Device* verifiedLowerNative=nullptr,
         std::unique_ptr<FgD3D11AuxSwapSource> auxiliary=nullptr,
         std::shared_ptr<void> providerLifetime=nullptr,
-        bool queueOwnsLowerSwap=false);
+        bool queueOwnsLowerSwap=false,CpuReporter reporter=nullptr,
+        void* reporterContext=nullptr);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** result) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;
@@ -76,7 +78,9 @@ public:
 private:
     FgD3D11SwapFacade(ID3D11Device* d11,IDXGISwapChain4* lower,
         std::unique_ptr<FgD3D11PresentBridge> bridge,
-        std::shared_ptr<void> providerLifetime) noexcept;
+        std::shared_ptr<void> providerLifetime,CpuReporter reporter,
+        void* reporterContext) noexcept;
+    HRESULT presentObserved(const FgPresentCall& call) noexcept;
     ~FgD3D11SwapFacade()=default;
     std::atomic<ULONG> refs_{1};
     // Release after all facade and bridge proxy references.
@@ -84,5 +88,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Device> d11_;
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower_;
     std::unique_ptr<FgD3D11PresentBridge> bridge_;
+    CpuReporter reporter_;
+    void* reporterContext_{};
+    std::uint64_t realPresents_{};
 };
 }

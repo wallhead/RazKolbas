@@ -5,15 +5,18 @@ namespace rk {
 FgD3D11SwapFacade::FgD3D11SwapFacade(ID3D11Device* d11,
     IDXGISwapChain4* lower,
     std::unique_ptr<FgD3D11PresentBridge> bridge,
-    std::shared_ptr<void> providerLifetime) noexcept:
+    std::shared_ptr<void> providerLifetime,CpuReporter reporter,
+    void* reporterContext) noexcept:
     providerLifetime_(std::move(providerLifetime)),
-    d11_(d11),lower_(lower),bridge_(std::move(bridge)) {}
+    d11_(d11),lower_(lower),bridge_(std::move(bridge)),
+    reporter_(reporter),reporterContext_(reporterContext) {}
 Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> FgD3D11SwapFacade::create(
     ID3D11Device* d11,ID3D11DeviceContext* context,ID3D12Device* d12,
     ID3D12CommandQueue* queue,IDXGISwapChain* lower,
     ID3D12Device* verifiedLowerNative,
     std::unique_ptr<FgD3D11AuxSwapSource> auxiliary,
-    std::shared_ptr<void> providerLifetime,bool queueOwnsLowerSwap) {
+    std::shared_ptr<void> providerLifetime,bool queueOwnsLowerSwap,
+    CpuReporter reporter,void* reporterContext) {
     if(!lower)return Error{ErrorCode::InvalidInput,"FG facade lower swap is null"};
     Microsoft::WRL::ComPtr<IDXGISwapChain4> lower4;
     if(FAILED(lower->QueryInterface(IID_PPV_ARGS(&lower4))))
@@ -26,7 +29,7 @@ Result<Microsoft::WRL::ComPtr<IDXGISwapChain4>> FgD3D11SwapFacade::create(
     Microsoft::WRL::ComPtr<IDXGISwapChain4> facade;
     facade.Attach(new FgD3D11SwapFacade(d11,lower4.Get(),
         std::move(std::get<std::unique_ptr<FgD3D11PresentBridge>>(made)),
-        std::move(providerLifetime)));
+        std::move(providerLifetime),reporter,reporterContext));
     return facade;
 }
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::QueryInterface(REFIID iid,
@@ -68,12 +71,20 @@ HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::GetDevice(REFIID iid,
     return d11_->QueryInterface(iid,device);
 }
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::Present(UINT interval,UINT flags) {
-    const FgPresentCall call{FgPresentMethod::Present,interval,flags};
-    if(!(flags&DXGI_PRESENT_TEST)) {
-        const auto hr=bridge_->copyToCurrent();
-        if(FAILED(hr))return hr;
+    return presentObserved({FgPresentMethod::Present,interval,flags});
+}
+HRESULT FgD3D11SwapFacade::presentObserved(const FgPresentCall& call) noexcept {
+    if(call.flags&DXGI_PRESENT_TEST)return bridge_->presentPrepared(call);
+    const auto count=++realPresents_;
+    const bool sample=reporter_&&(count<=3||count%600==0);
+    if(sample)bridge_->beginCpuSample(count);
+    const auto copied=bridge_->copyToCurrent();
+    const auto result=SUCCEEDED(copied)?bridge_->presentPrepared(call):copied;
+    if(sample) {
+        const auto timing=bridge_->endCpuSample(result);
+        reporter_(reporterContext_,timing);
     }
-    return bridge_->presentPrepared(call);
+    return result;
 }
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::GetBuffer(UINT index,REFIID iid,
     void** buffer) {
@@ -116,12 +127,7 @@ HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::GetCoreWindow(REFIID iid,
 HRESULT STDMETHODCALLTYPE FgD3D11SwapFacade::Present1(UINT interval,UINT flags,
     const DXGI_PRESENT_PARAMETERS* parameters) {
     if(!parameters)return E_INVALIDARG;
-    const FgPresentCall call{FgPresentMethod::Present1,interval,flags,parameters};
-    if(!(flags&DXGI_PRESENT_TEST)) {
-        const auto hr=bridge_->copyToCurrent();
-        if(FAILED(hr))return hr;
-    }
-    return bridge_->presentPrepared(call);
+    return presentObserved({FgPresentMethod::Present1,interval,flags,parameters});
 }
 BOOL STDMETHODCALLTYPE FgD3D11SwapFacade::IsTemporaryMonoSupported() {
     return lower_->IsTemporaryMonoSupported();

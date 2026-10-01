@@ -1,4 +1,5 @@
 #include "rk/WorldDrawHook.hpp"
+#include "rk/FgLiveFrameAdmission.hpp"
 #include "rk/CallSite.hpp"
 #include "rk/FrameProbe.hpp"
 #include "rk/PatchDescriptor.hpp"
@@ -66,6 +67,7 @@ struct WorldState {
     std::atomic<std::uint64_t> forwarded{0};
     FgRealFrameBoundaries fgFrameBoundaries;
     bool probeFgFrameBoundaries{};
+    std::atomic<std::uint32_t> fgLiveLastMask{UINT32_MAX};
     std::atomic<DisplayMode> displayedMode{DisplayMode::Native};
     std::atomic<std::uint32_t> statusWidth{0},statusHeight{0};
     std::atomic<std::uint64_t> statusDlssFrames{0},statusSkippedFrames{0};
@@ -3137,8 +3139,43 @@ std::optional<FgBoundarySample> sampleFgFrameBoundary(std::uintptr_t swap,
     auto* state=active.load(std::memory_order_acquire);
     if(!state||!state->probeFgFrameBoundaries)return std::nullopt;
     const auto expected=state->createdSwap.load(std::memory_order_acquire);
-    try {return state->fgFrameBoundaries.present(thread,test,
-        swap&&swap==expected);}catch(...) {return std::nullopt;}
+    try {
+        const auto boundary=state->fgFrameBoundaries.present(thread,test,
+            swap&&swap==expected);
+        if(boundary.kind!=FgBoundaryKind::Test&&
+           boundary.kind!=FgBoundaryKind::ForeignSwap) {
+            // The current hook has phase identity, but no continuously owned
+            // camera, FG guide packet, separate UI texture or provider lease.
+            // Keep those stamps absent until their actual producers publish
+            // matching source/generation/epoch and retirement tokens.
+            FgSourceFrame frame{};
+            frame.source=boundary.world;
+            frame.presentToken=boundary.realPresent;
+            frame.resetEpoch=boundary.epoch;
+            if(const auto* domain=activeOwnedSceneDomain()) {
+                frame.generation=domain->plan().generation;
+                frame.render=domain->plan().render;
+                frame.display=domain->plan().display;
+            }
+            frame.loading=namedMenuOnStack(state,RE::LoadingMenu::MENU_NAME);
+            frame.paused=titleMenuOnStack(state)||inventoryMenuOnStack(state)||
+                magicMenuOnStack(state);
+            frame.worldActive=!frame.loading&&!frame.paused&&
+                state->displayedMode.load(std::memory_order_acquire)==
+                    DisplayMode::DlssSr;
+            const auto inspected=inspectFgLiveFrame(boundary,frame,false);
+            const auto prior=state->fgLiveLastMask.exchange(inspected.gaps,
+                std::memory_order_relaxed);
+            if(boundary.realPresent<=3||boundary.realPresent%600==0||
+               prior!=inspected.gaps)
+                spdlog::info("FG live packet #{}: world={} generation={} loading={} paused={} mode={} gaps=0x{:03x}; bits phase=1 identity=2 owner=4 scene=8 camera=16 colour=32 depth=64 motion=128 hudless=256 nativeUI=512 retirement=1024; observation only, no token or submission",
+                    boundary.realPresent,boundary.world,frame.generation,
+                    frame.loading,frame.paused,
+                    static_cast<unsigned>(state->displayedMode.load(
+                        std::memory_order_relaxed)),inspected.gaps);
+        }
+        return boundary;
+    }catch(...) {return std::nullopt;}
 }
 void resetFgFrameBoundary(std::uintptr_t swap) noexcept {
     auto* state=active.load(std::memory_order_acquire);

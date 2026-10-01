@@ -364,6 +364,34 @@ TEST_CASE("FG facade submits cached D3D11 colour before each lower Present",
     REQUIRE(native->GetCurrentBackBufferIndex()==beforeRejected);
 }
 
+TEST_CASE("FG facade reports sampled CPU stages only for real Presents",
+    "[fg_d3d11_present_bridge]") {
+    Devices gpu;
+    ComPtr<IDXGISwapChain4> lower;
+    REQUIRE(SUCCEEDED(gpu.swap.As(&lower)));
+    std::vector<rk::FgBridgeCpuSample> samples;
+    auto made=rk::FgD3D11SwapFacade::create(gpu.d11.Get(),
+        gpu.context.Get(),gpu.d12.Get(),gpu.queue.Get(),lower.Get(),
+        nullptr,nullptr,nullptr,true,
+        [](void* context,const rk::FgBridgeCpuSample& sample) noexcept {
+            static_cast<std::vector<rk::FgBridgeCpuSample>*>(context)->push_back(sample);
+        },&samples);
+    REQUIRE(std::holds_alternative<ComPtr<IDXGISwapChain4>>(made));
+    auto facade=std::move(std::get<ComPtr<IDXGISwapChain4>>(made));
+    REQUIRE(SUCCEEDED(facade->Present(0,DXGI_PRESENT_TEST)));
+    REQUIRE(samples.empty());
+    REQUIRE(SUCCEEDED(facade->Present(0,0)));
+    REQUIRE(samples.size()==1);
+    REQUIRE(samples[0].realPresent==1);
+    REQUIRE(samples[0].queued);
+    REQUIRE(samples[0].sharedCopyNs>0);
+    REQUIRE(samples[0].d3d12CopyNs>0);
+    REQUIRE(samples[0].lowerPresentNs>0);
+    REQUIRE(samples[0].totalNs>=samples[0].sharedCopyNs+
+        samples[0].d3d12CopyNs+samples[0].lowerPresentNs);
+    REQUIRE(samples[0].result==S_OK);
+}
+
 TEST_CASE("FG swap facade exposes only the D3D11 game-facing device and buffers",
     "[fg_d3d11_present_bridge]") {
     Devices gpu;
