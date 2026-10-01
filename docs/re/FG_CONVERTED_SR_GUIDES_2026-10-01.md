@@ -33,9 +33,13 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `00ac1c5b4988368247a3e0353376d753a8d93b40dfc688685bad7025acda613e`.
-The still-installed 0.1.150 package verified **14/14** and its INI matches
-the stage. **0.1.151 Skyrim runtime and FG-On/generated frames: NOT RUN.**
-Next, after Skyrim exits, install only the DLL and manifest, verify the
-package, then run one FG-Off save-load regression. Continuous input pooling,
-transparent native UI, D3D11-to-D3D12 lease and provider retirement remain
-required before enabling game FG.
+The 0.1.150 package verified **14/14** and its INI matched the stage.
+After the user quit Skyrim through its menu and the process exited, the old
+DLL/INI/manifest were backed up under
+`artifacts/local/backup-v54-before-0151`. Only the DLL and manifest were
+replaced. The installed 0.1.151 package verified **14/14** and the INI stayed
+byte-identical. **0.1.151 Skyrim runtime and FG-On/generated frames: NOT RUN.**
+The next user-started FG-Off save load must check converted-guide capture at
+the real Present and image/UI/FPS. Continuous input pooling, transparent
+native UI, D3D11-to-D3D12 lease and provider retirement remain required
+before enabling game FG.
