@@ -6003,3 +6003,43 @@ wrong-sized, TEST, stale and cross-thread inputs. Full Release build/CTest
 passed **67/67**; full Debug build/CTest passed **62/62**. This source change
 has **not been installed or run in Skyrim**. The installed 0.1.146 timing
 trial is unchanged; its game timing run remains the next necessary launch.
+
+## User-started 0.1.146 private-route FPS run (2026-10-01)
+
+The user started Skyrim through MO2 at 10:26 Moscow time, loaded the save and
+reported approximately **45 FPS versus the 60-FPS baseline** at the same view
+(a sustained 15-FPS loss). This is the user's visual FPS reading, not a
+frame-time trace. The installed 0.1.146 package still verifies **14/14**
+manifest files, with FG Off, private FG-Off presentation On and the new raw
+world-guide source code **not yet installed**. The live log confirms version
+0.1.146, the private lower/facade route, ongoing owned DLSS world publication,
+and zero reported Present failures through the inspected world interval.
+
+From 23 periodic CPU samples at private Presents #600–#13800, medians were
+slot wait **0.002 ms**, D3D11 shared copy **0.112 ms**, D3D12 copy submission
+**0.103 ms**, lower Present **0.588 ms**, total measured bridge interval
+**0.825 ms**. These sampled CPU values alone cannot explain the roughly
+5.6-ms frame-time difference implied by 60 to 45 FPS. They exclude GPU
+execution and outer ENB/ReShade work; occasional lower-Present samples reached
+3.068 ms. The result narrows the search but does **not** identify a root
+cause or prove a native-route recovery. The active log snapshot is saved under
+ignored `artifacts/local/fg-private-cpu-2026-10-01/runtime-0146-live-snapshot.log`
+(23,797,524 bytes; SHA-256
+`8c8ce6e98586753752f74f7dba4e1808ac798dbb2f2b6024ed4052a2edc3eb7b`).
+
+Skyrim was still running when this evidence was recorded. The pending action
+is to let the user exit normally, then switch only
+`Diagnostics.ProbeFgPrivateSwapOff` back Off and verify the installed manifest.
+The post-rollback FPS comparison and FG-On remain **NOT RUN**.
+
+The original test PID 27800 exited, but a new SkyrimSE PID 8992 started at
+10:33 before the rollback. No installed file was changed while that process
+was active. The exact one-setting rollback is prepared in ignored
+`artifacts/local/fg-private-cpu-2026-10-01/stage-native-rollback`, with the
+original INI and manifest backed up separately. The staged INI hash is
+`9246b486cc214a0fc1c288e64c17835ee4d499609b8dbf71b4006a9b41914869`;
+the staged manifest hash is
+`ffcfdcc80d9240dd734497788ae290b90db4dbe667839e389ff5bb3006df462a`.
+Substituting only that staged INI into the current mod verifies **14/14**
+manifest entries. Application and a native-route FPS comparison are still
+pending confirmed exit of the new process.
