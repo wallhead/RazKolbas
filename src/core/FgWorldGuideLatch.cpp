@@ -46,21 +46,30 @@ Result<bool> FgWorldGuideLatch::capture(std::uint64_t source,
     if(source<=lastSource_)
         return Error{ErrorCode::Conflict,
             "FG world guide source identity was already captured"};
-    D3D11_TEXTURE2D_DESC desc{};
-    displayBeforeUi->GetDesc(&desc);
-    desc.Usage=D3D11_USAGE_DEFAULT;
-    desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
-    desc.CPUAccessFlags=0;desc.MiscFlags=0;
-    ComPtr<ID3D11Texture2D> hudless;
-    if(FAILED(device->CreateTexture2D(&desc,nullptr,&hudless)))
+    const auto copyTarget=[&](ID3D11Texture2D* source,
+        ComPtr<ID3D11Texture2D>& target,bool hudless) {
+        D3D11_TEXTURE2D_DESC desc{};
+        source->GetDesc(&desc);
+        desc.Usage=D3D11_USAGE_DEFAULT;
+        if(hudless)desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags=0;desc.MiscFlags=0;
+        return SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&target));
+    };
+    ComPtr<ID3D11Texture2D> depthCopy,motionCopy,hudless;
+    if(!copyTarget(depth,depthCopy,false)||
+       !copyTarget(motion,motionCopy,false)||
+       !copyTarget(displayBeforeUi,hudless,true))
         return Error{ErrorCode::Unavailable,
-            "FG pre-UI guide snapshot allocation failed"};
+            "FG world guide snapshot allocation failed"};
+    context->CopyResource(depthCopy.Get(),depth);
+    context->CopyResource(motionCopy.Get(),motion);
     context->CopyResource(hudless.Get(),displayBeforeUi);
     Pending next{};
     next.source=source;next.generation=generation;
     next.thread=GetCurrentThreadId();
     next.render=render;next.display=display;
-    next.depth=depth;next.motion=motion;next.hudless=std::move(hudless);
+    next.depth=std::move(depthCopy);next.motion=std::move(motionCopy);
+    next.hudless=std::move(hudless);
     pending_=std::move(next);
     lastSource_=source;
     return true;

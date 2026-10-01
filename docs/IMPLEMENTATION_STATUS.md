@@ -6167,7 +6167,7 @@ camera diagnostics but cannot publish a candidate. Existing pairer tests
 still reject missing, changed, stale, discontinuous or wrong-generation
 camera writes. Release build/CTest passed **69/69**; Debug passed **64/64**.
 The source does not set a camera-ready bit, create an FG token or submit a
-generated frame. **0.1.149 game candidate binding: NOT RUN. FG-On: NOT RUN.**
+generated frame.
 The Release package is staged at
 `artifacts/local/stage-v54-fg-camera-present-0149`. After Skyrim exited, the
 installed 0.1.148 payload and staged 0.1.149 payload each passed **14/14**
@@ -6180,5 +6180,46 @@ INI SHA-256:
 `3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
 manifest SHA-256:
 `b5b9f9ab928b363486f99440daada73c78a24e919a884752cee6f36cda3e7940`.
-The next user-started FG-Off world run will test whether the camera candidate
-now binds at the real Present without visual or FPS regression.
+The user-started FG-Off world run now verifies the timing correction. The
+0.1.149 session begins at 11:32:14; `cameraProducer=true`, exact
+`srJitter=true`, and `cameraCandidate=true` first appear in the loaded world
+at frame 11,757 and remain true at sampled frame 13,200. At frame 12,000,
+the camera write was fresh, menu-stable, decoded and consecutive, with one
+writer and zero rejected writes; the outer Present returned `S_OK`, failed
+count zero. The user reports normal image/UI and steady FPS compared with
+0.1.148. The ignored live snapshot has 19 logged candidate-true packets and
+no sampled nonzero Present failure. Details and snapshot identity:
+`docs/re/FG_CAMERA_PACKET_CANDIDATE_2026-10-01.md`.
+**0.1.149 game camera candidate binding: RUN/PASS. FG-On/generated frames:
+NOT RUN.** Skyrim was closed through its menu after the trace; no installed
+files changed during the run. Next: establish admitted colour/depth/motion
+and transparent native-UI resource ownership with retirement before FG-On.
+
+## Source 0.1.150 immutable world-guide pixels (2026-10-01)
+
+The 0.1.149 raw packet retained the game's depth and motion texture objects,
+but their pixels could still change after the menu-phase capture. Source
+0.1.150 now snapshots raw depth and motion on the verified immediate context
+alongside the existing HUD-free colour copy. It preserves their resource
+format/bind contract and publishes no packet if an owned texture cannot be
+allocated. A WARP mutation test failed against the prior code because the
+latched depth was the same object as the game's source; it passes after the
+change. A second WARP test passes with typeless R32 depth and RG16F motion.
+The latch still does not convert guide semantics, set FG-ready stamps or
+hold the D3D12/provider retirement lease. Source and limits:
+`docs/re/FG_WORLD_GUIDE_SNAPSHOT_2026-10-01.md`.
+Release build/CTest passed **69/69**; Debug passed **64/64**. The 14-file
+stage is `artifacts/local/stage-v54-fg-guide-snapshots-0150`. After Skyrim
+closed, old and staged payloads each verified **14/14**. The prior
+DLL/INI/manifest are backed up under
+`artifacts/local/backup-v54-before-0150`; only DLL and manifest were replaced.
+The installed 14/14 files verify, with the user INI byte-identical. DLL
+SHA-256:
+`f646930eacf3720aa6ad80e0908f5f66ed24ac60a482c7cf4c1e83a4c24d7a53`;
+INI SHA-256:
+`3df48892da15b6d20236653bb8b65423b52f2e35835cdc9585b0e9728f974914`;
+manifest SHA-256:
+`a57e41a1d82fe4531629f725088a90827b9af22fd6bdd5e43bd1571723190c04`.
+**0.1.150 Skyrim runtime and FG-On: NOT RUN.** The next user-started FG-Off
+run must verify the actual game/ENB descriptor copy path and visual/FPS
+regression before more continuous input-lease work.

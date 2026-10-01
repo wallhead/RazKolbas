@@ -89,8 +89,26 @@ unchanged INI SHA-256:
 manifest SHA-256:
 `b5b9f9ab928b363486f99440daada73c78a24e919a884752cee6f36cda3e7940`.
 
-**0.1.149 Skyrim candidate binding: NOT RUN. FG-On: NOT RUN.** The camera record remains a candidate until its
-temporal/jitter semantics and the final
-colour, converted depth/motion, transparent UI and provider retirement path
-are jointly validated in a real frame. No installed files were replaced while
-Skyrim was running.
+## User-started 0.1.149 runtime result
+
+The user started Skyrim through MO2, loaded a save, and reported normal
+image/UI and steady FPS compared with 0.1.148. The 0.1.149 session begins
+at the 11:32:14 bootstrap marker. The first logged loaded-world candidate is
+frame 11,757; frame 13,200 still reports `cameraProducer=true`, matching
+`srJitter=true` and `cameraCandidate=true`. At frame 12,000, the outer camera
+diagnostic saw generation 1/revision 127,506, one writer, zero rejected
+writes, fresh/menu-stable/decoded/consecutive true, and the outer Present
+returned `S_OK` with failed count zero. The captured 0.1.149 segment has 19
+logged candidate-true packets and no sampled Present line with nonzero
+failure count. This validates candidate binding at the real game boundary;
+it does not validate FG admission or generated output.
+
+Ignored log snapshot:
+`artifacts/local/fg-camera-present-0149-live-snapshot.log`, 24,269,863 bytes,
+SHA-256 `637e696871d06840d86aa1dcfc8a042490b3650189a9fdc42a7ebf8fe471499a`.
+The snapshot includes earlier appended sessions and was copied while Skyrim
+was running. **0.1.149 Skyrim camera candidate: RUN/PASS. FG-On: NOT RUN.**
+The camera record remains a candidate until its temporal/jitter semantics
+and the final colour, converted depth/motion, transparent UI and provider
+retirement path are jointly validated in a real frame. No installed files
+were replaced while Skyrim was running.
