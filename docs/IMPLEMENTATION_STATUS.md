@@ -6336,3 +6336,22 @@ scope are in the report. **0.1.154 eight-frame FG-Off copy: RUN/PASS.
 FG-On/generated Skyrim frames: NOT RUN.** Next: join the retained copy
 lease with same-frame camera/provider-input and presentation/allocator
 retirement; then run a controlled FG-On game test.
+
+## Offline copied-input provider retirement (2026-10-01)
+
+The standalone pinned Streamline `--facade-on` route now consumes five actual
+D3D11 textures through the same batch/ring used by the game copy probe. It
+validates the copied lease with source, camera and separate UI; transitions
+the D3D12 shared resources before tagging; then retains each ring slot until
+the SDK's input-completion fence and queue-owned post-Present/allocator
+fences pass. The test-first probe check failed on the old binary, then the
+RTX 4080 SUPER run passed eight copied source frames and eight two-frame
+Present reports, reusing slot 0 only after retirement. The exact V5.4
+ReShade wrapper also passed the eight-frame offline run. The direct D3D12
+control still passed. Release build/CTest: **70/70**; Debug: **65/65**.
+Details and test limits: `docs/re/FG_COPIED_INPUT_PROVIDER_RETIREMENT_2026-10-01.md`.
+The installed game plugin and user INI remain 0.1.154 unchanged. **Offline
+provider retirement: RUN/PASS. Skyrim FG-On/generated frames: NOT RUN.**
+Next: attach the game-owned input and camera to the startup-selected
+Streamline presentation owner, verify real Skyrim phase markers and lifetime
+fences, then conduct a guarded FG-On game run.

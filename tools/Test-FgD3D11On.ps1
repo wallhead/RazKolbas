@@ -10,6 +10,8 @@ $status = $LASTEXITCODE
 $text = $output -join "`n"
 if ($status -ne 0 -or $text -notmatch 'FG-D3D11 facade=1' -or
     $text -notmatch 'FG-On generatedObserved=1' -or
+    ([regex]::Matches($text, 'FG-On shared-copy frame=\d+ slot=0 producer=[1-9]\d* copy=[1-9]\d*')).Count -ne 8 -or
+    ([regex]::Matches($text, 'FG-On retained-input retirement frame=\d+ provider=[1-9]\d* present=[1-9]\d* allocator=[1-9]\d*')).Count -ne 8 -or
     ([regex]::Matches($text, 'actualPresented=2')).Count -ne 8 -or
     ([regex]::Matches($text, 'FG-On Present frame=\d+ hr=0x0')).Count -ne 8 -or
     ([regex]::Matches($text, 'FG-On input retirement frame=\d+ fencePresent=1 value=[1-9]\d*')).Count -ne 8 -or

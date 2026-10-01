@@ -7,6 +7,7 @@
 #include "rk/FgStreamlineSubmit.hpp"
 #include "rk/FgStreamlineInputLease.hpp"
 #include "rk/FgStreamlineFrameSession.hpp"
+#include "rk/FgInputLeaseRing.hpp"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <variant>
 
 using Microsoft::WRL::ComPtr;
@@ -91,7 +93,34 @@ rk::FgSourceFrame sourceFrame(unsigned frame) {
     source.presentToken=frame+1;source.resetEpoch=1;
     source.cameraValid=true;source.worldActive=true;source.ownerReady=true;
     source.render={kWidth,kHeight};source.display=source.render;
+    const rk::FgResourceStamp stamp{source.source,source.generation,
+        source.display,true,source.resetEpoch};
+    source.color=stamp;source.depth=stamp;source.motion=stamp;
+    source.hudless=stamp;source.uiColorAlpha=stamp;
     return source;
+}
+bool makeD11Source(ID3D11Device* device,DXGI_FORMAT format,
+    ComPtr<ID3D11Texture2D>& texture,ComPtr<ID3D11RenderTargetView>& view) {
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=kWidth;desc.Height=kHeight;desc.MipLevels=1;desc.ArraySize=1;
+    desc.Format=format;desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_DEFAULT;
+    desc.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    return SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&texture))&&
+        SUCCEEDED(device->CreateRenderTargetView(texture.Get(),nullptr,&view));
+}
+rk::FgUiPlaneFrame d11UiFrame(const rk::FgSourceFrame& frame,
+    const std::array<ComPtr<ID3D11Texture2D>,5>& textures) {
+    rk::FgUiPlaneFrame ui{};
+    ui.source=frame.source;ui.generation=frame.generation;
+    ui.presentToken=frame.presentToken;ui.resetEpoch=frame.resetEpoch;
+    ui.display=frame.display;
+    ui.uiRegion={0,0,static_cast<LONG>(kWidth),static_cast<LONG>(kHeight)};
+    ui.hudlessStamp=frame.hudless;ui.uiStamp=frame.uiColorAlpha;
+    ui.finalStamp=frame.color;
+    ui.hudless=textures[3];ui.uiColorAlpha=textures[4];
+    ui.finalColor=textures[0];
+    return ui;
 }
 rk::FgCameraData cameraData(unsigned frame) {
     const auto source=sourceFrame(frame);
@@ -180,6 +209,28 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R16G16_FLOAT,
         DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM,
         DXGI_FORMAT_R8G8B8A8_UNORM};
+    std::unique_ptr<rk::FgSharedInputs> shared;
+    std::unique_ptr<rk::FgInputLeaseRing> ring;
+    std::array<ComPtr<ID3D11Texture2D>,5> d11Sources{};
+    std::array<ComPtr<ID3D11RenderTargetView>,5> d11Views{};
+    ComPtr<ID3D12Fence> providerFence;
+    rk::FgCopyTicket lastCopy{};
+    std::uint64_t lastPresent{},lastAllocator{};
+    if(facadeMode) {
+        auto made=rk::FgSharedInputs::create(d11.Get(),device,queue);
+        if(!std::holds_alternative<std::unique_ptr<rk::FgSharedInputs>>(made)) {
+            std::cout<<"FG-On shared interop create failed: "<<
+                std::get<rk::Error>(made).message<<'\n';
+            return 64;
+        }
+        shared=std::move(std::get<std::unique_ptr<rk::FgSharedInputs>>(made));
+        ring=std::make_unique<rk::FgInputLeaseRing>(*shared,1);
+        const std::array<DXGI_FORMAT,5> sourceFormats{
+            formats[4],formats[0],formats[1],formats[2],formats[3]};
+        for(std::size_t i=0;i<d11Sources.size();++i)
+            if(!makeD11Source(d11.Get(),sourceFormats[i],
+                d11Sources[i],d11Views[i]))return 65;
+    }
     for(UINT i=0;i<planes.size();++i)
         if(!makePlane(device,heap.Get(),i,formats[i],planes[i]))return 42;
     std::array<ComPtr<ID3D12Resource>,2> back{};
@@ -241,6 +292,21 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         }
         return std::get<bool>(result);
     };
+    const auto transitionCopied=[&](const rk::FgInputLease& lease,
+        D3D12_RESOURCE_STATES before,D3D12_RESOURCE_STATES after,
+        ComPtr<ID3D12CommandAllocator>& allocator,
+        ComPtr<ID3D12GraphicsCommandList>& list) {
+        if(FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                IID_PPV_ARGS(&allocator)))||
+           FAILED(device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,
+                allocator.Get(),nullptr,IID_PPV_ARGS(&list))))return false;
+        for(const auto& resource:lease.resources)
+            transition(list.Get(),resource.Get(),before,after);
+        if(FAILED(list->Close()))return false;
+        ID3D12CommandList* lists[]{list.Get()};
+        queue->ExecuteCommandLists(1,lists);
+        return true;
+    };
     for(unsigned frame=0;frame<8;++frame) {
         const auto source=sourceFrame(frame);
         if(!phaseOk("begin",session.begin(source))||
@@ -258,7 +324,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
                 allocator.Get(),nullptr,IID_PPV_ARGS(&list)))) {
             error=50;break;
         }
-        for(UINT i=0;i<planes.size();++i) {
+        for(UINT i=0;!facadeMode&&i<planes.size();++i) {
             if(frame)transition(list.Get(),planes[i].resource.Get(),
                 kReadState,D3D12_RESOURCE_STATE_RENDER_TARGET);
             const float clear[]{
@@ -281,7 +347,7 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         if(FAILED(list->Close())){error=51;break;}
         ID3D12CommandList* lists[]{list.Get()};
         queue->ExecuteCommandLists(1,lists);
-        if(!waitFor(queue,fence.Get(),frame+1,event.handle)){
+        if(!waitFor(queue,fence.Get(),4*frame+1,event.handle)){
             error=52;break;
         }
         if(!phaseOk("renderSubmitEnd",session.renderSubmitEnd())) {
@@ -294,12 +360,63 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
         prepared.render=source.render;prepared.display=source.display;
         prepared.physicalOutputIndex=physical;
         prepared.swapBufferCount=static_cast<std::uint32_t>(back.size());
-        // Synthetic single-queue producer: both recorded completion values
-        // name the real fence signal just waited above. No D3D11 copy occurs.
-        prepared.copyTicket={frame+1,frame+1};
-        prepared.camera=cameraData(frame);
-        prepared.resources={planes[4].resource,planes[0].resource,
-            planes[1].resource,planes[2].resource,planes[3].resource};
+        rk::FgInputLease copied{};
+        ComPtr<ID3D12CommandAllocator> readAllocator;
+        ComPtr<ID3D12GraphicsCommandList> readList;
+        if(facadeMode) {
+            const std::array<std::array<float,4>,5> clears{{
+                {0.25f,0.25f,0.0f,1.0f},
+                {0.5f,0.0f,0.0f,0.0f},
+                {0.0f,0.0f,0.0f,0.0f},
+                {0.25f,0.25f,0.0f,1.0f},
+                {0.0f,0.0f,0.0f,0.0f}}};
+            for(std::size_t i=0;i<d11Views.size();++i)
+                context->ClearRenderTargetView(d11Views[i].Get(),clears[i].data());
+            rk::FgInputSources sources{};
+            for(std::size_t i=0;i<d11Sources.size();++i)
+                sources.textures[i]=d11Sources[i].Get();
+            const auto completed=fence->GetCompletedValue();
+            const rk::FgFenceProgress progress{1,
+                lastCopy.producer&&shared->producerComplete(lastCopy.producer)?
+                    lastCopy.producer:0,
+                lastCopy.copy&&shared->copyComplete(lastCopy.copy)?
+                    lastCopy.copy:0,
+                providerFence?providerFence->GetCompletedValue():0,
+                completed>=lastPresent?lastPresent:0,
+                completed>=lastAllocator?lastAllocator:0};
+            auto acquired=ring->prepare(source,sources,context.Get(),progress);
+            if(!std::holds_alternative<rk::FgInputLease>(acquired)) {
+                std::cout<<"FG-On shared-copy prepare failed: "<<
+                    std::get<rk::Error>(acquired).message<<'\n';
+                error=66;break;
+            }
+            copied=std::move(std::get<rk::FgInputLease>(acquired));
+            if(!shared->waitCopy(copied.lastCopy.copy)||
+               !transitionCopied(copied,D3D12_RESOURCE_STATE_COMMON,
+                   kReadState,readAllocator,readList)||
+               !waitFor(queue,fence.Get(),4*frame+2,event.handle)) {
+                error=67;break;
+            }
+            auto checked=rk::prepareFgSubmission(source,copied,
+                d11UiFrame(source,d11Sources),cameraData(frame),physical,
+                static_cast<std::uint32_t>(back.size()));
+            if(!std::holds_alternative<rk::FgPreparedSubmission>(checked)) {
+                std::cout<<"FG-On copied submission rejected: "<<
+                    std::get<rk::Error>(checked).message<<'\n';
+                error=68;break;
+            }
+            prepared=std::move(std::get<rk::FgPreparedSubmission>(checked));
+            std::cout<<"FG-On shared-copy frame="<<frame<<
+                " slot="<<copied.slot<<
+                " producer="<<copied.lastCopy.producer<<
+                " copy="<<copied.lastCopy.copy<<'\n';
+        } else {
+            // D3D12-only synthetic control has no D3D11 copy.
+            prepared.copyTicket={4*frame+1,4*frame+1};
+            prepared.camera=cameraData(frame);
+            prepared.resources={planes[4].resource,planes[0].resource,
+                planes[1].resource,planes[2].resource,planes[3].resource};
+        }
         rk::FgStreamlineReadStates readable{};
         readable.completedCopy=prepared.copyTicket;
         readable.actual.fill(kReadState);
@@ -343,14 +460,59 @@ int probeSyntheticOn(ID3D12Device* device,ID3D12CommandQueue* queue,
             " fencePresent="<<(state.inputsProcessingCompletionFence!=nullptr)<<
             " value="<<state.lastPresentInputsProcessingCompletionFenceValue<<'\n';
         const auto observed=retained.observeCompletion(state);
-        if(!std::holds_alternative<bool>(observed)||
-           !waitCompletion(retained.completionFence(),
-                retained.completionValue(),event.handle)||
-           !retained.releaseIfRetired()) {
+        if(!std::holds_alternative<bool>(observed)) {
             std::cout<<"FG-On provider input fence did not retire\n";
             error=59;break;
         }
+        if(facadeMode) {
+            if(providerFence&&providerFence.Get()!=retained.completionFence()) {
+                std::cout<<"FG-On provider input fence identity changed\n";
+                error=69;break;
+            }
+            providerFence=retained.completionFence();
+            const auto presentValue=4*frame+3;
+            const auto allocatorValue=4*frame+4;
+            ComPtr<ID3D12CommandAllocator> releaseAllocator;
+            ComPtr<ID3D12GraphicsCommandList> releaseList;
+            if(FAILED(queue->Signal(fence.Get(),presentValue))||
+               FAILED(queue->Wait(providerFence.Get(),
+                   retained.completionValue()))||
+               !transitionCopied(copied,kReadState,
+                   D3D12_RESOURCE_STATE_COMMON,releaseAllocator,releaseList)||
+               FAILED(queue->Signal(fence.Get(),allocatorValue))||
+               !ring->submit(copied,{source.generation,
+                   copied.lastCopy.producer,copied.lastCopy.copy,
+                   retained.completionValue(),presentValue,allocatorValue})||
+               !waitCompletion(providerFence.Get(),
+                   retained.completionValue(),event.handle)||
+               !waitCompletion(fence.Get(),allocatorValue,event.handle)) {
+                std::cout<<"FG-On copied-input retirement failed\n";
+                error=70;break;
+            }
+            lastCopy=copied.lastCopy;
+            lastPresent=presentValue;
+            lastAllocator=allocatorValue;
+            std::cout<<"FG-On retained-input retirement frame="<<frame<<
+                " provider="<<retained.completionValue()<<
+                " present="<<presentValue<<
+                " allocator="<<allocatorValue<<'\n';
+        } else if(!waitCompletion(retained.completionFence(),
+                retained.completionValue(),event.handle)) {
+            error=59;break;
+        }
+        if(!retained.releaseIfRetired()) {
+            error=59;break;
+        }
         Sleep(16);
+    }
+    if(facadeMode&&!error) {
+        const rk::FgFenceProgress progress{1,lastCopy.producer,
+            lastCopy.copy,providerFence->GetCompletedValue(),
+            fence->GetCompletedValue(),fence->GetCompletedValue()};
+        if(!ring->stop(progress)) {
+            std::cout<<"FG-On copied-input ring did not drain\n";
+            error=71;
+        }
     }
     options.mode=sl::DLSSGMode::eOff;
     std::cout<<"slDLSSGSetOptions(Off)="<<
